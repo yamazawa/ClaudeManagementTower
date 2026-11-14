@@ -25,6 +25,7 @@ async def run_claude(
     prompt: str,
     worktree: str,
     resume: str | None = None,
+    on_message: Callable[[object], None] | None = None,
 ) -> tuple[str | None, str | None]:
     options = ClaudeAgentOptions(
         cwd=worktree,
@@ -35,6 +36,8 @@ async def run_claude(
     session_id = None
     result_text = None
     async for message in query(prompt=prompt, options=options):
+        if on_message is not None:
+            on_message(message)
         cls = type(message).__name__
         if cls == "SystemMessage" and message.subtype == "init":
             session_id = message.data.get("session_id")

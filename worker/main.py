@@ -1,19 +1,47 @@
+import asyncio
 import os
 import time
 import uuid
 
+from core.claude_client import run_claude
 from core.config import settings
-from core.db import init_db
+from core.db import SessionLocal, init_db
+from core.execution_events import record_event
 from core.job_queue import claim_next_job, finish_job, register_worker, set_worker_state
+from core.models import ExecutionJob, Subtask
+
+
+def _run_claude_for_job(job_id: int, worktree_path: str, instruction: str) -> tuple[str | None, str | None]:
+    def on_message(message: object) -> None:
+        record_event(job_id, event_type=type(message).__name__, content=repr(message)[:4000])
+
+    return asyncio.run(run_claude(instruction, worktree_path, on_message=on_message))
 
 
 def process_job(job: dict, worker_id: int) -> None:
     print(f"[worker] job {job['job_id']} (subtask {job['subtask_id']}) を実行開始")
     set_worker_state(worker_id, state="busy", current_job_id=job["job_id"])
-    # Phase 6でClaude実行に置き換える
-    finish_job(job["job_id"], status="succeeded", exit_code=0)
+
+    with SessionLocal() as session:
+        subtask = session.get(Subtask, job["subtask_id"])
+        branch_name = subtask.branch_name
+        instruction = subtask.instruction
+    worktree_path = f"{settings.worktree_base_dir}/{branch_name}"
+
+    try:
+        session_id, result_text = _run_claude_for_job(job["job_id"], worktree_path, instruction)
+        with SessionLocal() as session:
+            db_job = session.get(ExecutionJob, job["job_id"])
+            db_job.claude_session_id = session_id
+            session.commit()
+        finish_job(job["job_id"], status="succeeded", exit_code=0)
+        print(f"[worker] job {job['job_id']} 完了: {result_text}")
+    except Exception as exc:  # noqa: BLE001
+        record_event(job["job_id"], event_type="error", content=str(exc))
+        finish_job(job["job_id"], status="failed", exit_code=1)
+        print(f"[worker] job {job['job_id']} 失敗: {exc}")
+
     set_worker_state(worker_id, state="idle", current_job_id=None)
-    print(f"[worker] job {job['job_id']} 完了")
 
 
 def main() -> None:
