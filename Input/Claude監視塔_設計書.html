@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+
+<html lang="ja"><head><meta charset="utf-8"/><meta content="width=device-width,initial-scale=1" name="viewport"/><title>Claude管理塔 実装設計書 v1.7｜GitHub対応</title><style>:root{--bg:#f4f6fa;--ink:#182235;--muted:#637086;--line:#dce3ec;--accent:#335eea;--soft:#edf2ff;--green:#13795b;--amber:#a4650a}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.8 system-ui,-apple-system,'Segoe UI',sans-serif}header{background:#18243c;color:#fff;padding:48px max(24px,calc((100vw - 1040px)/2))}header h1{font-size:34px;margin:0 0 8px}header p{color:#d6dff0;max-width:820px}.meta{font-size:13px;color:#b8c7e3}.wrap{max-width:1080px;margin:auto;padding:28px 22px 90px}.toc,.section{background:#fff;border:1px solid var(--line);border-radius:14px;padding:25px 30px;margin:18px 0;box-shadow:0 2px 8px #1b2b4c08}h2{font-size:23px;margin:0 0 16px;border-bottom:1px solid var(--line);padding-bottom:12px}h3{font-size:17px;margin:24px 0 8px}p{margin:8px 0 13px}a{color:#2855c9}ul,ol{padding-left:23px}li{margin:5px 0}.pill{display:inline-block;padding:2px 9px;border-radius:99px;background:#e9f5ef;color:#126447;font-size:12px;font-weight:700}.proposal{background:#fff3df;color:#875407}.note{border-left:4px solid var(--accent);background:var(--soft);padding:12px 16px;margin:14px 0;border-radius:0 8px 8px 0}.warn{border-left-color:#c78421;background:#fff7e9}.scroll{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:14px}th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}th{background:#f0f3f8}code,pre{font-family:Consolas,'Courier New',monospace}code{background:#edf0f6;padding:1px 5px;border-radius:4px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#152137;color:#e4ecfa;padding:17px;border-radius:10px;font-size:12px;line-height:1.65}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.panel{border:1px solid var(--line);border-radius:10px;padding:16px}.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.step{background:#eaf0ff;border:1px solid #c9d7fc;padding:8px 12px;border-radius:8px;font-weight:600}.arrow{color:#7b8aa5}.mock{border:2px solid #ccd5e5;border-radius:10px;overflow:hidden}.mock-head{background:#243450;color:white;padding:12px 16px;font-weight:700}.mock-body{display:grid;grid-template-columns:40% 60%;min-height:330px}.mock-left{border-right:1px solid var(--line);padding:14px}.mock-right{padding:14px}.task{border:1px solid var(--line);padding:9px;border-radius:7px;margin-bottom:8px}.task.active{border:2px solid #e38b39;background:#fff8ee}.sub{display:grid;grid-template-columns:38% 62%;gap:12px}.subitem{padding:7px;border-bottom:1px solid var(--line)}.subitem.active{background:#fff1dc;font-weight:700}.small{font-size:12px;color:var(--muted)}.checklist li{list-style:'☐  ';padding-left:5px}footer{text-align:center;color:var(--muted);font-size:12px;margin-top:25px}@media(max-width:650px){header{padding:30px 20px}header h1{font-size:27px}.toc,.section{padding:19px}.grid,.mock-body,.sub{grid-template-columns:1fr}.mock-left{border-right:0;border-bottom:1px solid var(--line)}}@media print{body{background:#fff}.section,.toc{box-shadow:none;break-inside:avoid}header{padding:25px}a{color:inherit}}</style></head><body><header><div class="meta">IMPLEMENTATION SPECIFICATION · v1.7 · 2026-11-14</div><h1>Claude管理塔</h1><p>GitHub Issue連動型 AI開発タスク管理システム — Claude Code実装用 設計・要求仕様書</p><div class="meta">対象：自宅Windows PC上のサーバー・ワーカー／外出先スマートフォンから操作</div></header><main class="wrap"><nav class="toc"><strong>目次</strong><div class="grid"><div><a href="#goal">1. 目的とスコープ</a><br/><a href="#rules">2. 確定した業務ルール</a><br/><a href="#arch">3. システム構成</a><br/><a href="#ui">4. 画面仕様</a><br/><a href="#flow">5. 実行フロー</a><br/><a href="#states">6. 状態管理</a></div><div><a href="#data">7. データモデル</a><br/><a href="#api">8. API・連携</a><br/><a href="#agent">9. Claude実行ポリシー</a><br/><a href="#report">10. HTMLレポート</a><br/><a href="#security">11. セキュリティ・運用</a><br/><a href="#build">12. 実装順序・受け入れ条件</a></div><div><a href="#primer">13. Web技術の基礎</a><br/><a href="#setup">14. Windowsでの開発手順</a><br/><a href="#glossary">15. 用語集・学習ガイド</a></div><div><a href="#parallel">16. MVP並列実行仕様</a></div></div><p class="small">凡例：<span class="pill">確定</span> 会話で採用済み　<span class="pill proposal">実装提案</span> 実装可能にするための補完案（変更可）</p></nav>
+<section class="section" id="goal"><h2>1. 目的とスコープ</h2><p><span class="pill">確定</span> 自宅PCでClaude Codeを実行し、Web UIからGitHub Issueに対応する開発タスクとサブタスクを管理する。外出先のスマホから指示を送信し、実行状況・作業結果・PRを確認できるようにする。</p><div class="note"><strong>基本思想：</strong>「人間がタスク・サブタスクの目的を入力 → Claudeが自律判断して実装 → HTMLで判断と成果を報告 → 人間がPRをレビュー・マージ」。実行中の問い合わせを前提にしない。</div><h3>MVPに含む</h3><ul><li>Issue一覧・詳細の取得と表示、Issueの進捗状態表示</li><li>Issue配下のサブタスク作成、専用ブランチ・Draft PR作成</li><li>サブタスク単位のClaude Code実行と履歴蓄積</li><li>実行状態表示、結果HTMLレポート、PRリンク</li><li>Webサーバーとワーカーのプロセス分離、スマホからの認証付きアクセス</li></ul><h3>MVPから除外</h3><ul><li>別Claudeセッションによる自動コードレビュー（後続）</li><li>実行時間上限・API費用上限の設定UI（後続）</li><li>Claudeによるサブタスク自動分割、定期実行（後続）</li></ul></section>
+<section class="section" id="rules"><h2>2. 確定した業務ルール</h2><div class="scroll"><table><tr><th>単位</th><th>ルール</th></tr><tr><td>タスク</td><td>1タスク = 1 GitHub Issue。開発進捗はIssue側で管理・連動する。</td></tr><tr><td>サブタスク</td><td>1サブタスク = 1 PR。専用ブランチを持つ。作業開始時はDraft PRを基本とする。</td></tr><tr><td>サブタスク完了</td><td><strong>対応PRがマージされた時点</strong>。Claudeの実装完了だけでは完了にならない。</td></tr><tr><td>Issue完了</td><td>必要なサブタスクのPRがすべてマージされた後にIssueをクローズする。</td></tr><tr><td>修正</td><td>PRマージ前のレビューNGは同じサブタスク・同じブランチ・同じPRで修正し、再レビューする。PRマージ後に問題が判明した場合のみ、新しい修正サブタスクとPRを作成する。</td></tr><tr><td>PRのIssue参照</td><td>説明文は <code>Related to #42</code> 形式。<code>Closes #42</code> は使わず、自動クローズを避ける。</td></tr><tr><td>Claudeの判断</td><td>不明点は既存コード・仕様を調査し、合理的に補足して実装。原則ユーザーに質問しない。</td></tr><tr><td>報告</td><td>Claudeが自分で判断した内容・理由をHTMLで報告。回答・ログはサブタスク履歴に蓄積する。</td></tr><tr><td>状態</td><td>Issueの開発進捗と管理塔のClaude稼働状態を分離する。</td></tr></table></div><div class="note warn"><strong>技術的な要確認点：</strong>差分のない新規ブランチに対するDraft PR作成が、対象GitHub環境・APIで可能かを最初に実機検証する。不可の場合は黙って初期コミットを追加せず、エラーを明示して設計判断を求める。MVPに複雑なフォールバックは不要。</div><h3>実装前の確認事項と停止条件（確定事項を尊重）</h3><p>差分ゼロのDraft PRが作成できない場合は、該当サブタスクの開始を停止し、失敗理由を報告する。ダミーコミットの追加、PRを作らないままの実行、別ブランチへの切替えを自動で行わない。人間が代替フローを決定してから再開する。</p><p>レビューNGはマージ前に限り同じサブタスク・ブランチ・PRを再利用する。修正実行前には既存PRが未マージであることを再確認する。マージ済み・クローズ済みのPRには追記しない。</p></section>
+<section class="section" id="arch"><h2>3. システム構成</h2><pre>外出先スマホ / PC
+    │ HTTPS + ログイン認証
+Cloudflare Tunnel + Cloudflare Access
+    │
+自宅Windows PC
+    ├─ Webサーバー（FastAPI）
+    │    ├─ HTML/JavaScript 管理画面
+    │    ├─ GitHub API連携
+    │    └─ SQLite（タスクキュー・履歴・状態）
+    │
+    └─ Claude実行ワーカー（独立プロセス）
+         ├─ キュー取得・排他制御
+         ├─ Git worktree / ブランチ操作
+         ├─ Claude Code CLI / Agent SDK
+         ├─ テスト・コミット・push
+         └─ HTMLレポート生成・保存
+
+GitHub：Issue / Branch / Draft PR / Merge 状態</pre><p><span class="pill">確定</span> Webサーバーと実行ワーカーは分離する。ブラウザを閉じてもワーカーは継続する。</p><p><span class="pill">確定</span> Python + FastAPI、SQLite、シンプルなHTML/CSS/JavaScriptを採用する。MVPの画面状態更新は3秒間隔のポーリングとする。Git操作はGit CLI、GitHub操作はGitHub APIを使用する。WebSocketはMVPでは採用せず、将来の拡張候補とする。</p><p><span class="pill">確定</span> GitHubホスティングはgithub.com（SaaS）とする。GitHub Enterprise Server等のセルフホストはMVPの対象外とする。</p><p><span class="pill">確定</span> Windows上で稼働させ、PowerShellおよびWindowsパスを考慮する。Claude Codeの実行にはインストール済みCLIの非対話モードまたは公式SDKを使用し、実装時に現行仕様を調査して選定する。MVPから設定可能なN個の独立ワーカーで最大N件を同時実行する。初期設定はN=3とする。</p><p>【確定・MVP】ワーカー数Nは設定で変更可能とし、ワーカー1個につきClaude Code実行を最大1件担当する。異なるサブタスクは最大N件並列実行できる。同一サブタスクは同時実行しない。各サブタスクに専用Git worktreeを割り当てる。</p><h3>ORM・構成上の補足</h3><p>SQLiteアクセスにはSQLAlchemy ORMを採用する。ワーカーのジョブ取得と同一サブタスク排他は、ORMの通常の読み書きだけに頼らず、SQLiteの原子的な更新とトランザクションで保証する。</p><p>Webサーバーとワーカーは別プロセスとし、HTTPリクエストの処理中にClaude Codeを直接起動して待機しない。</p></section>
+<section class="section" id="ui"><h2>4. 画面仕様</h2><p><span class="pill">確定</span> ユーザー提供のラフ画面に沿い、上部にタスク一覧、下部に選択タスクの詳細とサブタスク履歴・内容を表示する。スマホでは縦積みとする。</p><div class="mock"><div class="mock-head">Claude管理塔 <span style="float:right;font-size:12px">● ワーカー待機中</span></div><div class="mock-body"><div class="mock-left"><strong>Issue / タスク一覧</strong><div class="task">［実装中］オークションポーカーのUI実装</div><div class="task active">［レビュー中］オークションポーカーのAI実装</div><div class="task">［マージ済］Claude管理塔の実装</div><div class="small">Issueラベル等から状態を表示</div></div><div class="mock-right"><strong>［レビュー中］オークションポーカーのAI実装</strong><div class="small">Issue #42　PR #45　branch: issue-42-ai</div><hr style="border:0;border-top:1px solid #ddd"/><div class="sub"><div><strong>サブタスク履歴</strong><div class="subitem">AI設計（マージ済）</div><div class="subitem active">AI実装（レビュー中）</div><div class="subitem">AI確認（未着手）</div></div><div><strong>サブタスク内容</strong><div class="panel">AIの入札ロジックを実装して。<hr/><div class="small">指示履歴 / Claude回答 / HTML報告 / Git差分 / PRリンク</div></div></div></div></div></div></div><h3>必要な操作</h3><ul><li>Issue選択、Issue詳細・外部GitHubリンクの表示</li><li>サブタスク新規作成（タイトル・指示）、履歴からサブタスク選択</li><li>Claude実行開始、実行状態・ログ・HTMLレポート確認</li><li>実行済みサブタスクへの追加指示（必要な場合、同じPRブランチ上で再実行）</li><li>PRをGitHubで開く、マージ状態を同期する</li></ul><div class="note"><strong>画面設計上の区別：</strong>「Issueの開発進捗」「PRのレビュー／マージ状態」「Claudeワーカーの実行状態」は異なる値として表示する。</div><p>【確定・MVP】管理画面にワーカー全体の稼働状況（実行中数／待機中数／設定上限N）と、各ジョブの担当ワーカー・実行状態を表示する。スマホでも確認できること。</p></section>
+<section class="section" id="flow"><h2>5. サブタスク実行フロー</h2><div class="flow"><span class="step">Issue選択</span><span class="arrow">→</span><span class="step">サブタスク作成</span><span class="arrow">→</span><span class="step">ブランチ作成</span><span class="arrow">→</span><span class="step">Draft PR作成</span><span class="arrow">→</span><span class="step">Claude実行</span><span class="arrow">→</span><span class="step">HTML報告</span><span class="arrow">→</span><span class="step">レビュー</span><span class="arrow">→</span><span class="step">PRマージ</span></div><ol><li>GitHub Issueを選択し、タイトル・ClaudeへのINPUTを登録する。</li><li>mainなど対象ブランチからサブタスク専用ブランチを作成・pushする。</li><li>Issueへの参照 <code>Related to #番号</code> を含むDraft PRを作成する。</li><li>作成に成功したらワーカーへ実行要求を登録。Claudeは対応worktree内で作業する。</li><li>Claudeがコード調査・実装・テスト・修正を実行し、必要な変更をコミット・pushする。</li><li>作業結果・自律判断・未解決事項・テスト結果をHTMLレポートにまとめ、サブタスク履歴へ保存する。</li><li>実装成功時にDraftを解除し、PRをレビュー中にする（GitHub API操作）。</li><li>人間がGitHubでマージしたら、同期によりサブタスク完了にする。</li><li>レビューNGの場合は同じサブタスクへ追加指示を投入し、同一worktree・ブランチ・PRで修正と再レビューを繰り返す。マージ後に発見した不具合のみ新しいサブタスクとして起票する。</li></ol><p><span class="pill proposal">実装提案</span> PRの作成・マージ状態はGitHub APIから取得。初期は定期ポーリングと画面上の「同期」操作でよい。GitHubのWebhook受信はMVPでは不要。</p><h3>レビューで問題があった場合</h3><p><span class="pill">確定</span> <strong>マージ前のレビューNG：</strong>既存サブタスクに追加指示を登録し、同じ作業ブランチ・同じPRでClaudeが修正する。修正内容を既存履歴へ追記し、同じPRを再レビューする。レビューNGを理由に新しいPRは作成しない。<br/><span class="pill">確定</span> <strong>マージ後に問題が発覚：</strong>元のPRとサブタスクはマージ済・完了のまま維持し、新しい修正サブタスクと新しいPRを作成する。</p><div class="scroll"><table><tr><th>タイミング</th><th>処理</th><th>サブタスク完了判定</th></tr><tr><td>Claude実装完了・PR未マージ</td><td>レビュー待ち</td><td>未完了</td></tr><tr><td>レビューNG・PR未マージ</td><td>同一PRへ追加コミットして再レビュー（何度でも可）</td><td>未完了</td></tr><tr><td>レビューOK・PRマージ</td><td>GitHubのマージ状態を同期</td><td>完了</td></tr><tr><td>PRマージ後に不具合発覚</td><td>別サブタスク・別PRを新規作成</td><td>元サブタスクは完了のまま</td></tr></table></div><h3>レビューNG時の再実行手順</h3><p>追加指示を既存サブタスクの履歴に保存し、既存worktree・ブランチ・PRを対象に新たなexecution_jobを登録する。ワーカーは前回の実装とレビュー指摘を確認し、修正・テスト・コミット・push・HTMLレポート作成を行う。</p><p>レビューNGでの再実行時は必要に応じてPRをDraftに戻し、修正と検証が成功した後にDraftを解除する。失敗時はレビュー可能と誤認させない状態・エラーを表示する。</p></section>
+<section class="section" id="states"><h2>6. 状態管理</h2><div class="scroll"><table><tr><th>分類</th><th>状態候補</th><th>正式な情報源</th></tr><tr><td>Issue進捗</td><td>未着手／設計中／実装中／レビュー中／マージ済（ラベル名は設定可能）</td><td>GitHub Issue・ラベル</td></tr><tr><td>サブタスク/PR</td><td>準備中／Draft／レビュー中／マージ済／クローズ（未マージ）</td><td>GitHub PR + 管理塔</td></tr><tr><td>Claude実行</td><td>待機中／キュー待ち／実行中／成功／失敗／中断</td><td>管理塔 SQLite</td></tr></table></div><p><strong>不変条件：</strong> Claudeが成功してもPR未マージならサブタスクは完了ではない。PRマージ済みならサブタスクは完了。Issueクローズは全必要サブタスクのマージ確認後に人間または明示的な操作で行う。</p><p><span class="pill proposal">実装提案</span> PRがマージされずクローズされた場合は「中止」として扱い、「完了」にしない。Issueのラベル運用は既存リポジトリのルールに合わせ設定可能にする。</p></section>
+<section class="section" id="data"><h2>7. データモデル（SQLite案）</h2><p><span class="pill proposal">実装提案</span> GitHubのIssue・PRそのものを重複して正本管理しない。外部IDと管理塔固有の実行・履歴データを保存する。</p><pre>projects
+  id, name, github_repo, repo_path, default_branch, created_at
+
+tasks_cache
+  id, project_id, github_issue_number, title, state_label, synced_at
+
+subtasks
+  id, project_id, github_issue_number, title, instruction,
+  branch_name, github_pr_number NULL, lifecycle_state,
+  created_at, updated_at
+
+execution_jobs
+  id, subtask_id, status, queued_at, started_at, ended_at,
+  exit_code NULL, claude_session_id NULL, error_message NULL,
+  worker_id NULL, claimed_at NULL, heartbeat_at NULL
+
+execution_events
+  id, job_id, sequence_no, event_type, content, created_at
+
+reports
+  id, job_id, html_path, summary, created_at
+
+workers
+  id, process_identifier, state, heartbeat_at, current_job_id NULL</pre><p>複数回の追加指示は <code>execution_jobs</code> を追加し、過去の実行・回答を消さない。<code>execution_events</code> に指示、Claude出力、実行ログ、判断メモ等を時系列保存する。</p><p>DB制約例：<code>UNIQUE(project_id, github_issue_number, branch_name)</code>、PR IDの一意性、同一サブタスクに同時実行ジョブを作らない排他制御。</p><p>【確定・MVP】ジョブ取得はSQLiteトランザクションで原子的に行い、二重取得を防止する。ジョブ実行中はDBトランザクションを保持しない。SQLiteのWALモード、短い書き込みトランザクション、busy_timeoutを使用する。</p><h3>排他制御・履歴保持の実装条件</h3><p>同一サブタスクに対して実行中ジョブは常に最大1件とする。複数の追加指示は登録順に処理し、ワーカーのジョブ取得時にもこの条件を原子的に検査する。</p><p>外部GitHub操作とローカルDB更新の間で失敗が起き得るため、作成途中の状態とGitHubのIDを保持し、再試行時は既存ブランチ・PRの有無を確認して重複作成を避ける。</p><p>SQLiteファイル、レポート、worktree等の実行時生成物はGit管理対象から除外する。既存の継続利用データを削除するスキーマ変更は事前確認する。</p></section>
+<section class="section" id="api"><h2>8. Web API・GitHub連携</h2><p><span class="pill proposal">実装提案</span> 初期API例。URLやレスポンスは実装で調整可能。</p><div class="scroll"><table><tr><th>Method</th><th>Endpoint</th><th>用途</th></tr><tr><td>GET</td><td><code>/api/projects</code></td><td>対象プロジェクト一覧</td></tr><tr><td>GET</td><td><code>/api/projects/{id}/issues</code></td><td>GitHub Issue一覧取得</td></tr><tr><td>GET</td><td><code>/api/projects/{id}/issues/{number}</code></td><td>Issue詳細・サブタスク一覧</td></tr><tr><td>POST</td><td><code>/api/subtasks</code></td><td>サブタスク・ブランチ・Draft PR作成</td></tr><tr><td>GET</td><td><code>/api/subtasks/{id}</code></td><td>サブタスク詳細・PR状態</td></tr><tr><td>POST</td><td><code>/api/subtasks/{id}/execute</code></td><td>Claude実行ジョブ投入</td></tr><tr><td>GET</td><td><code>/api/jobs/{id}</code></td><td>実行状態取得</td></tr><tr><td>GET</td><td><code>/api/jobs/{id}/events</code></td><td>指示・応答・ログ履歴</td></tr><tr><td>GET</td><td><code>/api/jobs/{id}/report</code></td><td>安全なHTML報告閲覧</td></tr><tr><td>POST</td><td><code>/api/projects/{id}/sync</code></td><td>Issue・PR状態同期</td></tr><tr><td>GET</td><td>/api/workers</td><td>ワーカー一覧・稼働状態・現在のジョブ</td></tr></table></div><p>GitHub APIで必要な操作：Issue取得、ブランチ作成、PR作成（Draft）、PR取得・Draft解除、PRマージ状態取得。API認証には権限を絞ったトークンを使用する。</p><p><strong>冪等性：</strong>「サブタスク作成」ボタンの二重押下で同名ブランチ・PRが重複しないよう、リクエストIDまたは処理中フラグを設ける。</p><h3>操作APIの保護</h3><p>Cloudflare Accessの認証を前提とし、状態変更APIはサーバー側でも認証・認可とCSRF対策を実施する。ブラウザから渡されたリポジトリパス・コマンド・PR番号は信用せず、登録済み対象と照合する。</p><p>実行依頼の重複登録防止は画面の二重押下対策だけでなく、サーバー側の冪等性と同一サブタスク排他で担保する。</p></section>
+<section class="section" id="agent"><h2>9. Claude Code実行ポリシー</h2><p><span class="pill">確定</span> Claudeは原則質問せず、入力内容をもとに調査・合理的な判断・実装・テストを行う。自律判断した事項はHTMLに記録する。</p><pre>あなたはClaude管理塔の自律実装ワーカーです。
+対象：GitHub Issueと紐付く1サブタスク（1 PR）。
+1. 指示、Issue、既存コード、プロジェクト規約を確認する。
+2. 不明点は自ら調査し、合理的な前提を選んで作業を進める。
+3. 原則としてユーザーへの問い合わせや応答待ちはしない。
+4. 判断した事項と理由、残る不確実性を記録する。
+5. 対象worktree・許可範囲で実装、テスト、修正する。
+6. 変更内容・テスト結果・未解決課題を報告する。
+7. 最終的に指定フォーマットのHTMLレポートを出力する。
+8. 機密情報の公開、権限外操作、破壊的操作など安全に
+   自律判断できない処理は実行せず、失敗理由を報告する。
+9. Issueの自動クローズ、PRの自動マージは行わない。</pre><p><span class="pill proposal">実装提案</span> Web入力をそのままシェルに連結せず、構造化された引数としてClaude実行機構へ渡す。ClaudeのセッションIDは再実行時の継続に利用可能なら保持し、使えない場合は指示と履歴要約を渡す。</p></section>
+<section class="section" id="report"><h2>10. HTML作業報告書</h2><p><span class="pill">確定</span> Claudeが自分で補足・判断した内容をHTMLでまとめる。管理塔で閲覧し、サブタスクの実行履歴として保存する。</p><h3>必須項目（提案）</h3><ol><li>対象Issue・サブタスク・PR・ブランチ</li><li>実装結果の要約（成功／一部成功／失敗）</li><li>実施した変更と主な変更ファイル</li><li><strong>Claudeが自律判断した事項・採用理由・前提</strong></li><li>実行したテストと結果（未実施なら理由）</li><li>残課題、リスク、レビュー時の確認ポイント</li></ol><div class="note warn"><span class="pill">確定</span> Claude生成HTMLは信頼できない入力として扱い、<strong>厳格にsandbox化したiframeで隔離して表示する</strong>。MVPではHTMLサニタイズ方式との選択制にはしない。iframeには <code>sandbox=""</code> を指定し、<code>allow-scripts</code> と <code>allow-same-origin</code> は付与しない。レポート内の外部リソース読み込みはCSPで制限し、Webサーバーの認証トークンをHTMLに埋め込まない。</div><h3>iframe表示の実装条件（確定方式の具体化）</h3><p>レポートは専用のHTML応答として返し、管理画面ではsandbox=""付きiframeで表示する。allow-scripts、allow-same-origin、allow-top-navigation、allow-forms、allow-popups等の権限は付与しない。親画面のDOMへレポートHTMLを挿入しない。</p><p>レポート応答には制限的なContent-Security-Policyを設定し、スクリプト、外部接続、外部画像・フォント等の読み込みを原則禁止する。レポート内のリンク・フォーム・外部リソースは機能要件に含めない。</p><p>GitHubトークン、Cloudflare認証情報、Claude認証情報をレポートやログに書き込まない。機密情報のマスキングを行い、レポートファイルへの直接アクセスも認証の対象とする。</p></section>
+<section class="section" id="security"><h2>11. セキュリティ・運用</h2><ul><li>外部アクセスはCloudflare Tunnel + Cloudflare Accessによる認証付きHTTPS。自宅ルーターのポート開放を前提にしない。</li><li>GitHubトークンとClaude認証情報は環境変数・安全な秘密情報ストアで保持し、ブラウザへ送らない。</li><li>実行対象のリポジトリ・worktreeを許可リストで制限し、任意のOSコマンドをWebから直接実行させない。</li><li>Claude Codeは最小権限で実行し、危険な操作を無条件に許可しない。</li><li>ワーカーが異常終了した場合、DB上の実行中ジョブを「要確認」にしてログ・worktreeを点検する。自動二重実行はしない。</li><li>自宅PCの電源・スリープ・ネットワーク切断中は遠隔操作不可。再起動後にサーバー・ワーカーを再起動できる運用を用意する。</li><li>本プロジェクトのGitHubリポジトリは公開（Public）とする。自宅PCへの侵入につながる情報（実IPアドレス、Cloudflareトンネルの固有ホスト名・トークン、GitHub/Claude等の認証情報、ローカル環境固有のユーザー名を含むパス等）はコミット・push・Issue・PR・コメントのいずれにも記載しない。</li></ul><p><span class="pill proposal">実装提案</span> MVPは単一ユーザー・単一PC・Nワーカーを基本とする。複雑なRBAC、分散キュー、課金ダッシュボードは不要。</p><h3>Claude実行とGit操作の境界</h3><p>ワーカーには登録済みリポジトリと担当サブタスクのworktreeのみを割り当てる。別サブタスク・別ワーカーのworktreeを変更・削除しない。</p><p>共有ブランチへのforce push、hard reset、強制削除、秘密情報の送信、許可範囲外のファイル操作を自律実行しない。実行前の承認が必要な操作は安全側で停止し、理由を記録する。</p><p>ワーカー停止・PC再起動時にはheartbeatとプロセス生存を確認し、処理中だったジョブを要確認として扱う。重複実行を避けるため自動再投入はしない。</p></section>
+<section class="section" id="build"><h2>12. Claude Code向け実装順序と受け入れ条件</h2><h3>実装順序</h3><ol><li><strong>環境検証：</strong>GitHub接続・Issue取得・差分なしブランチでDraft PR作成可否を確認。</li><li><strong>基盤：</strong>FastAPI、SQLite、設定管理、Web画面、GitHub APIクライアント。</li><li><strong>タスク画面：</strong>Issue一覧・詳細、サブタスク履歴、状態表示。</li><li><strong>Git連携：</strong>サブタスク作成 → ブランチ → Draft PR → GitHubリンク。</li><li><strong>ワーカー：</strong>独立プロセス、SQLiteジョブキュー、Claude実行、イベント保存。</li><li><strong>成果物：</strong>コミット・push、HTMLレポート、Draft解除、PR同期。</li><li><strong>遠隔操作：</strong>Cloudflare認証経由でスマホ表示・指示送信を確認。</li><li><strong>並列実行：</strong>Nワーカー起動、原子的キュー取得、サブタスク別worktree、同一サブタスク排他、N=3での同時実行テスト。</li></ol><h3>受け入れチェックリスト</h3><ul class="checklist"><li>Issue一覧から対象Issueを選択できる。</li><li>1 Issueに複数サブタスクを登録できる。</li><li>サブタスク作成時に専用ブランチとDraft PRを作成できる（環境検証に成功した場合）。</li><li>PR説明文が <code>Related to #番号</code> であり、Issueを自動クローズしない。</li><li>Claudeの実装開始後にブラウザを閉じても処理が継続する。</li><li>Claudeの実行中・成功・失敗を管理塔で確認できる。</li><li>指示、Claude応答、ログ、HTMLレポートが履歴として残る。</li><li>Claudeが判断した内容と理由をHTMLで確認できる。</li><li>Claude実装成功だけではサブタスクが完了にならない。</li><li>PRマージを同期すると該当サブタスクが完了になる。</li><li>複数サブタスクが残っているIssueを最初のPRマージだけで閉じない。</li><li>スマホから認証付きで閲覧・指示できる。</li><li>N=3で異なる3件が並列実行され、4件目が待機して順次開始する。</li><li>同一サブタスクの二重実行が起こらず、ワーカーごとの状態を確認できる。</li></ul><h3>未決定・環境依存の確認事項</h3><div class="scroll"><table><tr><th>項目</th><th>扱い</th></tr><tr><td>対象リポジトリ、デフォルトブランチ</td><td>設定値として外出し</td></tr><tr><td>Claude Code CLIとAgent SDKの選択</td><td>実装前に現行仕様・認証方式を確認</td></tr><tr><td>差分ゼロのDraft PR作成</td><td>実機検証。失敗時は停止して報告</td></tr><tr><td>Issueラベル名と同期ルール</td><td>既存GitHub運用に合わせる</td></tr><tr><td>別サブタスク間のPR依存関係</td><td>MVPでは必要な場合に手動で明示。レビューNG時は同じPRを修正するため依存PRは作成しない。</td></tr><tr><td>Cloudflareドメイン・認証設定</td><td>環境構築時に決定</td></tr></table></div><div class="note"><strong>Claude Codeへの実装指示：</strong>本書の「確定」項目を優先し、「実装提案」はシンプルさ・安全性・保守性を考慮して採用または調整する。未決定事項は根拠のない断定をせず、設定可能な設計とする。まずPhase 1（ローカルMVP）を動作させ、段階的に外部公開へ進める。実装内容、テスト結果、未完了項目を報告すること。</div><h3>開発ガイドラインとの関係</h3><p>全プロジェクト共通の「CommonGuideLine.md」を開発進行・報告・Git運用の共通規則として参照する。Claude管理塔の実装要件については本設計書の確定事項を優先する。</p><p>CharpGuideLine.mdとWpfGuideLine.mdはC#・WPF向けの技術知見であり、Python/FastAPI実装へ機械的に適用しない。プロジェクト固有のCLAUDE.mdには参照先、優先順位、実行・テストの注意点を記載する。</p><p>設計書と共通ガイドラインが衝突する場合、Claudeは黙って仕様を変更せず、衝突箇所と採用方針を実装計画に記録する。安全上重大な衝突は実装前に人間へ確認する。</p></section><footer>Claude管理塔 · 実装設計書 v1.7 · 単一HTMLファイル / 外部ライブラリ不要</footer>
+<section class="section" id="primer">
+<h2>13. Web技術の基礎（Web未経験のC#/.NETアプリ開発者向け）</h2>
+<p><span class="pill">補足説明</span> この章は実装要件ではなく、設計書を読み解き、Claude Codeが作成したプログラムを自分で理解するための説明。ASP.NET経験は前提にしない。</p>
+<h3>13.1 デスクトップアプリとの最大の違い</h3>
+<p>C#のデスクトップアプリでは、画面イベントから同一プロセスの処理を呼び出すことが多い。Webアプリでは、<strong>ブラウザ（画面）とサーバー（処理）が別のプロセス</strong>として動き、HTTPという通信規約でやり取りする。スマホからでも操作できるのは、画面をブラウザが描画し、処理は自宅PCが担当するため。</p>
+<pre>【外出先スマホ】HTML/CSS/JavaScript（ブラウザ）
+        │ HTTPリクエスト: POST /api/subtasks/123/execute
+        ▼
+【自宅PC】FastAPI（Webサーバー）
+        │ SQLiteに実行依頼を登録 → すぐ受付結果を返す
+        ▼
+【自宅PC】Pythonワーカー（別プロセス）
+        │ Claude Code起動・Git操作・ログ保存
+        ▼
+【自宅PC】SQLite / Git worktree
+
+スマホはClaude実行の終了まで通信を開いたまま待つ必要がない。</pre>
+<h3>13.2 それぞれの技術の役割</h3>
+<table><tr><th>技術</th><th>何を担当するか</th><th>身近な例え</th></tr>
+<tr><td>HTML</td><td>画面の構造（見出し、ボタン、入力欄）</td><td>画面の部品配置</td></tr>
+<tr><td>CSS</td><td>色・余白・スマホ対応などの見た目</td><td>画面デザイン設定</td></tr>
+<tr><td>JavaScript</td><td>クリック操作、API呼び出し、画面更新</td><td>UIイベント処理</td></tr>
+<tr><td>HTTP / JSON</td><td>ブラウザとサーバーの要求・応答、データ表現</td><td>プロセス間のメッセージ</td></tr>
+<tr><td>Python</td><td>サーバー・ワーカーの実装言語</td><td>C#に相当する言語</td></tr>
+<tr><td>FastAPI</td><td>HTTPのURLをPython関数へ結びつける仕組み、入力検証、API仕様書</td><td>Web通信の受付窓口</td></tr>
+<tr><td>Uvicorn</td><td>FastAPIアプリをHTTPサーバーとして動かす実行基盤</td><td>Webアプリのホスト</td></tr>
+<tr><td>SQLite</td><td>タスク実行履歴・キューをファイルDBに保存</td><td>ローカルデータベース</td></tr>
+<tr><td>SQLAlchemy</td><td>PythonからDBを操作するライブラリ</td><td>DBアクセス層 / ORM</td></tr>
+<tr><td>Cloudflare Tunnel</td><td>自宅ルーターのポート開放なしで外部アクセス経路を提供</td><td>外部公開の中継</td></tr>
+<tr><td>Cloudflare Access</td><td>アクセスする人の認証を行う</td><td>入口の入場チェック</td></tr></table>
+<h3>13.3 FastAPIの最小例</h3>
+<pre>from fastapi import FastAPI
+from pydantic import BaseModel
+
+app = FastAPI()
+
+class RunRequest(BaseModel):
+    instruction: str
+
+@app.post("/api/subtasks/{subtask_id}/execute")
+def execute(subtask_id: int, request: RunRequest):
+    # 実際の実装ではここでSQLiteに実行依頼を登録する
+    return {"accepted": True, "subtask_id": subtask_id}
+</pre>
+<p><code>@app.post(...)</code> は指定URLへのPOST要求を関数へ対応付ける宣言。<code>BaseModel</code> は受信JSONを検証する。FastAPIは通常 <code>http://127.0.0.1:8000/docs</code> にAPIを試せる画面を提供する（公開環境では/docsのアクセスも制限する）。</p>
+<h3>13.4 ブラウザからAPIを呼ぶ例</h3>
+<pre>const response = await fetch('/api/subtasks/123/execute', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ instruction: 'AIを実装して' })
+});
+const result = await response.json();
+</pre>
+<p><code>fetch</code> はブラウザ標準の通信機能。<code>POST</code> は操作依頼、<code>GET</code> は情報取得に使う。レスポンスの <code>accepted</code> は「依頼を受け付けた」という意味であり、Claudeの実装完了ではない。</p>
+<h3>13.5 同期・非同期とワーカー分離</h3>
+<p>Claude実行は数分以上かかる可能性がある。HTTPリクエストの中でClaudeを直接実行して完了まで待つと、通信切断やタイムアウトに弱い。Webサーバーはキューに登録して即座に応答し、別プロセスのワーカーが後から処理する。画面は定期的に状態取得する（MVPは数秒ごとのポーリングで十分。WebSocketは後から追加可能）。</p>
+<h3>13.6 ブラウザとサーバーの責任分担</h3>
+<p>ブラウザに置くJavaScriptは利用者から読める。GitHubのアクセストークン、Claudeの認証情報、DBパスなどの秘密情報は<strong>必ず自宅PCのサーバー側</strong>に置く。ブラウザからの指示は信用せず、サーバー側で対象Issue・サブタスク・操作権限を検証する。</p>
+</section>
+<section class="section" id="setup">
+<h2>14. Windows PCでの構築・起動手順（実装提案）</h2>
+<p><span class="pill proposal">実装提案</span> 初回は自宅PC内だけで動作確認し、後から外部公開する。PowerShellの例を示す。実際のパスや起動コマンドはClaudeが生成するプロジェクトに合わせてREADMEへ記載する。</p>
+<h3>14.1 必要なもの</h3>
+<ul><li>Windows PC、Python 3系、Git、Claude Code、GitHubアカウントと対象リポジトリ</li><li>Python仮想環境（venv）：プロジェクト固有のライブラリを分離する仕組み</li><li>GitHub API用の適切な権限を持つトークン（環境変数などで安全に管理し、Gitにコミットしない）</li></ul>
+<h3>14.2 ローカル環境の起動例</h3>
+<pre>py -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+
+# ターミナル1：Webサーバー
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+
+# ターミナル2：別プロセスの実行ワーカー
+python -m worker.main
+</pre>
+<p>上記の <code>app.main</code> と <code>worker.main</code> は推奨ディレクトリ構成の例で、実装時に一致させる。PowerShellの実行ポリシーによって仮想環境の有効化手順は異なる。初回は <code>http://127.0.0.1:8000</code> から動作確認する。</p>
+<h3>14.3 推奨フォルダ構成</h3>
+<pre>claude-tower/
+  app/                 # FastAPI: APIと画面配信
+    main.py
+    routes/
+    templates/         # HTML（採用する場合）
+    static/            # CSS / JavaScript
+  worker/              # 別プロセス: Claude実行
+    main.py
+  core/                # 共通のDBモデル・設定・GitHub連携
+  tests/               # 自動テスト
+  reports/             # 生成HTML（Git管理対象外）
+  requirements.txt
+  .env.example         # 秘密値を含まない設定例
+  README.md            # セットアップ・起動・トラブルシュート
+</pre>
+<h3>14.4 実装・検証を段階分けする</h3>
+<ol><li>FastAPIで固定データのタスク一覧を表示する。<code>/docs</code> からAPI呼び出しを試す。</li><li>GitHub APIでIssue一覧を取得する。まず読み取り専用で確認する。</li><li>SQLiteへサブタスクと実行依頼を保存し、ワーカーが取得できることを確認する。</li><li>テスト用リポジトリでブランチ作成・Draft PR作成を検証する。差分ゼロのPR作成可否はGitHub環境に依存するため実環境で確認し、不可なら実装を止めて要件を相談する（自動フォールバックはMVP対象外）。</li><li>Claude Code起動、実装ログ、HTML報告書、PR状態の同期を実装する。</li><li>ローカルで完成後、Cloudflare TunnelとAccessを設定してスマホから確認する。</li></ol>
+<h3>14.5 外部公開時の最低限の注意</h3>
+<p>FastAPIは原則 <code>127.0.0.1</code> にバインドし、Cloudflare Tunnel経由で公開する。Cloudflare Accessの認証を設定し、可能ならアプリ側でもAccessのJWTを検証する。Web UIから任意のシェルコマンドや任意のファイルパスを指定できるようにはしない。状態変更APIには認証・権限確認・CSRF等の対策を適用する。</p>
+<p><strong>並列起動の補足：</strong>実装時には設定値 <code>worker.count</code> に従ってN個の独立したワーカープロセスを起動するランチャー（例：<code>python -m worker.launcher</code>）を用意する。単独起動コマンドはデバッグ用途とする。</p></section>
+<section class="section" id="glossary">
+<h2>15. 用語集と学習の進め方</h2>
+<table><tr><th>用語</th><th>意味</th></tr>
+<tr><td>クライアント</td><td>画面を表示して操作するスマホ・PCのブラウザ</td></tr>
+<tr><td>サーバー</td><td>リクエストを受け付け、データ取得や処理を行う自宅PCのプログラム</td></tr>
+<tr><td>API</td><td>外部から機能を呼び出すための決まった窓口</td></tr>
+<tr><td>エンドポイント</td><td>APIのURLとHTTPメソッドの組（例：GET /api/tasks）</td></tr>
+<tr><td>HTTP GET / POST</td><td>情報取得 / 処理依頼などに用いる通信方式</td></tr>
+<tr><td>JSON</td><td>APIでデータを受け渡すテキスト形式</td></tr>
+<tr><td>REST API</td><td>HTTPメソッドとURLでデータ・操作を表現する設計スタイル</td></tr>
+<tr><td>ORM</td><td>DBのテーブルをプログラムのオブジェクトとして扱う仕組み</td></tr>
+<tr><td>ポーリング</td><td>一定間隔でサーバーに状態を問い合わせる方法</td></tr>
+<tr><td>WebSocket</td><td>ブラウザとサーバーで双方向通信を維持する仕組み（MVPでは必須でない）</td></tr>
+<tr><td>Draft PR</td><td>まだレビュー・マージの準備が整っていないPR</td></tr>
+<tr><td>Git worktree</td><td>1つのGitリポジトリから複数の作業ディレクトリを持つ仕組み</td></tr>
+<tr><td>CSP</td><td>ブラウザが読み込めるスクリプトや外部リソースを制限する仕組み</td></tr>
+<tr><td>iframe sandbox</td><td>HTMLレポートを親画面から権限的に隔離して表示する仕組み</td></tr></table>
+<h3>学習順序（無理なく理解するための目安）</h3>
+<ol><li><strong>HTTP・JSON・fetch</strong>：画面とサーバーがどう通信するかを理解する。</li><li><strong>FastAPI・Pydantic</strong>：URLとPython関数、入力検証の関係を理解する。</li><li><strong>SQLite・ワーカー</strong>：依頼を保存して別プロセスで処理する仕組みを理解する。</li><li><strong>GitHub API・Git worktree</strong>：Issue/PRと実装作業を結びつける。</li><li><strong>Cloudflare Access・Tunnel</strong>：ローカル動作を確認した後に安全に公開する。</li></ol>
+<p class="small">設計書の技術選択は Python + FastAPI を維持。ASP.NET / ASP.NET Core の知識を前提とした説明は使用しない。C#/.NETデスクトップアプリ経験は、イベント処理・クラス設計・DBアクセス・非同期処理の理解に活かす。</p>
+</section><section class="section" id="parallel"><h2>16. MVP並列実行仕様（確定）</h2><p><span class="pill">確定</span> MVP時点でワーカーN個・同時実行最大N件を達成する。Nは設定可能で、初期値は3（設定変更可能）。同一サブタスクの並列実行は禁止する。</p><h3>16.1 処理構造</h3><pre>FastAPI Webサーバー（1プロセス）
+      │ 指示登録 / 状態照会
+      ▼
+SQLite ジョブキュー（原子的なジョブ取得）
+      ├── Worker 1 → Claude Code 1 → worktree A
+      ├── Worker 2 → Claude Code 2 → worktree B
+      ├── Worker 3 → Claude Code 3 → worktree C
+      └── ... Worker N → Claude Code N → worktree N</pre><h3>16.2 ワーカー制御</h3><ul><li>ワーカー1個は同時に1ジョブだけ実行し、終了後に次のジョブを取得する。</li><li>キューからのジョブ取得はSQLiteの短い書き込みトランザクション内で「待機中→実行中」を原子的に更新する。</li><li>同一サブタスクのジョブは同時に実行しない。追加指示はキューに入れて順番に処理する。</li><li>サブタスクごとに専用worktreeを用意する。異なるサブタスクが同一リポジトリに属していても編集領域は分離する。</li><li>Gitの共有メタデータに影響するworktree作成・削除などは、リポジトリ単位で短時間の排他制御を行う。</li><li>1件のClaude実行が失敗しても他ワーカーは継続する。ワーカー異常終了後のジョブは要確認とし、無条件の自動二重実行はしない。</li><li>並列worktreeでもPR間の論理的な依存やマージ競合は起こり得る。依存PRは前提PRのマージ後に実行するか、実行前に依存関係を明示する。</li></ul><h3>16.3 設定例（実装提案）</h3><pre>worker:
+  count: 3
+  max_concurrent_tasks: 3
+  polling_interval_seconds: 3
+execution:
+  worktree_per_subtask: true
+  allow_same_subtask_parallel: false</pre><p>初期MVPでは count と max_concurrent_tasks を同じ値にする。Web画面の状態更新は従来どおり3秒程度のポーリングでよい。ワーカー数を増やす際はPCリソースとClaudeの利用制限を考慮する。</p><h3>16.4 受け入れ条件</h3><ul class="checklist"><li>N=3で異なる3件のサブタスクが同時にClaude Codeを実行する。</li><li>4件目は待機し、ワーカーが空くと自動的に開始する。</li><li>同一サブタスクへの複数指示は同時実行されず、順番に処理される。</li><li>同じGitリポジトリの3件を別々のworktreeで実行できる。</li><li>1件が失敗しても他の実行は継続する。</li><li>管理画面とスマホでワーカーの稼働状態と担当ジョブを確認できる。</li><li>Nを設定変更して起動すると、起動ワーカー数と同時実行上限が変わる。</li></ul><h3>並列実行の追加受け入れ条件</h3><p>異なるサブタスクを同一リポジトリで同時実行しても、worktreeの編集対象が交差しないこと。worktreeの作成・削除など共有Gitメタデータの変更時のみ短時間の排他を行うこと。</p><p>同じサブタスクに追加指示を連続登録した場合、実行中ジョブと次の待機ジョブが同時に起動しないこと。</p><p>ワーカーの強制終了後、該当ジョブが自動的に別ワーカーで二重実行されず、要確認状態として管理画面に表示されること。</p></section>
+</main></body></html>

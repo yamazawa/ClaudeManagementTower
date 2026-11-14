@@ -1,0 +1,13 @@
+.claude/settings.local.json
+
+.venv/
+__pycache__/
+*.pyc
+
+.env
+
+reports/
+*.db
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
