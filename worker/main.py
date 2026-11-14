@@ -7,8 +7,10 @@ from core.claude_client import run_claude
 from core.config import settings
 from core.db import SessionLocal, init_db
 from core.execution_events import record_event
+from core.github_client import mark_pr_ready
 from core.job_queue import claim_next_job, finish_job, register_worker, set_worker_state
-from core.models import ExecutionJob, Subtask
+from core.models import ExecutionJob, Project, Subtask
+from core.reports import save_report
 
 
 def _run_claude_for_job(job_id: int, worktree_path: str, instruction: str) -> tuple[str | None, str | None]:
@@ -18,22 +20,37 @@ def _run_claude_for_job(job_id: int, worktree_path: str, instruction: str) -> tu
     return asyncio.run(run_claude(instruction, worktree_path, on_message=on_message))
 
 
+def _finalize_success(job_id: int, subtask: Subtask, project: Project, worktree_path: str, result_text: str) -> None:
+    html_path = save_report(job_id, worktree_path, summary=result_text or "")
+    if html_path is None:
+        record_event(job_id, event_type="warning", content=".claude-tower/report.htmlが見つからない")
+
+    if subtask.github_pr_number:
+        mark_pr_ready(project.github_repo, subtask.github_pr_number)
+        with SessionLocal() as session:
+            db_subtask = session.get(Subtask, subtask.id)
+            db_subtask.lifecycle_state = "in_review"
+            session.commit()
+
+
 def process_job(job: dict, worker_id: int) -> None:
     print(f"[worker] job {job['job_id']} (subtask {job['subtask_id']}) を実行開始")
     set_worker_state(worker_id, state="busy", current_job_id=job["job_id"])
 
     with SessionLocal() as session:
         subtask = session.get(Subtask, job["subtask_id"])
-        branch_name = subtask.branch_name
-        instruction = subtask.instruction
-    worktree_path = f"{settings.worktree_base_dir}/{branch_name}"
+        project = session.get(Project, subtask.project_id)
+        session.expunge(subtask)
+        session.expunge(project)
+    worktree_path = f"{settings.worktree_base_dir}/{subtask.branch_name}"
 
     try:
-        session_id, result_text = _run_claude_for_job(job["job_id"], worktree_path, instruction)
+        session_id, result_text = _run_claude_for_job(job["job_id"], worktree_path, subtask.instruction)
         with SessionLocal() as session:
             db_job = session.get(ExecutionJob, job["job_id"])
             db_job.claude_session_id = session_id
             session.commit()
+        _finalize_success(job["job_id"], subtask, project, worktree_path, result_text or "")
         finish_job(job["job_id"], status="succeeded", exit_code=0)
         print(f"[worker] job {job['job_id']} 完了: {result_text}")
     except Exception as exc:  # noqa: BLE001
