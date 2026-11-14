@@ -23,7 +23,8 @@
 - Webサーバー（FastAPI）とClaude実行ワーカーをプロセス分離する。
 - DBはSQLite、アクセスはSQLAlchemy ORM。
 - 画面更新は3秒間隔ポーリング。WebSocketはMVPで不採用。
-- Git操作はGit CLI、GitHub操作はGitHub APIを使う。
+- Git操作はGit CLI、GitHub操作は`gh` CLI（サブプロセス実行）を使う。
+- GitHub認証は`gh auth login`済みの既存OAuthセッションを使い回す。ワーカー専用PATは発行しない。このトークンはscope `repo`（アクセス可能な全リポジトリ）を持つため、対象リポジトリ限定の最小権限はアプリ側の許可リスト判定に委ねる。
 - Windows上で稼働し、PowerShellとWindowsパスを前提にする。
 - GitHubホスティングはgithub.com（SaaS）で確定。セルフホストは対象外。
 - ワーカー数Nは設定可能、初期値3。
@@ -49,7 +50,7 @@
 ## 1.5 セキュリティ・運用
 - 外部アクセスはCloudflare Tunnel + Cloudflare Access経由とする。
 - 自宅ルーターのポート開放は前提にしない。
-- 認証情報は環境変数等で保持し、ブラウザへ送らない。
+- GitHub認証は`gh` CLIの既存OAuthセッション（Windows資格情報）を使い回す。Claude認証情報は環境変数等で保持する。いずれもブラウザへ送らない。
 - 対象リポジトリ・worktreeは許可リストで制限する。
 - 任意のOSコマンドをWebから直接実行させない。
 - ワーカー異常終了時は該当ジョブを「要確認」にし、自動二重実行しない。
@@ -82,9 +83,9 @@
 
 | Phase | 内容 | 完了条件 | テスト方法 |
 |---|---|---|---|
-| 0 | プロジェクト初期化・CLAUDE.md作成・設定値の確定 | git init、フォルダ構成作成、CLAUDE.md配置、GitHub接続情報が設定ファイル/環境変数化されている | ファイル配置の目視確認 |
-| 1 | 環境検証 | GitHub接続・Issue取得成功、差分ゼロブランチでのDraft PR作成可否が判明 | テスト用リポジトリに対してスクリプトで実行し結果を記録 |
-| 2 | 基盤構築 | FastAPI起動、SQLiteモデル作成・マイグレーション、設定読み込み、GitHub APIクライアントの疎通 | `/docs`からの手動呼び出し、簡易スクリプトでのDB読み書き確認 |
+| 0 | プロジェクト初期化・CLAUDE.md作成・設定値の確定 | git init、フォルダ構成作成、CLAUDE.md配置、対象リポジトリ（owner/repo）が設定ファイルで外出しされている | ファイル配置の目視確認 |
+| 1 | 環境検証 | `gh`経由でのIssue取得成功、差分ゼロブランチでのDraft PR作成可否が判明 | テスト用リポジトリ（claude-tower-test-repo）に対してスクリプトで実行し結果を記録 |
+| 2 | 基盤構築 | FastAPI起動、SQLiteモデル作成・マイグレーション、設定読み込み、`gh` CLIラッパーの疎通 | `/docs`からの手動呼び出し、簡易スクリプトでのDB読み書き確認 |
 | 3 | タスク画面（読み取り専用） | Issue一覧・詳細・サブタスク履歴が画面表示される | ブラウザでの目視確認 |
 | 4 | Git連携 | サブタスク作成でブランチ・Draft PRが作成され、Issueへのリンクが`Related to #番号`になる | テスト用リポジトリで1件作成し、GitHub上で確認 |
 | 5 | ワーカー基盤（単一ワーカー） | 別プロセスのワーカーがSQLiteジョブキューから原子的にジョブを取得できる | ジョブ投入→取得→状態更新の一連の動作をログで確認 |
@@ -102,7 +103,7 @@
 |---|---|---|---|
 | 1 | 差分ゼロのDraft PR作成可否 | テスト用リポジトリで実機検証する | 停止してエラーを報告し、代替フローは人間が決定する（設計書確定事項） |
 | 2 | Claude Code CLIの非対話実行方式 | 現行CLIの非対話オプション・セッション継続機能を調査し実行検証する | 代わりにAgent SDKの採用を検討し、結果を報告する |
-| 3 | GitHub APIアクセス方法（ライブラリ利用かHTTP直接呼び出しか） | シンプルさを優先し、採用候補を試して比較する | 設計書の「実装提案」として採用理由を報告時に共有する |
+| 3 | `gh` CLIコマンド（`pr create --draft`・`pr ready`等）の具体的な呼び出し・エラーハンドリング | テスト用リポジトリで実際にサブプロセス実行して検証する | 想定どおり動かない場合は代替コマンド・引数を調査し報告する |
 | 4 | SQLiteでの原子的ジョブ取得の実装パターン | WALモード・busy_timeout設定下でのトランザクション更新を検証する | 要件を満たせない場合は別の排他制御方式を報告・相談する |
 | 5 | Windows環境でのGit worktree運用（パス長・権限） | テスト用リポジトリで複数worktree作成・削除を検証する | 問題があれば制約事項として記録する |
 | 6 | Cloudflare Tunnel + AccessのJWT検証実装 | 後工程（Phase 9）で実機検証する | MVPでは認証をCloudflare Access側に委ね、アプリ側検証は可能な範囲で実装する |
@@ -111,7 +112,5 @@
 
 | No. | ファイル | 行 | 指摘内容 | 対応 |
 |---|---|---|---|---|
-| 1 | **C:\git\ClaudeManagementTower\Input\Claude監視塔_設計書.html** | 23 | 検証用リポジトリの作成方法が未実行。DevGuidelinesアカウント配下に新規テスト用リポジトリを用意する方針は決定済み | Phase 1着手前にClaudeが作成してよいか人間へ確認する |
-| 2 | **C:\git\ClaudeManagementTower\Input\Claude監視塔_設計書.html** | 51 | GitHub APIトークンの発行・権限範囲・保管方法が未確定 | 人間からの回答待ち |
-| 3 | **C:\git\ClaudeManagementTower\Input\Claude監視塔_設計書.html** | 66 | Claude Code CLIとAgent SDKのどちらを使うか未確定 | Phase 1の環境検証で技術調査し、結果を報告する |
-| 4 | **C:\git\ClaudeManagementTower\Input\Claude監視塔_設計書.html** | 66 | Cloudflareドメイン・Access設定が未確定 | Phase 9着手時に人間へ確認する（MVP初期は未着手でよい） |
+| 1 | **C:\git\ClaudeManagementTower\Input\Claude監視塔_設計書.html** | 66 | Claude Code CLIとAgent SDKのどちらを使うか未確定 | Phase 1の環境検証で技術調査し、結果を報告する |
+| 2 | **C:\git\ClaudeManagementTower\Input\Claude監視塔_設計書.html** | 66 | Cloudflareドメイン・Access設定が未確定 | Phase 9着手時に人間へ確認する（MVP初期は未着手でよい） |
