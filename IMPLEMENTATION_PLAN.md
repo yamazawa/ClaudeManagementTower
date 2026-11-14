@@ -59,6 +59,7 @@
 
 ## 1.5 セキュリティ・運用
 - 外部アクセスはCloudflare Tunnel + Cloudflare Access経由とする。
+- ドメインは個人の共用ドメインとして1つ取得し、本PJは`claude-tower.取得したドメイン`のようなサブドメイン1つを使う。他のPJは別のサブドメインを使い、同じドメイン・同じ`cloudflared`プロセスを共用する（確定・Phase 9前に決定）。
 - 自宅ルーターのポート開放は前提にしない。
 - GitHub認証は`gh` CLIの既存OAuthセッション（Windows資格情報）を使い回す。Claude認証情報は環境変数等で保持する。いずれもブラウザへ送らない。
 - 対象リポジトリ・worktreeは許可リストで制限する。
@@ -137,4 +138,4 @@
 
 | No. | ファイル | 行 | 指摘内容 | 対応 |
 |---|---|---|---|---|
-| 1 | **C:\git\ClaudeManagementTower\Input\Claude監視塔_設計書.html** | 66 | Cloudflareドメイン・Access設定が未確定 | Phase 9着手時に人間へ確認する（MVP初期は未着手でよい） |
+| 1 | **C:\git\ClaudeManagementTower\Input\Claude監視塔_設計書.html** | 66 | Cloudflareドメイン・Access設定が未確定。方針は確定済み（下記）、実際のドメイン取得はPhase 9着手時に人間が行う | Phase 9着手時に人間へ確認する（MVP初期は未着手でよい） |
