@@ -36,6 +36,7 @@
 - Claude実行は公式Claude Agent SDK（Python）を使う。内部的にはCLIサブプロセス方式と同じCLIバイナリ・同じエージェントループを使うが、`can_use_tool`コールバックでworktree外操作を確実に拒否できる点を優先してSDKを採用する。
 - `can_use_tool`コールバックは`PermissionResultAllow`/`PermissionResultDeny`を返す（dictを返すとSDK側でエラーになる。Phase 1実機検証済み）。
 - Webサーバー・ワーカープロセスは環境変数`PYTHONIOENCODING=utf-8`を設定して起動する（Windows既定のcp932では、Claude出力やGitHubの日本語データを標準出力に表示する際に文字化け・UnicodeEncodeErrorが発生するため。Phase 1・2で実機確認済み）。
+- ワーカープロセスは`-u`（無バッファ出力）付きで起動する（標準出力をファイルにリダイレクトするとバッファリングされ、ログの反映が遅れるため。Phase 5実機確認済み）。
 
 ## 1.3 データ・排他制御
 - ジョブ取得はSQLiteの短い書き込みトランザクションで原子的に行う。
@@ -108,7 +109,7 @@
 | 1 | 差分ゼロのDraft PR作成可否 | テスト用リポジトリで実機検証する | 検証済み。5.1参照 |
 | 2 | `claude-agent-sdk`（Python）の呼び出し方法・`can_use_tool`コールバックによるworktree外操作の拒否・`resume`によるセッション継続 | テスト用リポジトリに対応するworktreeで実際に実行して検証する | 検証済み。5.1参照 |
 | 3 | `gh` CLIコマンド（`pr create --draft`・`pr ready`等）の具体的な呼び出し・エラーハンドリング | テスト用リポジトリで実際にサブプロセス実行して検証する | 検証済み。5.1参照 |
-| 4 | SQLiteでの原子的ジョブ取得の実装パターン | WALモード・busy_timeout設定下でのトランザクション更新を検証する | 未検証。Phase 2/5で実施 |
+| 4 | SQLiteでの原子的ジョブ取得の実装パターン | WALモード・busy_timeout設定下でのトランザクション更新を検証する | 検証済み。`UPDATE ... RETURNING`で原子的に取得し、同一サブタスクはNOT EXISTS句で除外する（Phase 5実装・自動テスト済み） |
 | 7 | サブタスク作成中（worktree作成〜Draft PR作成〜DB保存）の途中失敗時の復旧 | - | MVPでは未対応。失敗時はエラーを返すのみで、再試行・ロールバックは行わない。残存したworktree・ブランチの後始末は人間が行う（設計書7章で想定済みのリスク） |
 | 5 | Windows環境でのGit worktree運用（パス長・権限） | テスト用リポジトリで複数worktree作成・削除を検証する | 検証済み。5.1参照 |
 | 6 | Cloudflare Tunnel + AccessのJWT検証実装 | 後工程（Phase 9）で実機検証する | 未検証。Phase 9で実施 |

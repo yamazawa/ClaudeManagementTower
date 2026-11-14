@@ -7,8 +7,8 @@ GitHub Issue連動型AI開発タスク管理システム。
 
 ## 現状
 
-FastAPIサーバーの基盤（設定読み込み・SQLiteモデル・`gh`/Claude Agent SDKラッパー）まで実装済み（Phase 2）。\
-Web画面・Git連携・ワーカーの実装はこれから行う。
+FastAPIサーバー、Git連携（サブタスク作成）、ワーカー基盤（単一ワーカー）まで実装済み（Phase 5）。\
+Claude実行統合・並列実行・遠隔アクセスはこれから行う。
 
 ## セットアップ
 
@@ -29,5 +29,11 @@ $env:PYTHONIOENCODING = "utf-8"
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-起動後、`http://127.0.0.1:8000/docs` でAPIを確認できる。\
-ワーカーの起動コマンドはPhase 5で確定する。
+起動後、`http://127.0.0.1:8000/docs` でAPIを確認できる。
+
+ワーカーは別プロセスで起動する。標準出力がバッファリングされ、ログがファイルに出力されるまで遅れることがあるため`-u`（無バッファ）を付ける。
+
+```
+$env:PYTHONIOENCODING = "utf-8"
+python -u -m worker.main
+```

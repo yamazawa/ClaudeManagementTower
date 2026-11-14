@@ -11,7 +11,7 @@ from core.git_client import (
     slugify,
 )
 from core.github_client import GitHubClientError, create_draft_pr
-from core.models import Project, Subtask
+from core.models import ExecutionJob, Project, Subtask
 
 router = APIRouter(prefix="/api/subtasks")
 
@@ -93,3 +93,18 @@ def create_subtask(payload: CreateSubtaskRequest):
             "pr_url": pr["url"],
             "lifecycle_state": subtask.lifecycle_state,
         }
+
+
+@router.post("/{subtask_id}/execute")
+def execute_subtask(subtask_id: int):
+    with SessionLocal() as session:
+        subtask = session.get(Subtask, subtask_id)
+        if subtask is None:
+            raise HTTPException(status_code=404, detail="subtask not found")
+
+        job = ExecutionJob(subtask_id=subtask_id, status="queued")
+        session.add(job)
+        session.commit()
+        session.refresh(job)
+
+        return {"job_id": job.id, "status": job.status}
