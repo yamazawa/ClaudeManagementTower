@@ -1,6 +1,13 @@
 let currentProjectId = null;
 let currentIssueNumber = null;
 
+const LIFECYCLE_LABELS = {
+  draft: "Draft",
+  in_review: "レビュー中",
+  merged: "マージ済",
+  closed: "クローズ（未マージ）",
+};
+
 async function init() {
   const projects = await fetch("/api/projects").then((r) => r.json());
   if (projects.length === 0) {
@@ -36,7 +43,15 @@ function renderSubtask(s) {
   const prLink = s.pr_url
     ? ` <a href="${s.pr_url}" target="_blank" rel="noopener">PR #${s.github_pr_number}</a>`
     : "";
-  return `<div class="subtask-item">${s.title}（${s.lifecycle_state}）${prLink}</div>`;
+  const label = LIFECYCLE_LABELS[s.lifecycle_state] || s.lifecycle_state;
+  return `
+    <div class="subtask-item" data-subtask-id="${s.id}">
+      <div>${s.title}（${label}）${prLink}</div>
+      <button class="run-button" data-subtask-id="${s.id}">実行する</button>
+      <p class="job-status empty" data-subtask-id="${s.id}"></p>
+      <iframe class="report-frame" sandbox="" data-subtask-id="${s.id}" hidden></iframe>
+    </div>
+  `;
 }
 
 async function selectIssue(number) {
@@ -73,6 +88,9 @@ async function selectIssue(number) {
   document
     .getElementById("subtask-form")
     .addEventListener("submit", onSubmitSubtaskForm);
+  document
+    .querySelectorAll(".run-button")
+    .forEach((btn) => btn.addEventListener("click", onClickRun));
 }
 
 async function onSubmitSubtaskForm(event) {
@@ -104,6 +122,49 @@ async function onSubmitSubtaskForm(event) {
   }
 
   await selectIssue(currentIssueNumber);
+}
+
+async function onClickRun(event) {
+  const subtaskId = event.target.dataset.subtaskId;
+  const statusEl = document.querySelector(`.job-status[data-subtask-id="${subtaskId}"]`);
+  event.target.disabled = true;
+  statusEl.textContent = "実行待ち...";
+
+  const { job_id: jobId } = await fetch(`/api/subtasks/${subtaskId}/execute`, {
+    method: "POST",
+  }).then((r) => r.json());
+
+  pollJob(jobId, subtaskId, event.target);
+}
+
+async function pollJob(jobId, subtaskId, button) {
+  const statusEl = document.querySelector(`.job-status[data-subtask-id="${subtaskId}"]`);
+  const job = await fetch(`/api/jobs/${jobId}`).then((r) => r.json());
+  statusEl.textContent = `状態: ${job.status}`;
+
+  if (job.status === "queued" || job.status === "running") {
+    setTimeout(() => pollJob(jobId, subtaskId, button), 3000);
+    return;
+  }
+
+  if (job.status === "succeeded") {
+    // selectIssueが画面を再描画するため、レポート表示は再描画の後に行う
+    await selectIssue(currentIssueNumber);
+    await showReport(jobId, subtaskId);
+  } else {
+    button.disabled = false;
+  }
+}
+
+async function showReport(jobId, subtaskId) {
+  const frame = document.querySelector(`.report-frame[data-subtask-id="${subtaskId}"]`);
+  const response = await fetch(`/api/jobs/${jobId}/report`);
+  if (!response.ok) {
+    return;
+  }
+  // iframeにURLを直接読み込ませる（レポート応答のCSPヘッダーを効かせるため）
+  frame.src = `/api/jobs/${jobId}/report`;
+  frame.hidden = false;
 }
 
 init();
