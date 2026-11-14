@@ -7,11 +7,10 @@ GitHub Issue連動型AI開発タスク管理システム。
 
 ## 現状
 
-実装前の準備段階（Phase 0）。\
-フォルダ構成・設定ファイル・CLAUDE.mdを配置した。\
-FastAPIサーバー・ワーカーの実装はこれから行う。
+FastAPIサーバーの基盤（設定読み込み・SQLiteモデル・`gh`/Claude Agent SDKラッパー）まで実装済み（Phase 2）。\
+Web画面・Git連携・ワーカーの実装はこれから行う。
 
-## セットアップ（予定）
+## セットアップ
 
 ```
 py -m venv .venv
@@ -20,4 +19,15 @@ python -m pip install -r requirements.txt
 copy .env.example .env
 ```
 
-起動コマンドは実装（Phase 2以降）で確定する。
+## 起動
+
+Windows既定の文字コード（cp932）では、Claude出力やGitHubの日本語データでUnicodeEncodeError・文字化けが発生する。\
+`PYTHONIOENCODING=utf-8`を必ず設定して起動する。
+
+```
+$env:PYTHONIOENCODING = "utf-8"
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+起動後、`http://127.0.0.1:8000/docs` でAPIを確認できる。\
+ワーカーの起動コマンドはPhase 5で確定する。

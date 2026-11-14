@@ -35,7 +35,7 @@
 - Webサーバーはリクエスト処理中にClaude Codeを直接起動して待機しない。
 - Claude実行は公式Claude Agent SDK（Python）を使う。内部的にはCLIサブプロセス方式と同じCLIバイナリ・同じエージェントループを使うが、`can_use_tool`コールバックでworktree外操作を確実に拒否できる点を優先してSDKを採用する。
 - `can_use_tool`コールバックは`PermissionResultAllow`/`PermissionResultDeny`を返す（dictを返すとSDK側でエラーになる。Phase 1実機検証済み）。
-- ワーカープロセスの標準出力・ログ出力はUTF-8を強制する（Windows既定のcp932ではClaudeの出力でUnicodeEncodeErrorが発生するため。Phase 1実機検証済み）。
+- Webサーバー・ワーカープロセスは環境変数`PYTHONIOENCODING=utf-8`を設定して起動する（Windows既定のcp932では、Claude出力やGitHubの日本語データを標準出力に表示する際に文字化け・UnicodeEncodeErrorが発生するため。Phase 1・2で実機確認済み）。
 
 ## 1.3 データ・排他制御
 - ジョブ取得はSQLiteの短い書き込みトランザクションで原子的に行う。
@@ -124,7 +124,7 @@
 | 6 | `claude-agent-sdk`の`query()`呼び出し | 成功。`SystemMessage`・`ResultMessage`等の型付きオブジェクトを取得できた |
 | 7 | `resume`によるセッション継続 | 成功。同一session_idで2回目の実行がエラーなく継続した |
 | 8 | `can_use_tool`によるworktree外操作の拒否 | dictを返すとSDK側でエラーになり、結果的に書き込みは防げたが正しい実装ではなかった。`PermissionResultAllow`/`PermissionResultDeny`を返す実装に修正が必要（1.2節に反映済み） |
-| 9 | Windows標準出力のエンコーディング | 既定のcp932でClaudeの出力にUnicodeEncodeErrorが発生した。UTF-8強制が必要（1.2節に反映済み） |
+| 9 | Windows標準出力のエンコーディング | 既定のcp932では、Claude出力に限らずGitHubの日本語データ表示でも文字化け・UnicodeEncodeErrorが発生した。`PYTHONIOENCODING=utf-8`をプロセス起動時に設定して解決（Phase 2で再確認、1.2節に反映済み） |
 
 # 6. 実装開始前にユーザーへ確認が必要な情報
 
