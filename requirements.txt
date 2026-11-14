@@ -3,4 +3,5 @@ uvicorn[standard]
 sqlalchemy
 pydantic-settings
 claude-agent-sdk
+filelock
 pytest
