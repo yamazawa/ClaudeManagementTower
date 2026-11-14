@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     github_target_repo_path: str = "C:/git/claude-tower-test-repo"
     github_default_branch: str = "master"
     worker_count: int = 3
+    worktree_base_dir: str = "C:/git/claude-tower-worktrees"
     database_path: str = "claude_tower.db"
     cloudflare_access_aud: str = ""
 
