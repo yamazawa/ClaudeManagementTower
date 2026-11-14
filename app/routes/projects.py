@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 
 from core.db import SessionLocal
-from core.github_client import get_issue, list_issues
+from core.github_client import get_issue, get_pr, list_issues
 from core.models import Project, Subtask
 
 router = APIRouter(prefix="/api/projects")
@@ -58,3 +58,36 @@ def get_issue_detail(project_id: int, number: int):
             for s in subtasks
         ]
         return issue
+
+
+def _lifecycle_state_from_pr(pr: dict) -> str:
+    if pr.get("mergedAt"):
+        return "merged"
+    if pr.get("state") == "CLOSED":
+        return "closed"
+    if pr.get("isDraft"):
+        return "draft"
+    return "in_review"
+
+
+@router.post("/{project_id}/sync")
+def sync_project(project_id: int):
+    with SessionLocal() as session:
+        project = session.get(Project, project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="project not found")
+
+        subtasks = (
+            session.query(Subtask)
+            .filter(Subtask.project_id == project.id, Subtask.github_pr_number.isnot(None))
+            .all()
+        )
+        updated = []
+        for subtask in subtasks:
+            pr = get_pr(project.github_repo, subtask.github_pr_number)
+            new_state = _lifecycle_state_from_pr(pr)
+            if new_state != subtask.lifecycle_state:
+                subtask.lifecycle_state = new_state
+                updated.append({"subtask_id": subtask.id, "lifecycle_state": new_state})
+        session.commit()
+        return {"updated": updated}
