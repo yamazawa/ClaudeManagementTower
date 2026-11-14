@@ -1,9 +1,14 @@
+from pathlib import Path
+
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import HTMLResponse
 
 from core.db import SessionLocal
-from core.models import ExecutionEvent, ExecutionJob
+from core.models import ExecutionEvent, ExecutionJob, Report
 
 router = APIRouter(prefix="/api/jobs")
+
+REPORT_CSP = "default-src 'none'; style-src 'unsafe-inline'"
 
 
 @router.get("/{job_id}")
@@ -43,3 +48,13 @@ def get_job_events(job_id: int):
             }
             for e in events
         ]
+
+
+@router.get("/{job_id}/report")
+def get_job_report(job_id: int):
+    with SessionLocal() as session:
+        report = session.query(Report).filter_by(job_id=job_id).first()
+        if report is None:
+            raise HTTPException(status_code=404, detail="report not found")
+        html = Path(report.html_path).read_text(encoding="utf-8")
+        return HTMLResponse(content=html, headers={"Content-Security-Policy": REPORT_CSP})
