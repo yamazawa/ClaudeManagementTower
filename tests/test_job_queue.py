@@ -1,7 +1,16 @@
+from datetime import datetime, timedelta, timezone
+
 from sqlalchemy.orm import sessionmaker
 
 from core.db import init_db, make_engine
-from core.job_queue import claim_next_job, finish_job, register_worker, set_worker_state
+from core.job_queue import (
+    claim_next_job,
+    finish_job,
+    heartbeat_job,
+    recover_stale_jobs,
+    register_worker,
+    set_worker_state,
+)
 from core.models import ExecutionJob, Subtask
 
 
@@ -74,3 +83,37 @@ def test_set_worker_state_updates_row(tmp_path):
         worker = session.get(Worker, worker_id)
         assert worker.state == "busy"
         assert worker.current_job_id == 42
+
+
+def test_recover_stale_jobs_flags_jobs_without_recent_heartbeat(tmp_path):
+    engine, session_factory = _setup(tmp_path)
+    _add_subtask_and_jobs(session_factory, job_count=1)
+    worker_id = register_worker("worker-a", session_factory=session_factory)
+    job = claim_next_job(worker_id, bind=engine, session_factory=session_factory)
+
+    with session_factory() as session:
+        stale = session.get(ExecutionJob, job["job_id"])
+        stale.heartbeat_at = datetime.now(timezone.utc) - timedelta(seconds=120)
+        session.commit()
+
+    recovered = recover_stale_jobs(timeout_seconds=60, session_factory=session_factory)
+
+    assert recovered == [job["job_id"]]
+    with session_factory() as session:
+        reloaded = session.get(ExecutionJob, job["job_id"])
+        assert reloaded.status == "needs_attention"
+
+
+def test_recover_stale_jobs_keeps_recently_heartbeaten_jobs(tmp_path):
+    engine, session_factory = _setup(tmp_path)
+    _add_subtask_and_jobs(session_factory, job_count=1)
+    worker_id = register_worker("worker-a", session_factory=session_factory)
+    job = claim_next_job(worker_id, bind=engine, session_factory=session_factory)
+
+    heartbeat_job(job["job_id"], worker_id, session_factory=session_factory)
+    recovered = recover_stale_jobs(timeout_seconds=60, session_factory=session_factory)
+
+    assert recovered == []
+    with session_factory() as session:
+        reloaded = session.get(ExecutionJob, job["job_id"])
+        assert reloaded.status == "running"
