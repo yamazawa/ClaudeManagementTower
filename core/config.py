@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     github_default_branch: str = "master"
     worker_count: int = 3
     worktree_base_dir: str = "C:/git/claude-tower-worktrees"
+    worker_poll_interval_seconds: int = 3
     database_path: str = "claude_tower.db"
     cloudflare_access_aud: str = ""
 
