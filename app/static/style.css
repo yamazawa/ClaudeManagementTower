@@ -1,0 +1,101 @@
+:root {
+  --bg: #f4f6fa;
+  --ink: #182235;
+  --muted: #637086;
+  --line: #dce3ec;
+  --accent: #335eea;
+  --soft: #edf2ff;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.7 system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+header {
+  background: #18243c;
+  color: #fff;
+  padding: 16px 24px;
+}
+
+header h1 {
+  margin: 0;
+  font-size: 20px;
+}
+
+main {
+  display: grid;
+  grid-template-columns: 38% 62%;
+  gap: 16px;
+  max-width: 1080px;
+  margin: 20px auto;
+  padding: 0 16px;
+}
+
+section {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 16px 20px;
+}
+
+h2 {
+  font-size: 16px;
+  margin: 0 0 12px;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+}
+
+#issue-list-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.issue-item {
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+
+.issue-item:hover {
+  background: var(--soft);
+}
+
+.issue-item.active {
+  border-color: var(--accent);
+  background: var(--soft);
+}
+
+.issue-item .number {
+  color: var(--muted);
+  font-size: 12px;
+  margin-right: 6px;
+}
+
+.empty {
+  color: var(--muted);
+}
+
+.subtask-item {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.subtask-item:last-child {
+  border-bottom: none;
+}
+
+@media (max-width: 680px) {
+  main {
+    grid-template-columns: 1fr;
+  }
+}
