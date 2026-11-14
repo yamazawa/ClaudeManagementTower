@@ -2,6 +2,8 @@ import re
 import subprocess
 from pathlib import Path
 
+from filelock import FileLock
+
 
 class GitClientError(RuntimeError):
     pass
@@ -31,11 +33,15 @@ def create_worktree(
     base_branch: str,
     worktree_path: str,
 ) -> None:
-    _run_git(["fetch", "origin", base_branch], cwd=repo_path)
-    _run_git(
-        ["worktree", "add", "-b", branch_name, worktree_path, f"origin/{base_branch}"],
-        cwd=repo_path,
-    )
+    # worktree作成はリポジトリ共有のGitメタデータを変更するため、
+    # 同一リポジトリへの同時作成をリポジトリ単位で排他する
+    lock_path = Path(repo_path) / ".git" / "claude-tower-worktree.lock"
+    with FileLock(str(lock_path)):
+        _run_git(["fetch", "origin", base_branch], cwd=repo_path)
+        _run_git(
+            ["worktree", "add", "-b", branch_name, worktree_path, f"origin/{base_branch}"],
+            cwd=repo_path,
+        )
 
 
 def commit_subtask_instruction(worktree_path: str, title: str, instruction: str) -> None:
