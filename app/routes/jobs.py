@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 
 from core.db import SessionLocal
-from core.models import ExecutionJob
+from core.models import ExecutionEvent, ExecutionJob
 
 router = APIRouter(prefix="/api/jobs")
 
@@ -21,4 +21,25 @@ def get_job(job_id: int):
             "ended_at": job.ended_at,
             "exit_code": job.exit_code,
             "worker_id": job.worker_id,
+            "claude_session_id": job.claude_session_id,
         }
+
+
+@router.get("/{job_id}/events")
+def get_job_events(job_id: int):
+    with SessionLocal() as session:
+        events = (
+            session.query(ExecutionEvent)
+            .filter_by(job_id=job_id)
+            .order_by(ExecutionEvent.sequence_no)
+            .all()
+        )
+        return [
+            {
+                "sequence_no": e.sequence_no,
+                "event_type": e.event_type,
+                "content": e.content,
+                "created_at": e.created_at,
+            }
+            for e in events
+        ]
