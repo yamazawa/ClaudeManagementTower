@@ -34,6 +34,9 @@
 - ブランチ作成後、サブタスクのタイトル・指示内容を`.claude-tower/subtask.md`に書き出す初期コミットを1件追加してからDraft PRを作成する（差分ゼロではDraft PR作成不可のため。Phase 1実機検証済み、ダミーコミットではなく意味のある内容とする）。
 - Claudeには`.claude-tower/report.html`への自己完結HTMLレポート出力を、system_promptの追記（`claude_code`プリセット + append）で指示する。ワーカーはこのファイルを`reports/job-{id}.html`へコピーしてReportテーブルへ記録する（Phase 7実装・実機確認済み）。
 - ジョブが例外なく完走したら（job.status=succeeded）、Claudeの作業判断の成否に関わらずDraftを解除し、サブタスクのlifecycle_stateを`in_review`にする。Claude自身の成功/一部成功/失敗の判断はレポートの中身で人間が確認する（Phase 7確定）。
+- Nワーカーは`python -m worker.launcher`が`worker.count`個のサブプロセスとして起動する。単独起動（`python -m worker.main`）はデバッグ用途とする（Phase 8実装・実機確認済み）。
+- `git worktree add`はリポジトリ単位で`filelock`による排他を行う（共有Gitメタデータの同時変更を避けるため。Phase 8実装済み）。
+- 各ワーカーはジョブ実行中、別スレッドで`heartbeat_interval_seconds`ごとにjob/workerのheartbeat_atを更新する。ポーリングのたびに`stale_timeout_seconds`を超えて更新のないrunningジョブを`needs_attention`にする。要確認ジョブは自動再実行しない（Phase 8実装・ワーカー強制終了での実機確認済み）。
 - Webサーバーはリクエスト処理中にClaude Codeを直接起動して待機しない。
 - Claude実行は公式Claude Agent SDK（Python）を使う。内部的にはCLIサブプロセス方式と同じCLIバイナリ・同じエージェントループを使うが、`can_use_tool`コールバックでworktree外操作を確実に拒否できる点を優先してSDKを採用する。
 - `can_use_tool`コールバックは`PermissionResultAllow`/`PermissionResultDeny`を返す（dictを返すとSDK側でエラーになる。Phase 1実機検証済み）。

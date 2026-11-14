@@ -8,6 +8,26 @@ const LIFECYCLE_LABELS = {
   closed: "クローズ（未マージ）",
 };
 
+const WORKER_STATE_LABELS = {
+  idle: "待機中",
+  busy: "実行中",
+};
+
+async function pollWorkers() {
+  const workers = await fetch("/api/workers").then((r) => r.json());
+  const busyCount = workers.filter((w) => w.state === "busy").length;
+  const items = workers
+    .map((w) => {
+      const label = WORKER_STATE_LABELS[w.state] || w.state;
+      const job = w.current_job_id ? `job #${w.current_job_id}` : "";
+      return `<span class="worker-pill worker-${w.state}">${label} ${job}</span>`;
+    })
+    .join("");
+  document.getElementById("worker-status").innerHTML =
+    `<span class="worker-summary">実行中 ${busyCount} / ${workers.length}</span>${items}`;
+  setTimeout(pollWorkers, 3000);
+}
+
 async function init() {
   const projects = await fetch("/api/projects").then((r) => r.json());
   if (projects.length === 0) {
@@ -17,6 +37,7 @@ async function init() {
   }
   currentProjectId = projects[0].id;
   await loadIssues();
+  pollWorkers();
 }
 
 async function loadIssues() {

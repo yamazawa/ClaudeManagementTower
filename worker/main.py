@@ -1,5 +1,6 @@
 import asyncio
 import os
+import threading
 import time
 import uuid
 
@@ -8,7 +9,14 @@ from core.config import settings
 from core.db import SessionLocal, init_db
 from core.execution_events import record_event
 from core.github_client import mark_pr_ready
-from core.job_queue import claim_next_job, finish_job, register_worker, set_worker_state
+from core.job_queue import (
+    claim_next_job,
+    finish_job,
+    heartbeat_job,
+    recover_stale_jobs,
+    register_worker,
+    set_worker_state,
+)
 from core.models import ExecutionJob, Project, Subtask
 from core.reports import save_report
 
@@ -18,6 +26,22 @@ def _run_claude_for_job(job_id: int, worktree_path: str, instruction: str) -> tu
         record_event(job_id, event_type=type(message).__name__, content=repr(message)[:4000])
 
     return asyncio.run(run_claude(instruction, worktree_path, on_message=on_message))
+
+
+def _run_with_heartbeat(job_id: int, worker_id: int, worktree_path: str, instruction: str):
+    stop_event = threading.Event()
+
+    def heartbeat_loop() -> None:
+        while not stop_event.wait(settings.job_heartbeat_interval_seconds):
+            heartbeat_job(job_id, worker_id)
+
+    thread = threading.Thread(target=heartbeat_loop, daemon=True)
+    thread.start()
+    try:
+        return _run_claude_for_job(job_id, worktree_path, instruction)
+    finally:
+        stop_event.set()
+        thread.join()
 
 
 def _finalize_success(job_id: int, subtask: Subtask, project: Project, worktree_path: str, result_text: str) -> None:
@@ -45,7 +69,9 @@ def process_job(job: dict, worker_id: int) -> None:
     worktree_path = f"{settings.worktree_base_dir}/{subtask.branch_name}"
 
     try:
-        session_id, result_text = _run_claude_for_job(job["job_id"], worktree_path, subtask.instruction)
+        session_id, result_text = _run_with_heartbeat(
+            job["job_id"], worker_id, worktree_path, subtask.instruction
+        )
         with SessionLocal() as session:
             db_job = session.get(ExecutionJob, job["job_id"])
             db_job.claude_session_id = session_id
@@ -68,6 +94,10 @@ def main() -> None:
     print(f"[worker] 起動しました: {process_identifier} (id={worker_id})")
 
     while True:
+        recovered = recover_stale_jobs(settings.job_stale_timeout_seconds)
+        if recovered:
+            print(f"[worker] 要確認にしたジョブ: {recovered}")
+
         job = claim_next_job(worker_id)
         if job is None:
             time.sleep(settings.worker_poll_interval_seconds)

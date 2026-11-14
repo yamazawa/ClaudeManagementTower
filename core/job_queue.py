@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
@@ -55,9 +55,44 @@ def claim_next_job(worker_id: int, bind=engine, session_factory: sessionmaker = 
         job.worker_id = worker_id
         job.claimed_at = now
         job.started_at = now
+        job.heartbeat_at = now
         session.commit()
 
     return {"job_id": row.id, "subtask_id": row.subtask_id}
+
+
+def heartbeat_job(
+    job_id: int,
+    worker_id: int,
+    session_factory: sessionmaker = SessionLocal,
+) -> None:
+    now = datetime.now(timezone.utc)
+    with session_factory() as session:
+        job = session.get(ExecutionJob, job_id)
+        worker = session.get(Worker, worker_id)
+        if job is not None:
+            job.heartbeat_at = now
+        if worker is not None:
+            worker.heartbeat_at = now
+        session.commit()
+
+
+def recover_stale_jobs(
+    timeout_seconds: int,
+    session_factory: sessionmaker = SessionLocal,
+) -> list[int]:
+    threshold = datetime.now(timezone.utc) - timedelta(seconds=timeout_seconds)
+    with session_factory() as session:
+        stale_jobs = (
+            session.query(ExecutionJob)
+            .filter(ExecutionJob.status == "running", ExecutionJob.heartbeat_at < threshold)
+            .all()
+        )
+        recovered_ids = [job.id for job in stale_jobs]
+        for job in stale_jobs:
+            job.status = "needs_attention"
+        session.commit()
+    return recovered_ids
 
 
 def finish_job(
