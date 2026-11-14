@@ -31,8 +31,11 @@
 - 1ワーカーは同時に1ジョブのみ実行する。
 - 同一サブタスクの並列実行は禁止する。
 - サブタスクごとに専用Git worktreeを割り当てる。
+- ブランチ作成後、サブタスクのタイトル・指示内容を`.claude-tower/subtask.md`に書き出す初期コミットを1件追加してからDraft PRを作成する（差分ゼロではDraft PR作成不可のため。Phase 1実機検証済み、ダミーコミットではなく意味のある内容とする）。
 - Webサーバーはリクエスト処理中にClaude Codeを直接起動して待機しない。
 - Claude実行は公式Claude Agent SDK（Python）を使う。内部的にはCLIサブプロセス方式と同じCLIバイナリ・同じエージェントループを使うが、`can_use_tool`コールバックでworktree外操作を確実に拒否できる点を優先してSDKを採用する。
+- `can_use_tool`コールバックは`PermissionResultAllow`/`PermissionResultDeny`を返す（dictを返すとSDK側でエラーになる。Phase 1実機検証済み）。
+- ワーカープロセスの標準出力・ログ出力はUTF-8を強制する（Windows既定のcp932ではClaudeの出力でUnicodeEncodeErrorが発生するため。Phase 1実機検証済み）。
 
 ## 1.3 データ・排他制御
 - ジョブ取得はSQLiteの短い書き込みトランザクションで原子的に行う。
@@ -100,14 +103,28 @@
 
 # 5. 実装前に検証が必要な技術的課題
 
-| No. | 課題 | 検証方法 | 不可・失敗時の対応 |
+| No. | 課題 | 検証方法 | 状況 |
 |---|---|---|---|
-| 1 | 差分ゼロのDraft PR作成可否 | テスト用リポジトリで実機検証する | 停止してエラーを報告し、代替フローは人間が決定する（設計書確定事項） |
-| 2 | `claude-agent-sdk`（Python）の呼び出し方法・`can_use_tool`コールバックによるworktree外操作の拒否・`resume`によるセッション継続 | テスト用リポジトリに対応するworktreeで実際に実行して検証する | 想定どおり動かない場合は実装方法を見直し、結果を報告する |
-| 3 | `gh` CLIコマンド（`pr create --draft`・`pr ready`等）の具体的な呼び出し・エラーハンドリング | テスト用リポジトリで実際にサブプロセス実行して検証する | 想定どおり動かない場合は代替コマンド・引数を調査し報告する |
-| 4 | SQLiteでの原子的ジョブ取得の実装パターン | WALモード・busy_timeout設定下でのトランザクション更新を検証する | 要件を満たせない場合は別の排他制御方式を報告・相談する |
-| 5 | Windows環境でのGit worktree運用（パス長・権限） | テスト用リポジトリで複数worktree作成・削除を検証する | 問題があれば制約事項として記録する |
-| 6 | Cloudflare Tunnel + AccessのJWT検証実装 | 後工程（Phase 9）で実機検証する | MVPでは認証をCloudflare Access側に委ね、アプリ側検証は可能な範囲で実装する |
+| 1 | 差分ゼロのDraft PR作成可否 | テスト用リポジトリで実機検証する | 検証済み。5.1参照 |
+| 2 | `claude-agent-sdk`（Python）の呼び出し方法・`can_use_tool`コールバックによるworktree外操作の拒否・`resume`によるセッション継続 | テスト用リポジトリに対応するworktreeで実際に実行して検証する | 検証済み。5.1参照 |
+| 3 | `gh` CLIコマンド（`pr create --draft`・`pr ready`等）の具体的な呼び出し・エラーハンドリング | テスト用リポジトリで実際にサブプロセス実行して検証する | 検証済み。5.1参照 |
+| 4 | SQLiteでの原子的ジョブ取得の実装パターン | WALモード・busy_timeout設定下でのトランザクション更新を検証する | 未検証。Phase 2/5で実施 |
+| 5 | Windows環境でのGit worktree運用（パス長・権限） | テスト用リポジトリで複数worktree作成・削除を検証する | 検証済み。5.1参照 |
+| 6 | Cloudflare Tunnel + AccessのJWT検証実装 | 後工程（Phase 9）で実機検証する | 未検証。Phase 9で実施 |
+
+## 5.1 Phase 1 検証結果（2026-11-14、claude-tower-test-repoで実施）
+
+| No. | 検証項目 | 結果 |
+|---|---|---|
+| 1 | `gh issue list/view --json`でのIssue取得 | 成功 |
+| 2 | 差分ゼロのDraft PR作成 | 失敗（GitHubも不可）。`.claude-tower/subtask.md`への初期コミットで解決 |
+| 3 | `gh pr ready`によるDraft解除 | 成功 |
+| 4 | Git worktreeの作成・削除（Windows） | 成功。パス長・権限の問題は発生しなかった |
+| 5 | Python環境 | 未導入だったため、Python 3.12.10をwingetで導入した |
+| 6 | `claude-agent-sdk`の`query()`呼び出し | 成功。`SystemMessage`・`ResultMessage`等の型付きオブジェクトを取得できた |
+| 7 | `resume`によるセッション継続 | 成功。同一session_idで2回目の実行がエラーなく継続した |
+| 8 | `can_use_tool`によるworktree外操作の拒否 | dictを返すとSDK側でエラーになり、結果的に書き込みは防げたが正しい実装ではなかった。`PermissionResultAllow`/`PermissionResultDeny`を返す実装に修正が必要（1.2節に反映済み） |
+| 9 | Windows標準出力のエンコーディング | 既定のcp932でClaudeの出力にUnicodeEncodeErrorが発生した。UTF-8強制が必要（1.2節に反映済み） |
 
 # 6. 実装開始前にユーザーへ確認が必要な情報
 
