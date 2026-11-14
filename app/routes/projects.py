@@ -49,6 +49,11 @@ def get_issue_detail(project_id: int, number: int):
                 "title": s.title,
                 "lifecycle_state": s.lifecycle_state,
                 "github_pr_number": s.github_pr_number,
+                "pr_url": (
+                    f"https://github.com/{project.github_repo}/pull/{s.github_pr_number}"
+                    if s.github_pr_number
+                    else None
+                ),
             }
             for s in subtasks
         ]

@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routes import projects
+from app.routes import projects, subtasks
 from core.db import ensure_default_project, init_db
 
 
@@ -18,6 +18,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Claude管理塔", lifespan=lifespan)
 
 app.include_router(projects.router)
+app.include_router(subtasks.router)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 

@@ -94,6 +94,42 @@ h2 {
   border-bottom: none;
 }
 
+#subtask-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+#subtask-form input,
+#subtask-form textarea {
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+#subtask-form textarea {
+  min-height: 70px;
+  resize: vertical;
+}
+
+#subtask-form button {
+  align-self: flex-start;
+  font: inherit;
+  padding: 7px 16px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+#subtask-form button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 @media (max-width: 680px) {
   main {
     grid-template-columns: 1fr;

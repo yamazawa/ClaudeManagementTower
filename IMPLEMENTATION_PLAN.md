@@ -30,7 +30,7 @@
 - ワーカー数Nは設定可能、初期値3。
 - 1ワーカーは同時に1ジョブのみ実行する。
 - 同一サブタスクの並列実行は禁止する。
-- サブタスクごとに専用Git worktreeを割り当てる。
+- サブタスクごとに専用Git worktreeを割り当てる。worktreeは`WORKTREE_BASE_DIR`配下、ブランチ名と同名のフォルダに作成する（Phase 4実装済み）。
 - ブランチ作成後、サブタスクのタイトル・指示内容を`.claude-tower/subtask.md`に書き出す初期コミットを1件追加してからDraft PRを作成する（差分ゼロではDraft PR作成不可のため。Phase 1実機検証済み、ダミーコミットではなく意味のある内容とする）。
 - Webサーバーはリクエスト処理中にClaude Codeを直接起動して待機しない。
 - Claude実行は公式Claude Agent SDK（Python）を使う。内部的にはCLIサブプロセス方式と同じCLIバイナリ・同じエージェントループを使うが、`can_use_tool`コールバックでworktree外操作を確実に拒否できる点を優先してSDKを採用する。
@@ -109,6 +109,7 @@
 | 2 | `claude-agent-sdk`（Python）の呼び出し方法・`can_use_tool`コールバックによるworktree外操作の拒否・`resume`によるセッション継続 | テスト用リポジトリに対応するworktreeで実際に実行して検証する | 検証済み。5.1参照 |
 | 3 | `gh` CLIコマンド（`pr create --draft`・`pr ready`等）の具体的な呼び出し・エラーハンドリング | テスト用リポジトリで実際にサブプロセス実行して検証する | 検証済み。5.1参照 |
 | 4 | SQLiteでの原子的ジョブ取得の実装パターン | WALモード・busy_timeout設定下でのトランザクション更新を検証する | 未検証。Phase 2/5で実施 |
+| 7 | サブタスク作成中（worktree作成〜Draft PR作成〜DB保存）の途中失敗時の復旧 | - | MVPでは未対応。失敗時はエラーを返すのみで、再試行・ロールバックは行わない。残存したworktree・ブランチの後始末は人間が行う（設計書7章で想定済みのリスク） |
 | 5 | Windows環境でのGit worktree運用（パス長・権限） | テスト用リポジトリで複数worktree作成・削除を検証する | 検証済み。5.1参照 |
 | 6 | Cloudflare Tunnel + AccessのJWT検証実装 | 後工程（Phase 9）で実機検証する | 未検証。Phase 9で実施 |
 
