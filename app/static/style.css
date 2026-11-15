@@ -29,6 +29,106 @@ header h1 {
   font-size: 20px;
 }
 
+#breadcrumb {
+  margin-top: 10px;
+  font-size: 13px;
+  color: #b8c7e3;
+}
+
+#breadcrumb a {
+  color: #fff;
+  text-decoration: none;
+}
+
+#breadcrumb a:hover {
+  text-decoration: underline;
+}
+
+.breadcrumb-sep {
+  margin: 0 6px;
+  color: #7a869e;
+}
+
+.breadcrumb-current {
+  color: #fff;
+}
+
+#project-view {
+  display: block;
+  max-width: 1080px;
+  margin: 20px auto;
+  padding: 0 16px;
+}
+
+#project-list-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.project-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  background: #fff;
+}
+
+.project-item:hover {
+  background: var(--soft);
+}
+
+.project-name {
+  font-weight: 600;
+}
+
+.project-branch {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+#issue-create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--line);
+}
+
+#issue-create-form input,
+#issue-create-form textarea {
+  font: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+#issue-create-form textarea {
+  min-height: 60px;
+  resize: vertical;
+}
+
+#issue-create-form button {
+  align-self: flex-start;
+  font: inherit;
+  padding: 7px 16px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+#issue-create-form button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 #worker-status {
   margin-top: 8px;
   display: flex;
@@ -58,7 +158,12 @@ header h1 {
   color: #7a869e;
 }
 
-main {
+#project-view[hidden],
+#issue-view[hidden] {
+  display: none;
+}
+
+#issue-view {
   display: grid;
   grid-template-columns: 38% 62%;
   gap: 16px;
@@ -237,7 +342,7 @@ h2 {
 }
 
 @media (max-width: 680px) {
-  main {
+  #issue-view {
     grid-template-columns: 1fr;
   }
 }
