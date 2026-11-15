@@ -20,7 +20,7 @@ class CreateSubtaskRequest(BaseModel):
     project_id: int
     github_issue_number: int
     title: str
-    instruction: str
+    instruction: str = ""
 
 
 def _create_branch_and_draft_pr(

@@ -16,6 +16,12 @@ const WORKER_STATE_LABELS = {
   busy: "実行中",
 };
 
+function escapeHtml(text) {
+  const div = document.createElement("div");
+  div.textContent = text || "";
+  return div.innerHTML;
+}
+
 async function pollWorkers() {
   const workers = await fetch("/api/workers").then((r) => r.json());
   const aliveWorkers = workers.filter((w) => !w.is_stale);
@@ -163,7 +169,6 @@ async function refreshIssueDetail() {
     <p>${(issue.body || "").replace(/\n/g, "<br>")}</p>
     <form id="subtask-form">
       <input type="text" name="title" placeholder="タイトル" required />
-      <textarea name="instruction" placeholder="指示内容" required></textarea>
       <button type="submit">作成</button>
       <p id="subtask-form-status" class="empty"></p>
     </form>
@@ -204,17 +209,16 @@ function renderSubtaskDetail(s) {
   el.innerHTML = `
     <h3>${s.title}</h3>
     <p>状態: ${label}${prLink}</p>
-    <button class="run-button" data-subtask-id="${s.id}">実行する</button>
-    <form class="rerun-form" data-subtask-id="${s.id}">
-      <textarea name="instruction" placeholder="追加の指示（レビューNG時の修正依頼など）"></textarea>
-      <button type="submit">この指示で再実行</button>
+    <form class="instruction-form" data-subtask-id="${s.id}">
+      <label for="instruction-${s.id}">指示内容</label>
+      <textarea id="instruction-${s.id}" name="instruction" placeholder="Claudeへの指示内容を入力してください">${escapeHtml(s.instruction)}</textarea>
+      <button type="submit">実行する</button>
     </form>
     <p class="job-status empty" data-subtask-id="${s.id}"></p>
     <iframe class="report-frame" sandbox="" data-subtask-id="${s.id}" hidden></iframe>
   `;
 
-  document.querySelector(".run-button").addEventListener("click", onClickRun);
-  document.querySelector(".rerun-form").addEventListener("submit", onSubmitRerunForm);
+  document.querySelector(".instruction-form").addEventListener("submit", onSubmitInstructionForm);
 }
 
 async function onClickSync(event) {
@@ -240,7 +244,6 @@ async function onSubmitIssueForm(event) {
   const form = event.target;
   const statusEl = document.getElementById("issue-create-status");
   const title = form.title.value;
-  const body = form.body.value;
 
   statusEl.textContent = "作成中...";
   form.querySelector("button").disabled = true;
@@ -248,7 +251,7 @@ async function onSubmitIssueForm(event) {
   const response = await fetch(`/api/projects/${currentProjectId}/issues`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title, body }),
+    body: JSON.stringify({ title }),
   });
 
   form.querySelector("button").disabled = false;
@@ -269,7 +272,6 @@ async function onSubmitSubtaskForm(event) {
   const form = event.target;
   const statusEl = document.getElementById("subtask-form-status");
   const title = form.title.value;
-  const instruction = form.instruction.value;
 
   statusEl.textContent = "作成中...";
   form.querySelector("button").disabled = true;
@@ -281,7 +283,6 @@ async function onSubmitSubtaskForm(event) {
       project_id: currentProjectId,
       github_issue_number: currentIssueNumber,
       title,
-      instruction,
     }),
   });
 
@@ -310,12 +311,7 @@ async function startExecution(subtaskId, instruction, button) {
   pollJob(jobId, subtaskId, button);
 }
 
-async function onClickRun(event) {
-  const subtaskId = event.target.dataset.subtaskId;
-  await startExecution(subtaskId, null, event.target);
-}
-
-async function onSubmitRerunForm(event) {
+async function onSubmitInstructionForm(event) {
   event.preventDefault();
   const form = event.target;
   const subtaskId = form.dataset.subtaskId;
