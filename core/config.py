@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     worker_poll_interval_seconds: int = 3
     job_heartbeat_interval_seconds: int = 5
     job_stale_timeout_seconds: int = 60
+    worker_offline_timeout_seconds: int = 30
     database_path: str = "claude_tower.db"
     cloudflare_access_aud: str = ""
 
