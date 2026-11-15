@@ -2,7 +2,10 @@ import re
 import subprocess
 from pathlib import Path
 
-from filelock import FileLock
+from filelock import FileLock, Timeout
+
+GIT_TIMEOUT_SECONDS = 60
+WORKTREE_LOCK_TIMEOUT_SECONDS = 60
 
 
 class GitClientError(RuntimeError):
@@ -10,13 +13,17 @@ class GitClientError(RuntimeError):
 
 
 def _run_git(args: list[str], cwd: str) -> str:
-    result = subprocess.run(
-        ["git", *args],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    )
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=GIT_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise GitClientError(f"git {' '.join(args)} がタイムアウトしました") from exc
     if result.returncode != 0:
         raise GitClientError(result.stderr.strip())
     return result.stdout
@@ -36,12 +43,15 @@ def create_worktree(
     # worktree作成はリポジトリ共有のGitメタデータを変更するため、
     # 同一リポジトリへの同時作成をリポジトリ単位で排他する
     lock_path = Path(repo_path) / ".git" / "claude-tower-worktree.lock"
-    with FileLock(str(lock_path)):
-        _run_git(["fetch", "origin", base_branch], cwd=repo_path)
-        _run_git(
-            ["worktree", "add", "-b", branch_name, worktree_path, f"origin/{base_branch}"],
-            cwd=repo_path,
-        )
+    try:
+        with FileLock(str(lock_path), timeout=WORKTREE_LOCK_TIMEOUT_SECONDS):
+            _run_git(["fetch", "origin", base_branch], cwd=repo_path)
+            _run_git(
+                ["worktree", "add", "-b", branch_name, worktree_path, f"origin/{base_branch}"],
+                cwd=repo_path,
+            )
+    except Timeout as exc:
+        raise GitClientError("worktree作成の排他ロック取得がタイムアウトしました") from exc
 
 
 def commit_subtask_instruction(worktree_path: str, title: str, instruction: str) -> None:

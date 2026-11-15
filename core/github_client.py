@@ -1,18 +1,24 @@
 import json
 import subprocess
 
+GH_TIMEOUT_SECONDS = 60
+
 
 class GitHubClientError(RuntimeError):
     pass
 
 
 def _run_gh(args: list[str]) -> str:
-    result = subprocess.run(
-        ["gh", *args],
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-    )
+    try:
+        result = subprocess.run(
+            ["gh", *args],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            timeout=GH_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise GitHubClientError(f"gh {' '.join(args)} がタイムアウトしました") from exc
     if result.returncode != 0:
         raise GitHubClientError(result.stderr.strip())
     return result.stdout
