@@ -95,6 +95,20 @@ def recover_stale_jobs(
     return recovered_ids
 
 
+def cleanup_stale_workers(
+    timeout_seconds: int,
+    session_factory: sessionmaker = SessionLocal,
+) -> list[int]:
+    threshold = datetime.now(timezone.utc) - timedelta(seconds=timeout_seconds)
+    with session_factory() as session:
+        stale_workers = session.query(Worker).filter(Worker.heartbeat_at < threshold).all()
+        removed_ids = [worker.id for worker in stale_workers]
+        for worker in stale_workers:
+            session.delete(worker)
+        session.commit()
+    return removed_ids
+
+
 def finish_job(
     job_id: int,
     status: str,

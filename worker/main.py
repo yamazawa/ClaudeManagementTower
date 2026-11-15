@@ -11,6 +11,7 @@ from core.execution_events import record_event
 from core.github_client import mark_pr_ready
 from core.job_queue import (
     claim_next_job,
+    cleanup_stale_workers,
     finish_job,
     heartbeat_job,
     recover_stale_jobs,
@@ -117,6 +118,10 @@ def process_job(job: dict, worker_id: int) -> None:
 
 def main() -> None:
     init_db()
+    removed_workers = cleanup_stale_workers(settings.worker_offline_timeout_seconds)
+    if removed_workers:
+        print(f"[worker] 削除したオフラインワーカー行: {removed_workers}")
+
     process_identifier = f"worker-{os.getpid()}-{uuid.uuid4().hex[:8]}"
     worker_id = register_worker(process_identifier)
     print(f"[worker] 起動しました: {process_identifier} (id={worker_id})")
