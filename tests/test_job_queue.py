@@ -5,13 +5,14 @@ from sqlalchemy.orm import sessionmaker
 from core.db import init_db, make_engine
 from core.job_queue import (
     claim_next_job,
+    cleanup_stale_workers,
     finish_job,
     heartbeat_job,
     recover_stale_jobs,
     register_worker,
     set_worker_state,
 )
-from core.models import ExecutionJob, Subtask
+from core.models import ExecutionJob, Subtask, Worker
 
 
 def _setup(tmp_path):
@@ -102,6 +103,33 @@ def test_recover_stale_jobs_flags_jobs_without_recent_heartbeat(tmp_path):
     with session_factory() as session:
         reloaded = session.get(ExecutionJob, job["job_id"])
         assert reloaded.status == "needs_attention"
+
+
+def test_cleanup_stale_workers_removes_dead_worker_rows(tmp_path):
+    _, session_factory = _setup(tmp_path)
+    worker_id = register_worker("worker-dead", session_factory=session_factory)
+
+    with session_factory() as session:
+        worker = session.get(Worker, worker_id)
+        worker.heartbeat_at = datetime.now(timezone.utc) - timedelta(seconds=120)
+        session.commit()
+
+    removed = cleanup_stale_workers(timeout_seconds=30, session_factory=session_factory)
+
+    assert removed == [worker_id]
+    with session_factory() as session:
+        assert session.get(Worker, worker_id) is None
+
+
+def test_cleanup_stale_workers_keeps_recently_heartbeaten_workers(tmp_path):
+    _, session_factory = _setup(tmp_path)
+    worker_id = register_worker("worker-alive", session_factory=session_factory)
+
+    removed = cleanup_stale_workers(timeout_seconds=30, session_factory=session_factory)
+
+    assert removed == []
+    with session_factory() as session:
+        assert session.get(Worker, worker_id) is not None
 
 
 def test_recover_stale_jobs_keeps_recently_heartbeaten_jobs(tmp_path):
