@@ -21,15 +21,23 @@ copy .env.example .env
 
 ## 起動
 
-Windows既定の文字コード（cp932）では、Claude出力やGitHubの日本語データでUnicodeEncodeError・文字化けが発生する。\
-`PYTHONIOENCODING=utf-8`を必ず設定して起動する。
+サーバーとワーカーは常にセットで起動・再起動する運用のため、通常は以下の1コマンドでまとめて起動する。
+
+```
+python -u run_all.py
+```
+
+`Ctrl+C`で両方とも停止する。起動後、`http://127.0.0.1:8000/docs` でAPIを確認できる。
+
+### 個別起動（デバッグ用途）
+
+サーバー・ワーカーのどちらかだけを再起動したい場合は個別に起動できる。\
+Windows既定の文字コード（cp932）では、Claude出力やGitHubの日本語データでUnicodeEncodeError・文字化けが発生するため、`PYTHONIOENCODING=utf-8`を必ず設定する。
 
 ```
 $env:PYTHONIOENCODING = "utf-8"
 python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
-
-起動後、`http://127.0.0.1:8000/docs` でAPIを確認できる。
 
 ワーカーは別プロセスで起動する。標準出力がバッファリングされ、ログがファイルに出力されるまで遅れることがあるため`-u`（無バッファ）を付ける。
 
