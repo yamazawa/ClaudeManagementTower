@@ -1,4 +1,5 @@
 import os
+import re
 from collections.abc import Callable
 
 from claude_agent_sdk import (
@@ -7,6 +8,32 @@ from claude_agent_sdk import (
     PermissionResultDeny,
     query,
 )
+
+SHELL_TOOL_NAMES = {"Bash", "PowerShell"}
+
+DANGEROUS_COMMAND_PATTERNS = [
+    re.compile(r"push[^|&;\n]*(--force\b|-f\b)", re.IGNORECASE),
+    re.compile(r"reset\s+--hard", re.IGNORECASE),
+    re.compile(r"clean\s+-[a-z]*f", re.IGNORECASE),
+    re.compile(r"worktree\s+(remove|prune)", re.IGNORECASE),
+    re.compile(r"branch\s+-D\b", re.IGNORECASE),
+    re.compile(r"--git-dir\b|--work-tree\b", re.IGNORECASE),
+    re.compile(r"git\s+-C\s", re.IGNORECASE),
+]
+
+DIRECTORY_TRAVERSAL_PATTERN = re.compile(r"(?:^|[\s\"'])\.\.(?:[\\/]|$|[\s\"'])")
+WINDOWS_ABS_PATH_PATTERN = re.compile(r"[A-Za-z]:[\\/]")
+
+
+def _command_escapes_worktree(command: str, worktree_abs: str) -> bool:
+    if DIRECTORY_TRAVERSAL_PATTERN.search(command):
+        return True
+    for match in WINDOWS_ABS_PATH_PATTERN.finditer(command):
+        token = re.split(r'[\s"\'|]', command[match.start():], maxsplit=1)[0]
+        token_abs = os.path.abspath(token.rstrip("\\/"))
+        if not token_abs.lower().startswith(worktree_abs.lower()):
+            return True
+    return False
 
 AGENT_POLICY_PROMPT = """
 あなたはClaude管理塔の自律実装ワーカーです。
@@ -38,6 +65,14 @@ def restrict_to_worktree(worktree: str) -> Callable:
     worktree_abs = os.path.abspath(worktree)
 
     async def can_use_tool(tool_name, tool_input, context):
+        if tool_name in SHELL_TOOL_NAMES:
+            command = tool_input.get("command", "")
+            if any(pattern.search(command) for pattern in DANGEROUS_COMMAND_PATTERNS):
+                return PermissionResultDeny(message=f"危険な操作のため拒否: {command}")
+            if _command_escapes_worktree(command, worktree_abs):
+                return PermissionResultDeny(message=f"worktree外を操作する可能性があるため拒否: {command}")
+            return PermissionResultAllow(updated_input=tool_input)
+
         path = tool_input.get("file_path") or tool_input.get("path")
         if path and not os.path.abspath(path).startswith(worktree_abs):
             return PermissionResultDeny(message=f"worktree外への操作を拒否: {path}")
