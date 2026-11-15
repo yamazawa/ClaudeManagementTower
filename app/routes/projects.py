@@ -66,6 +66,7 @@ def get_issue_detail(project_id: int, number: int):
             {
                 "id": s.id,
                 "title": s.title,
+                "instruction": s.instruction,
                 "lifecycle_state": s.lifecycle_state,
                 "github_pr_number": s.github_pr_number,
                 "pr_url": (
