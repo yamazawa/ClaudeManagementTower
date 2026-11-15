@@ -118,10 +118,6 @@ def process_job(job: dict, worker_id: int) -> None:
 
 def main() -> None:
     init_db()
-    removed_workers = cleanup_stale_workers(settings.worker_offline_timeout_seconds)
-    if removed_workers:
-        print(f"[worker] 削除したオフラインワーカー行: {removed_workers}")
-
     process_identifier = f"worker-{os.getpid()}-{uuid.uuid4().hex[:8]}"
     worker_id = register_worker(process_identifier)
     print(f"[worker] 起動しました: {process_identifier} (id={worker_id})")
@@ -130,6 +126,10 @@ def main() -> None:
         recovered = recover_stale_jobs(settings.job_stale_timeout_seconds)
         if recovered:
             print(f"[worker] 要確認にしたジョブ: {recovered}")
+
+        removed_workers = cleanup_stale_workers(settings.worker_offline_timeout_seconds)
+        if removed_workers:
+            print(f"[worker] 削除したオフラインワーカー行: {removed_workers}")
 
         job = claim_next_job(worker_id)
         if job is None:
