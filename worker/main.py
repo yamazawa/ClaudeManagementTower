@@ -100,6 +100,7 @@ def main() -> None:
 
         job = claim_next_job(worker_id)
         if job is None:
+            set_worker_state(worker_id, state="idle", current_job_id=None)
             time.sleep(settings.worker_poll_interval_seconds)
             continue
         process_job(job, worker_id)
