@@ -95,12 +95,19 @@ def create_subtask(payload: CreateSubtaskRequest):
         }
 
 
+class ExecuteSubtaskRequest(BaseModel):
+    instruction: str | None = None
+
+
 @router.post("/{subtask_id}/execute")
-def execute_subtask(subtask_id: int):
+def execute_subtask(subtask_id: int, payload: ExecuteSubtaskRequest | None = None):
     with SessionLocal() as session:
         subtask = session.get(Subtask, subtask_id)
         if subtask is None:
             raise HTTPException(status_code=404, detail="subtask not found")
+
+        if payload is not None and payload.instruction:
+            subtask.instruction = payload.instruction
 
         job = ExecutionJob(subtask_id=subtask_id, status="queued")
         session.add(job)

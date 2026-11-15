@@ -151,6 +151,55 @@ h2 {
   border-radius: 6px;
 }
 
+.rerun-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.rerun-form textarea {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  min-height: 50px;
+  resize: vertical;
+}
+
+.rerun-form button {
+  align-self: flex-start;
+  font: inherit;
+  font-size: 13px;
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+
+#sync-button {
+  margin-left: 8px;
+  font: inherit;
+  font-size: 13px;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+
+#sync-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+#sync-status {
+  margin-left: 6px;
+  font-size: 12.5px;
+}
+
 #subtask-form {
   display: flex;
   flex-direction: column;
