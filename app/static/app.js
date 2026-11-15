@@ -1,4 +1,5 @@
 let currentProjectId = null;
+let currentProjectName = null;
 let currentIssueNumber = null;
 
 const LIFECYCLE_LABELS = {
@@ -33,16 +34,59 @@ async function pollWorkers() {
   setTimeout(pollWorkers, 3000);
 }
 
-async function init() {
-  const projects = await fetch("/api/projects").then((r) => r.json());
-  if (projects.length === 0) {
-    document.getElementById("issue-list-items").innerHTML =
-      '<li class="empty">プロジェクトが登録されていません。</li>';
+function renderBreadcrumb() {
+  const el = document.getElementById("breadcrumb");
+  if (currentProjectId === null) {
+    el.innerHTML = "";
     return;
   }
-  currentProjectId = projects[0].id;
-  await loadIssues();
+  el.innerHTML = `
+    <a href="#" id="breadcrumb-projects">リポジトリ一覧</a>
+    <span class="breadcrumb-sep">&rsaquo;</span>
+    <span class="breadcrumb-current">${currentProjectName}</span>
+  `;
+  document
+    .getElementById("breadcrumb-projects")
+    .addEventListener("click", (event) => {
+      event.preventDefault();
+      showProjectList();
+    });
+}
+
+function showProjectList() {
+  currentProjectId = null;
+  currentProjectName = null;
+  currentIssueNumber = null;
+  document.getElementById("project-view").hidden = false;
+  document.getElementById("issue-view").hidden = true;
+  renderBreadcrumb();
+}
+
+async function init() {
+  const projects = await fetch("/api/projects").then((r) => r.json());
+  const listEl = document.getElementById("project-list-items");
+  listEl.innerHTML = "";
+  if (projects.length === 0) {
+    listEl.innerHTML = '<li class="empty">リポジトリが登録されていません。</li>';
+  } else {
+    for (const project of projects) {
+      const li = document.createElement("li");
+      li.className = "project-item";
+      li.innerHTML = `<span class="project-name">${project.name}</span><span class="project-branch">${project.default_branch}</span>`;
+      li.addEventListener("click", () => selectProject(project.id, project.name));
+      listEl.appendChild(li);
+    }
+  }
   pollWorkers();
+}
+
+async function selectProject(projectId, projectName) {
+  currentProjectId = projectId;
+  currentProjectName = projectName;
+  document.getElementById("project-view").hidden = true;
+  document.getElementById("issue-view").hidden = false;
+  renderBreadcrumb();
+  await loadIssues();
 }
 
 async function loadIssues() {
@@ -52,7 +96,7 @@ async function loadIssues() {
   const listEl = document.getElementById("issue-list-items");
   listEl.innerHTML = "";
   if (issues.length === 0) {
-    listEl.innerHTML = '<li class="empty">Issueがありません。</li>';
+    listEl.innerHTML = '<li class="empty">タスクがありません。</li>';
     return;
   }
   for (const issue of issues) {
@@ -108,7 +152,7 @@ async function selectIssue(number) {
       <span id="sync-status" class="empty"></span>
     </p>
     <p>${(issue.body || "").replace(/\n/g, "<br>")}</p>
-    <h4>サブタスク履歴</h4>
+    <h4>サブタスク一覧</h4>
     ${subtasksHtml}
     <h4>新規サブタスク作成</h4>
     <form id="subtask-form">
@@ -145,6 +189,35 @@ async function onClickSync(event) {
     result.updated.length === 0 ? "変更なし" : `${result.updated.length}件更新`;
   button.disabled = false;
   await selectIssue(currentIssueNumber);
+}
+
+async function onSubmitIssueForm(event) {
+  event.preventDefault();
+  const form = event.target;
+  const statusEl = document.getElementById("issue-create-status");
+  const title = form.title.value;
+  const body = form.body.value;
+
+  statusEl.textContent = "作成中...";
+  form.querySelector("button").disabled = true;
+
+  const response = await fetch(`/api/projects/${currentProjectId}/issues`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title, body }),
+  });
+
+  form.querySelector("button").disabled = false;
+
+  if (!response.ok) {
+    const error = await response.json();
+    statusEl.textContent = `失敗しました: ${error.detail}`;
+    return;
+  }
+
+  form.reset();
+  statusEl.textContent = "作成しました";
+  await loadIssues();
 }
 
 async function onSubmitSubtaskForm(event) {
@@ -239,5 +312,7 @@ async function showReport(jobId, subtaskId) {
   frame.src = `/api/jobs/${jobId}/report`;
   frame.hidden = false;
 }
+
+document.getElementById("issue-create-form").addEventListener("submit", onSubmitIssueForm);
 
 init();

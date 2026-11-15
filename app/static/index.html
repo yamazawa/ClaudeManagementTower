@@ -9,20 +9,36 @@
 <body>
 <header>
   <h1>Claude管理塔</h1>
+  <nav id="breadcrumb" aria-label="パンくず"></nav>
   <div id="worker-status" aria-label="ワーカー稼働状況"></div>
 </header>
-<main>
-  <section id="issue-list" aria-label="Issue一覧">
-    <h2>Issue一覧</h2>
+
+<main id="project-view" aria-label="リポジトリ一覧">
+  <section>
+    <h2>リポジトリ一覧</h2>
+    <ul id="project-list-items"></ul>
+  </section>
+</main>
+
+<main id="issue-view" hidden>
+  <section id="issue-list" aria-label="タスク一覧">
+    <h2>タスク一覧</h2>
+    <form id="issue-create-form">
+      <input type="text" name="title" placeholder="タイトル" required />
+      <textarea name="body" placeholder="本文（任意）"></textarea>
+      <button type="submit">タスクを追加</button>
+      <p id="issue-create-status" class="empty"></p>
+    </form>
     <ul id="issue-list-items"></ul>
   </section>
-  <section id="issue-detail" aria-label="Issue詳細">
-    <h2>Issue詳細</h2>
+  <section id="issue-detail" aria-label="サブタスク一覧">
+    <h2>サブタスク一覧</h2>
     <div id="issue-detail-body">
-      <p class="empty">左の一覧からIssueを選択してください。</p>
+      <p class="empty">左の一覧からタスクを選択してください。</p>
     </div>
   </section>
 </main>
+
 <script src="/static/app.js"></script>
 </body>
 </html>

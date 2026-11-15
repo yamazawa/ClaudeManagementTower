@@ -36,6 +36,13 @@ def get_issue(repo: str, number: int) -> dict:
     return json.loads(output)
 
 
+def create_issue(repo: str, title: str, body: str) -> dict:
+    output = _run_gh(["issue", "create", "--repo", repo, "--title", title, "--body", body])
+    url = output.strip()
+    number = int(url.rsplit("/", 1)[-1])
+    return {"number": number, "url": url}
+
+
 def create_draft_pr(repo: str, base: str, head: str, title: str, body: str) -> dict:
     output = _run_gh(
         [
