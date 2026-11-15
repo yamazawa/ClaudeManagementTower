@@ -25,10 +25,9 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 
 @app.middleware("http")
-async def no_cache_static(request, call_next):
+async def no_cache(request, call_next):
     response = await call_next(request)
-    if request.url.path.startswith("/static/") or request.url.path == "/":
-        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
+    response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate"
     return response
 
 
