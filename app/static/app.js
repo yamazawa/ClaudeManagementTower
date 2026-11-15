@@ -1,6 +1,8 @@
 let currentProjectId = null;
 let currentProjectName = null;
 let currentIssueNumber = null;
+let currentSubtasks = [];
+let currentSelectedSubtaskId = null;
 
 const LIFECYCLE_LABELS = {
   draft: "Draft",
@@ -109,42 +111,49 @@ async function loadIssues() {
   }
 }
 
-function renderSubtask(s) {
-  const prLink = s.pr_url
-    ? ` <a href="${s.pr_url}" target="_blank" rel="noopener">PR #${s.github_pr_number}</a>`
-    : "";
+function renderSubtaskRow(s) {
   const label = LIFECYCLE_LABELS[s.lifecycle_state] || s.lifecycle_state;
+  const prBadge = s.github_pr_number ? `PR #${s.github_pr_number}` : "";
   return `
-    <div class="subtask-item" data-subtask-id="${s.id}">
-      <div>${s.title}（${label}）${prLink}</div>
-      <button class="run-button" data-subtask-id="${s.id}">実行する</button>
-      <form class="rerun-form" data-subtask-id="${s.id}">
-        <textarea name="instruction" placeholder="追加の指示（レビューNG時の修正依頼など）"></textarea>
-        <button type="submit">この指示で再実行</button>
-      </form>
-      <p class="job-status empty" data-subtask-id="${s.id}"></p>
-      <iframe class="report-frame" sandbox="" data-subtask-id="${s.id}" hidden></iframe>
-    </div>
+    <li class="subtask-row" data-subtask-id="${s.id}">
+      <span class="subtask-row-title">${s.title}</span>
+      <span class="subtask-row-meta">${label} ${prBadge}</span>
+    </li>
   `;
+}
+
+function highlightSelectedSubtaskRow() {
+  document
+    .querySelectorAll(".subtask-row")
+    .forEach((row) =>
+      row.classList.toggle("active", Number(row.dataset.subtaskId) === currentSelectedSubtaskId)
+    );
 }
 
 async function selectIssue(number) {
   currentIssueNumber = number;
+  currentSelectedSubtaskId = null;
   document
     .querySelectorAll(".issue-item")
     .forEach((el) => el.classList.toggle("active", Number(el.dataset.number) === number));
 
+  await refreshIssueDetail();
+  renderSubtaskDetail(null);
+}
+
+async function refreshIssueDetail() {
   const issue = await fetch(
-    `/api/projects/${currentProjectId}/issues/${number}`
+    `/api/projects/${currentProjectId}/issues/${currentIssueNumber}`
   ).then((r) => r.json());
+  currentSubtasks = issue.subtasks;
 
-  const detailEl = document.getElementById("issue-detail-body");
-  const subtasksHtml =
-    issue.subtasks.length === 0
+  const listEl = document.getElementById("subtask-list-body");
+  const itemsHtml =
+    currentSubtasks.length === 0
       ? '<p class="empty">サブタスクはまだありません。</p>'
-      : issue.subtasks.map(renderSubtask).join("");
+      : `<ul id="subtask-list-items">${currentSubtasks.map(renderSubtaskRow).join("")}</ul>`;
 
-  detailEl.innerHTML = `
+  listEl.innerHTML = `
     <h3>#${issue.number} ${issue.title}</h3>
     <p>
       <a href="${issue.url}" target="_blank" rel="noopener">GitHubで開く</a>
@@ -152,15 +161,13 @@ async function selectIssue(number) {
       <span id="sync-status" class="empty"></span>
     </p>
     <p>${(issue.body || "").replace(/\n/g, "<br>")}</p>
-    <h4>サブタスク一覧</h4>
-    ${subtasksHtml}
-    <h4>新規サブタスク作成</h4>
     <form id="subtask-form">
       <input type="text" name="title" placeholder="タイトル" required />
       <textarea name="instruction" placeholder="指示内容" required></textarea>
       <button type="submit">作成</button>
       <p id="subtask-form-status" class="empty"></p>
     </form>
+    ${itemsHtml}
   `;
 
   document
@@ -168,27 +175,64 @@ async function selectIssue(number) {
     .addEventListener("submit", onSubmitSubtaskForm);
   document.getElementById("sync-button").addEventListener("click", onClickSync);
   document
-    .querySelectorAll(".run-button")
-    .forEach((btn) => btn.addEventListener("click", onClickRun));
-  document
-    .querySelectorAll(".rerun-form")
-    .forEach((form) => form.addEventListener("submit", onSubmitRerunForm));
+    .querySelectorAll(".subtask-row")
+    .forEach((row) =>
+      row.addEventListener("click", () => selectSubtask(Number(row.dataset.subtaskId)))
+    );
+  highlightSelectedSubtaskRow();
+}
+
+function selectSubtask(subtaskId) {
+  currentSelectedSubtaskId = subtaskId;
+  highlightSelectedSubtaskRow();
+  const subtask = currentSubtasks.find((s) => s.id === subtaskId) || null;
+  renderSubtaskDetail(subtask);
+}
+
+function renderSubtaskDetail(s) {
+  const el = document.getElementById("subtask-detail-body");
+  if (!s) {
+    el.innerHTML = '<p class="empty">左の一覧からサブタスクを選択してください。</p>';
+    return;
+  }
+
+  const prLink = s.pr_url
+    ? ` <a href="${s.pr_url}" target="_blank" rel="noopener">PR #${s.github_pr_number}</a>`
+    : "";
+  const label = LIFECYCLE_LABELS[s.lifecycle_state] || s.lifecycle_state;
+
+  el.innerHTML = `
+    <h3>${s.title}</h3>
+    <p>状態: ${label}${prLink}</p>
+    <button class="run-button" data-subtask-id="${s.id}">実行する</button>
+    <form class="rerun-form" data-subtask-id="${s.id}">
+      <textarea name="instruction" placeholder="追加の指示（レビューNG時の修正依頼など）"></textarea>
+      <button type="submit">この指示で再実行</button>
+    </form>
+    <p class="job-status empty" data-subtask-id="${s.id}"></p>
+    <iframe class="report-frame" sandbox="" data-subtask-id="${s.id}" hidden></iframe>
+  `;
+
+  document.querySelector(".run-button").addEventListener("click", onClickRun);
+  document.querySelector(".rerun-form").addEventListener("submit", onSubmitRerunForm);
 }
 
 async function onClickSync(event) {
   const button = event.target;
-  const statusEl = document.getElementById("sync-status");
   button.disabled = true;
-  statusEl.textContent = "同期中...";
+  document.getElementById("sync-status").textContent = "同期中...";
 
   const result = await fetch(`/api/projects/${currentProjectId}/sync`, {
     method: "POST",
   }).then((r) => r.json());
 
-  statusEl.textContent =
+  const keepSelected = currentSelectedSubtaskId;
+  await refreshIssueDetail();
+  document.getElementById("sync-status").textContent =
     result.updated.length === 0 ? "変更なし" : `${result.updated.length}件更新`;
-  button.disabled = false;
-  await selectIssue(currentIssueNumber);
+  if (keepSelected !== null) {
+    selectSubtask(keepSelected);
+  }
 }
 
 async function onSubmitIssueForm(event) {
@@ -294,8 +338,9 @@ async function pollJob(jobId, subtaskId, button) {
   }
 
   if (job.status === "succeeded") {
-    // selectIssueが画面を再描画するため、レポート表示は再描画の後に行う
-    await selectIssue(currentIssueNumber);
+    // refreshIssueDetailが詳細ペインの選択状態を消すため、再描画してから選択し直す
+    await refreshIssueDetail();
+    selectSubtask(Number(subtaskId));
     await showReport(jobId, subtaskId);
   } else {
     button.disabled = false;
