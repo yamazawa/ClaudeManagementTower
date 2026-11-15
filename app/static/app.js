@@ -15,16 +15,21 @@ const WORKER_STATE_LABELS = {
 
 async function pollWorkers() {
   const workers = await fetch("/api/workers").then((r) => r.json());
-  const busyCount = workers.filter((w) => w.state === "busy").length;
+  const aliveWorkers = workers.filter((w) => !w.is_stale);
+  const busyCount = aliveWorkers.filter((w) => w.state === "busy").length;
+
   const items = workers
     .map((w) => {
+      if (w.is_stale) {
+        return `<span class="worker-pill worker-offline">オフライン</span>`;
+      }
       const label = WORKER_STATE_LABELS[w.state] || w.state;
       const job = w.current_job_id ? `job #${w.current_job_id}` : "";
       return `<span class="worker-pill worker-${w.state}">${label} ${job}</span>`;
     })
     .join("");
   document.getElementById("worker-status").innerHTML =
-    `<span class="worker-summary">実行中 ${busyCount} / ${workers.length}</span>${items}`;
+    `<span class="worker-summary">実行中 ${busyCount} / ${aliveWorkers.length}</span>${items}`;
   setTimeout(pollWorkers, 3000);
 }
 

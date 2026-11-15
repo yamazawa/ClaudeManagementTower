@@ -53,6 +53,11 @@ header h1 {
   color: #18243c;
 }
 
+.worker-offline {
+  background: rgba(255, 255, 255, 0.06);
+  color: #7a869e;
+}
+
 main {
   display: grid;
   grid-template-columns: 38% 62%;
