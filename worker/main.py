@@ -21,14 +21,40 @@ from core.models import ExecutionJob, Project, Subtask
 from core.reports import save_report
 
 
-def _run_claude_for_job(job_id: int, worktree_path: str, instruction: str) -> tuple[str | None, str | None]:
+def _previous_session_id(subtask_id: int, current_job_id: int) -> str | None:
+    with SessionLocal() as session:
+        previous = (
+            session.query(ExecutionJob)
+            .filter(
+                ExecutionJob.subtask_id == subtask_id,
+                ExecutionJob.id != current_job_id,
+                ExecutionJob.claude_session_id.isnot(None),
+            )
+            .order_by(ExecutionJob.id.desc())
+            .first()
+        )
+        return previous.claude_session_id if previous else None
+
+
+def _run_claude_for_job(
+    job_id: int,
+    worktree_path: str,
+    instruction: str,
+    resume: str | None,
+) -> tuple[str | None, str | None]:
     def on_message(message: object) -> None:
         record_event(job_id, event_type=type(message).__name__, content=repr(message)[:4000])
 
-    return asyncio.run(run_claude(instruction, worktree_path, on_message=on_message))
+    return asyncio.run(run_claude(instruction, worktree_path, resume=resume, on_message=on_message))
 
 
-def _run_with_heartbeat(job_id: int, worker_id: int, worktree_path: str, instruction: str):
+def _run_with_heartbeat(
+    job_id: int,
+    worker_id: int,
+    worktree_path: str,
+    instruction: str,
+    resume: str | None,
+):
     stop_event = threading.Event()
 
     def heartbeat_loop() -> None:
@@ -38,7 +64,7 @@ def _run_with_heartbeat(job_id: int, worker_id: int, worktree_path: str, instruc
     thread = threading.Thread(target=heartbeat_loop, daemon=True)
     thread.start()
     try:
-        return _run_claude_for_job(job_id, worktree_path, instruction)
+        return _run_claude_for_job(job_id, worktree_path, instruction, resume)
     finally:
         stop_event.set()
         thread.join()
@@ -67,10 +93,12 @@ def process_job(job: dict, worker_id: int) -> None:
         session.expunge(subtask)
         session.expunge(project)
     worktree_path = f"{settings.worktree_base_dir}/{subtask.branch_name}"
+    resume = _previous_session_id(subtask.id, job["job_id"])
+    record_event(job["job_id"], event_type="instruction", content=subtask.instruction)
 
     try:
         session_id, result_text = _run_with_heartbeat(
-            job["job_id"], worker_id, worktree_path, subtask.instruction
+            job["job_id"], worker_id, worktree_path, subtask.instruction, resume
         )
         with SessionLocal() as session:
             db_job = session.get(ExecutionJob, job["job_id"])
