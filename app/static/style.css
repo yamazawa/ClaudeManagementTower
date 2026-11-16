@@ -29,6 +29,45 @@ header h1 {
   font-size: 20px;
 }
 
+.header-top {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+#system-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+}
+
+#system-controls button {
+  padding: 3px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+#system-controls button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+#system-controls button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+#system-status {
+  color: #b8c7e3;
+}
+
 #breadcrumb {
   margin-top: 10px;
   font-size: 13px;
