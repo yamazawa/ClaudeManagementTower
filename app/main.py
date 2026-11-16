@@ -1,3 +1,4 @@
+import uuid
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -6,6 +7,9 @@ from fastapi.staticfiles import StaticFiles
 
 from app.routes import jobs, projects, subtasks, system, workers
 from core.db import ensure_default_project, init_db
+
+# サーバー再起動の完了を画面側で判定するための起動ごとの識別子
+BOOT_ID = uuid.uuid4().hex
 
 
 @asynccontextmanager
@@ -34,7 +38,7 @@ async def no_cache(request, call_next):
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok"}
+    return {"status": "ok", "boot_id": BOOT_ID}
 
 
 @app.get("/")
