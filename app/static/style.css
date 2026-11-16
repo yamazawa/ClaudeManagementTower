@@ -92,29 +92,41 @@ header h1 {
 }
 
 #issue-create-form {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
   margin-bottom: 16px;
   padding-bottom: 16px;
   border-bottom: 1px solid var(--line);
 }
 
+#subtask-form {
+  margin-top: 10px;
+}
+
+/* 作成フォーム共通
+
+タイトル入力欄の右に作成ボタンを右詰めで配置する。
+入力欄が残りの幅を埋め、状態表示は次の行に出す。
+*/
+#issue-create-form,
+#subtask-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
 #issue-create-form input,
-#issue-create-form textarea {
+#subtask-form input {
+  flex: 1 1 0;
+  min-width: 0;
   font: inherit;
   padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
 }
 
-#issue-create-form textarea {
-  min-height: 60px;
-  resize: vertical;
-}
-
-#issue-create-form button {
-  align-self: flex-start;
+#issue-create-form button,
+#subtask-form button {
+  flex: 0 0 auto;
   font: inherit;
   padding: 7px 16px;
   border: 1px solid var(--accent);
@@ -124,9 +136,21 @@ header h1 {
   cursor: pointer;
 }
 
-#issue-create-form button:disabled {
+#issue-create-form button:disabled,
+#subtask-form button:disabled {
   opacity: 0.6;
   cursor: default;
+}
+
+#issue-create-status,
+#subtask-form-status {
+  flex-basis: 100%;
+  margin: 0;
+}
+
+#issue-create-status:empty,
+#subtask-form-status:empty {
+  display: none;
 }
 
 #worker-status {
@@ -321,42 +345,6 @@ h2 {
 #sync-status {
   margin-left: 6px;
   font-size: 12.5px;
-}
-
-#subtask-form {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-#subtask-form input,
-#subtask-form textarea {
-  font: inherit;
-  padding: 8px 10px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-}
-
-#subtask-form textarea {
-  min-height: 70px;
-  resize: vertical;
-}
-
-#subtask-form button {
-  align-self: flex-start;
-  font: inherit;
-  padding: 7px 16px;
-  border: 1px solid var(--accent);
-  border-radius: 6px;
-  background: var(--accent);
-  color: #fff;
-  cursor: pointer;
-}
-
-#subtask-form button:disabled {
-  opacity: 0.6;
-  cursor: default;
 }
 
 @media (max-width: 680px) {
