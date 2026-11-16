@@ -1,0 +1,39 @@
+from fastapi import APIRouter, HTTPException
+
+from core.config import settings
+from core.job_queue import cleanup_stale_workers, recover_stale_jobs
+from core.supervisor_control import (
+    COMMAND_RESTART_SERVER,
+    COMMAND_START_WORKERS,
+    is_supervised,
+    request_command,
+)
+
+router = APIRouter(prefix="/api/system")
+
+NOT_SUPERVISED_DETAIL = "run_all.py経由で起動していないため実行できません"
+
+
+def _request_to_supervisor(command: str) -> dict:
+    if not is_supervised():
+        raise HTTPException(status_code=409, detail=NOT_SUPERVISED_DETAIL)
+    request_command(command)
+    return {"accepted": True}
+
+
+@router.post("/restart-server", status_code=202)
+def restart_server() -> dict:
+    return _request_to_supervisor(COMMAND_RESTART_SERVER)
+
+
+@router.post("/start-workers", status_code=202)
+def start_workers() -> dict:
+    return _request_to_supervisor(COMMAND_START_WORKERS)
+
+
+@router.post("/cleanup-workers")
+def cleanup_workers() -> dict:
+    return {
+        "removed_worker_ids": cleanup_stale_workers(settings.worker_offline_timeout_seconds),
+        "recovered_job_ids": recover_stale_jobs(settings.job_stale_timeout_seconds),
+    }
