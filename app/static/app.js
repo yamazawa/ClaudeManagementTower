@@ -219,6 +219,29 @@ function renderSubtaskDetail(s) {
   `;
 
   document.querySelector(".instruction-form").addEventListener("submit", onSubmitInstructionForm);
+
+  restoreJobState(s);
+}
+
+function restoreJobState(s) {
+  const job = s.latest_job;
+  if (!job) {
+    return;
+  }
+
+  const statusEl = document.querySelector(`.job-status[data-subtask-id="${s.id}"]`);
+  statusEl.textContent = `状態: ${job.status}`;
+
+  if (job.status === "queued" || job.status === "running") {
+    const button = document.querySelector(`.instruction-form[data-subtask-id="${s.id}"] button`);
+    button.disabled = true;
+    pollJob(job.id, s.id, button);
+    return;
+  }
+
+  if (job.status === "succeeded" && job.has_report) {
+    showReport(job.id, s.id);
+  }
 }
 
 async function onClickSync(event) {
