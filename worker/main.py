@@ -8,6 +8,7 @@ from core.claude_client import run_claude
 from core.config import settings
 from core.db import SessionLocal, init_db
 from core.execution_events import record_event
+from core.git_client import append_instruction_history, push_branch
 from core.github_client import mark_pr_ready
 from core.job_queue import (
     claim_next_job,
@@ -98,6 +99,9 @@ def process_job(job: dict, worker_id: int) -> None:
     record_event(job["job_id"], event_type="instruction", content=subtask.instruction)
 
     try:
+        append_instruction_history(worktree_path, subtask.instruction)
+        push_branch(worktree_path, subtask.branch_name)
+
         session_id, result_text = _run_with_heartbeat(
             job["job_id"], worker_id, worktree_path, subtask.instruction, resume
         )

@@ -1,5 +1,6 @@
 import re
 import subprocess
+from datetime import datetime, timezone
 from pathlib import Path
 
 from filelock import FileLock, Timeout
@@ -63,6 +64,17 @@ def commit_subtask_instruction(worktree_path: str, title: str, instruction: str)
     )
     _run_git(["add", ".claude-tower/subtask.md"], cwd=worktree_path)
     _run_git(["commit", "-m", f"[サブタスク] {title} ― 指示を記録"], cwd=worktree_path)
+
+
+def append_instruction_history(worktree_path: str, instruction: str) -> None:
+    subtask_dir = Path(worktree_path) / ".claude-tower"
+    subtask_dir.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+    entry = f"## 実行指示（{timestamp}）\n\n{instruction}\n\n"
+    with (subtask_dir / "subtask.md").open("a", encoding="utf-8") as f:
+        f.write(entry)
+    _run_git(["add", ".claude-tower/subtask.md"], cwd=worktree_path)
+    _run_git(["commit", "-m", "[サブタスク] 指示内容を記録"], cwd=worktree_path)
 
 
 def push_branch(worktree_path: str, branch_name: str) -> None:
