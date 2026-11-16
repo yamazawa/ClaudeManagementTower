@@ -15,6 +15,8 @@ class Settings(BaseSettings):
     worker_offline_timeout_seconds: int = 30
     database_path: str = "claude_tower.db"
     cloudflare_access_aud: str = ""
+    supervisor_control_dir: str = ".tower-control"
+    supervisor_poll_interval_seconds: float = 1.0
 
 
 settings = Settings()
