@@ -26,8 +26,19 @@ GitHub Issue連動型AI開発タスク管理システム。\
 
 ローカルでのFastAPI起動・pytest実行は隔離環境のため自由に行ってよい。
 
-GitHub操作の実機確認は `yamazawa/claude-tower-test-repo` のみを対象にする。\
-他の実運用リポジトリ（本プロジェクト自身のリポジトリを含む）には絶対に操作しない。
+Claude管理塔の自律実行機能（サブタスク実行経由のGitHub自動操作）について、\
+新規実装・未検証の変更は引き続き `yamazawa/claude-tower-test-repo` で検証する。
+
+本プロジェクト自身のリポジトリ（`yamazawa/ClaudeManagementTower`）への\
+自律実行は、以下の安全対策が完了したため解禁する（2026-11-17判断）。
+
+- Bash/PowerShellの操作範囲制限（worktree外への逃げ道・force push等の拒否）
+- GitHub側のbranch protection（直接push・force pushの禁止、管理者にも適用）
+- Issueの自動クローズ・PRの自動マージを行わない方針の実機確認
+
+ただし以下は引き続き守る。
+- PRのマージは人間が明示的に指示した場合のみ行う（自動マージはしない）。
+- 最初は影響の小さいタスクから試し、Issue・PR・コミット内容を都度確認する。
 
 本リポジトリ（`yamazawa/ClaudeManagementTower`）は公開（Public）。\
 実IPアドレス、Cloudflareトンネルの固有ホスト名・トークン、認証情報、ローカル環境固有のユーザー名を含むパス等は、コミット・push・Issue・PR・コメントのいずれにも記載しない。
