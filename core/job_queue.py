@@ -128,10 +128,13 @@ def set_worker_state(
     state: str,
     current_job_id: int | None,
     session_factory: sessionmaker = SessionLocal,
-) -> None:
+) -> bool:
     with session_factory() as session:
         worker = session.get(Worker, worker_id)
+        if worker is None:
+            return False
         worker.state = state
         worker.current_job_id = current_job_id
         worker.heartbeat_at = datetime.now(timezone.utc)
         session.commit()
+        return True

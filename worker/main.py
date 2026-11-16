@@ -85,9 +85,21 @@ def _finalize_success(job_id: int, subtask: Subtask, project: Project, worktree_
             session.commit()
 
 
-def process_job(job: dict, worker_id: int) -> None:
+def _ensure_worker_registered(
+    worker_id: int,
+    process_identifier: str,
+    state: str,
+    current_job_id: int | None,
+) -> int:
+    if set_worker_state(worker_id, state=state, current_job_id=current_job_id):
+        return worker_id
+    print("[worker] 自分のワーカー行が見つからないため再登録します")
+    return register_worker(process_identifier)
+
+
+def process_job(job: dict, worker_id: int, process_identifier: str) -> int:
     print(f"[worker] job {job['job_id']} (subtask {job['subtask_id']}) を実行開始")
-    set_worker_state(worker_id, state="busy", current_job_id=job["job_id"])
+    worker_id = _ensure_worker_registered(worker_id, process_identifier, "busy", job["job_id"])
 
     with SessionLocal() as session:
         subtask = session.get(Subtask, job["subtask_id"])
@@ -117,7 +129,7 @@ def process_job(job: dict, worker_id: int) -> None:
         finish_job(job["job_id"], status="failed", exit_code=1)
         print(f"[worker] job {job['job_id']} 失敗: {exc}")
 
-    set_worker_state(worker_id, state="idle", current_job_id=None)
+    return _ensure_worker_registered(worker_id, process_identifier, "idle", None)
 
 
 def main() -> None:
@@ -137,10 +149,10 @@ def main() -> None:
 
         job = claim_next_job(worker_id)
         if job is None:
-            set_worker_state(worker_id, state="idle", current_job_id=None)
+            worker_id = _ensure_worker_registered(worker_id, process_identifier, "idle", None)
             time.sleep(settings.worker_poll_interval_seconds)
             continue
-        process_job(job, worker_id)
+        worker_id = process_job(job, worker_id, process_identifier)
 
 
 if __name__ == "__main__":

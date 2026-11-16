@@ -76,14 +76,23 @@ def test_set_worker_state_updates_row(tmp_path):
     _, session_factory = _setup(tmp_path)
     worker_id = register_worker("worker-a", session_factory=session_factory)
 
-    set_worker_state(worker_id, state="busy", current_job_id=42, session_factory=session_factory)
+    result = set_worker_state(worker_id, state="busy", current_job_id=42, session_factory=session_factory)
 
+    assert result is True
     with session_factory() as session:
         from core.models import Worker
 
         worker = session.get(Worker, worker_id)
         assert worker.state == "busy"
         assert worker.current_job_id == 42
+
+
+def test_set_worker_state_returns_false_when_row_missing(tmp_path):
+    _, session_factory = _setup(tmp_path)
+
+    result = set_worker_state(9999, state="idle", current_job_id=None, session_factory=session_factory)
+
+    assert result is False
 
 
 def test_recover_stale_jobs_flags_jobs_without_recent_heartbeat(tmp_path):
