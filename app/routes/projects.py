@@ -3,9 +3,22 @@ from pydantic import BaseModel
 
 from core.db import SessionLocal
 from core.github_client import GitHubClientError, create_issue, get_issue, get_pr, list_issues
-from core.models import Project, Subtask
+from core.models import ExecutionJob, Project, Report, Subtask
 
 router = APIRouter(prefix="/api/projects")
+
+
+def _latest_job_summary(session, subtask_id: int) -> dict | None:
+    job = (
+        session.query(ExecutionJob)
+        .filter_by(subtask_id=subtask_id)
+        .order_by(ExecutionJob.id.desc())
+        .first()
+    )
+    if job is None:
+        return None
+    has_report = session.query(Report).filter_by(job_id=job.id).first() is not None
+    return {"id": job.id, "status": job.status, "has_report": has_report}
 
 
 class CreateIssueRequest(BaseModel):
@@ -74,6 +87,7 @@ def get_issue_detail(project_id: int, number: int):
                     if s.github_pr_number
                     else None
                 ),
+                "latest_job": _latest_job_summary(session, s.id),
             }
             for s in subtasks
         ]
