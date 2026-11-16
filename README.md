@@ -7,8 +7,15 @@ GitHub Issue連動型AI開発タスク管理システム。
 
 ## 現状
 
-Phase 9（遠隔アクセス）まで実装・実機確認済み。\
-Phase 10（統合受け入れテスト）はこれから行う。
+Phase 10（統合受け入れテスト）まで完了し、受け入れチェックリスト全項目を実機確認済み。\
+以下の安全対策の完了により、本リポジトリ自身の開発管理もアプリでの自律実行に移行した。
+
+- Bash/PowerShellの操作範囲制限（worktree外への操作・force push・hard reset等を拒否）
+- GitHub側のbranch protection（masterへの直接push・force pushを禁止、管理者にも適用）
+- Issueの自動クローズ・PRの自動マージを行わない方針の実機確認
+
+新規実装・未検証の変更は、引き続きテスト用リポジトリで検証してから本体に適用する。\
+詳細は [`IMPLEMENTATION_PLAN.md`](./IMPLEMENTATION_PLAN.md) の7章・8章を参照する。
 
 ## セットアップ
 
