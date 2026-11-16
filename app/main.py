@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routes import jobs, projects, subtasks, workers
+from app.routes import jobs, projects, subtasks, system, workers
 from core.db import ensure_default_project, init_db
 
 
@@ -21,6 +21,7 @@ app.include_router(projects.router)
 app.include_router(subtasks.router)
 app.include_router(jobs.router)
 app.include_router(workers.router)
+app.include_router(system.router)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 
