@@ -1,9 +1,16 @@
+import json
 import subprocess
 
 import pytest
 
 from core import github_client
-from core.github_client import GitHubClientError, edit_issue_title, edit_pr_title
+from core.github_client import (
+    GitHubClientError,
+    edit_issue_title,
+    edit_pr_title,
+    list_open_pull_requests,
+    merge_pull_request,
+)
 
 
 def _fake_run(calls: list, returncode: int = 0, stderr: str = ""):
@@ -42,3 +49,32 @@ def test_edit_pr_title_raises_on_gh_failure(monkeypatch):
 
     with pytest.raises(GitHubClientError, match="not found"):
         edit_pr_title("owner/repo", 34, "PRタイトル")
+
+
+def test_list_open_pull_requests_parses_json(monkeypatch):
+    calls = []
+
+    def run(args, **kwargs):
+        calls.append(args)
+        stdout = json.dumps([{"number": 1, "isDraft": False}, {"number": 2, "isDraft": True}])
+        return subprocess.CompletedProcess(args, 0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(github_client.subprocess, "run", run)
+
+    result = list_open_pull_requests("owner/repo")
+
+    assert result == [{"number": 1, "isDraft": False}, {"number": 2, "isDraft": True}]
+    assert calls == [
+        ["gh", "pr", "list", "--repo", "owner/repo", "--state", "open", "--json", "number,isDraft"]
+    ]
+
+
+def test_merge_pull_request_runs_gh_pr_merge(monkeypatch):
+    calls = []
+    monkeypatch.setattr(github_client.subprocess, "run", _fake_run(calls))
+
+    merge_pull_request("owner/repo", 7)
+
+    assert calls == [
+        ["gh", "pr", "merge", "7", "--repo", "owner/repo", "--merge", "--delete-branch"]
+    ]

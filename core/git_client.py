@@ -101,3 +101,7 @@ def append_instruction_history(worktree_path: str, instruction: str) -> None:
 
 def push_branch(worktree_path: str, branch_name: str) -> None:
     _run_git(["push", "-u", "origin", branch_name], cwd=worktree_path)
+
+
+def pull_latest(repo_path: str, branch: str) -> None:
+    _run_git(["pull", "origin", branch], cwd=repo_path)

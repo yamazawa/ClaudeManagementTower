@@ -64,6 +64,15 @@ header h1 {
   cursor: default;
 }
 
+#system-controls button.danger-action {
+  border-color: #e38b39;
+  background: rgba(227, 139, 57, 0.2);
+}
+
+#system-controls button.danger-action:hover:not(:disabled) {
+  background: rgba(227, 139, 57, 0.35);
+}
+
 #system-status {
   color: #b8c7e3;
 }

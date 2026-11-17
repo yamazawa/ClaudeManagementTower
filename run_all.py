@@ -6,6 +6,7 @@ import time
 from core.config import settings
 from core.supervisor_control import (
     COMMAND_RESTART_SERVER,
+    COMMAND_RESTART_WORKERS,
     COMMAND_START_WORKERS,
     SUPERVISED_ENV,
     take_requested_commands,
@@ -48,10 +49,16 @@ class Supervisor:
         print("[run_all] ワーカーを起動します")
         self.workers = self._spawn(WORKERS_ARGS)
 
+    def restart_workers(self) -> None:
+        print("[run_all] ワーカーを再起動します")
+        _stop(self.workers)
+        self.workers = self._spawn(WORKERS_ARGS)
+
     def handle(self, command: str) -> None:
         handlers = {
             COMMAND_RESTART_SERVER: self.restart_server,
             COMMAND_START_WORKERS: self.start_workers,
+            COMMAND_RESTART_WORKERS: self.restart_workers,
         }
         handlers[command]()
 
