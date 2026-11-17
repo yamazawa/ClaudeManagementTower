@@ -258,10 +258,37 @@ h2 {
   padding-bottom: 8px;
 }
 
+/* 一覧の状態フィルタ
+
+ラベルは補助テキストと同じ色にし、選択欄は他の入力欄と枠線・角丸を揃える。
+*/
 .list-filter {
-  display: block;
-  margin: 0 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 12px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.list-filter select {
+  font: inherit;
   font-size: 13px;
+  color: var(--ink);
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+
+.list-filter select:hover {
+  background: var(--soft);
+}
+
+.list-filter select:focus {
+  outline: none;
+  border-color: var(--accent);
 }
 
 #issue-list-items {
