@@ -54,6 +54,28 @@ def create_worktree(
     except Timeout as exc:
         raise GitClientError("worktree作成の排他ロック取得がタイムアウトしました") from exc
 
+    link_shared_venv(repo_path, worktree_path)
+
+
+def link_shared_venv(repo_path: str, worktree_path: str) -> None:
+    """本体リポジトリの.venvへのジャンクションをworktree内に作成する
+
+    worktreeは新規git checkoutのため依存関係がインストールされていない。
+    絶対パスでworktree外へアクセスする代わりに、worktree内の相対パス
+    （./.venv）で本体の仮想環境を使えるようにする。失敗してもテストが
+    動かせないだけなので、サブタスク作成自体は失敗させない。
+    """
+    venv_source = Path(repo_path) / ".venv"
+    venv_link = Path(worktree_path) / ".venv"
+    if not venv_source.exists() or venv_link.exists():
+        return
+    subprocess.run(
+        ["cmd", "/c", "mklink", "/J", str(venv_link), str(venv_source)],
+        capture_output=True,
+        text=True,
+        timeout=GIT_TIMEOUT_SECONDS,
+    )
+
 
 def commit_subtask_instruction(worktree_path: str, title: str, instruction: str) -> None:
     subtask_dir = Path(worktree_path) / ".claude-tower"

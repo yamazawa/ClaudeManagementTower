@@ -76,6 +76,16 @@ async function patchTitle(url, title) {
 }
 
 async function pollWorkers() {
+  try {
+    await renderWorkers();
+  } catch (error) {
+    // サーバー再起動中などで取得に失敗しても監視を継続する
+    document.getElementById("worker-status").textContent = "ワーカー状況を取得できません";
+  }
+  setTimeout(pollWorkers, 3000);
+}
+
+async function renderWorkers() {
   const workers = await fetch("/api/workers").then((r) => r.json());
   const aliveWorkers = workers.filter((w) => !w.is_stale);
   const busyCount = aliveWorkers.filter((w) => w.state === "busy").length;
@@ -92,7 +102,105 @@ async function pollWorkers() {
     .join("");
   document.getElementById("worker-status").innerHTML =
     `<span class="worker-summary">実行中 ${busyCount} / ${aliveWorkers.length}</span>${items}`;
-  setTimeout(pollWorkers, 3000);
+}
+
+const SYSTEM_BUTTON_IDS = [
+  "start-workers-button",
+  "cleanup-workers-button",
+  "restart-server-button",
+];
+const SERVER_RESTART_POLL_MS = 1000;
+const SERVER_RESTART_TIMEOUT_MS = 60000;
+
+function setSystemStatus(text) {
+  document.getElementById("system-status").textContent = text;
+}
+
+function setSystemButtonsDisabled(disabled) {
+  SYSTEM_BUTTON_IDS.forEach((id) => (document.getElementById(id).disabled = disabled));
+}
+
+async function postSystem(path) {
+  const response = await fetch(`/api/system/${path}`, { method: "POST" });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(body.detail || `HTTP ${response.status}`);
+  }
+  return body;
+}
+
+async function runSystemAction(action) {
+  setSystemButtonsDisabled(true);
+  try {
+    await action();
+  } catch (error) {
+    setSystemStatus(`失敗しました: ${error.message}`);
+  } finally {
+    setSystemButtonsDisabled(false);
+  }
+}
+
+async function onClickStartWorkers() {
+  setSystemStatus("ワーカー起動を依頼中...");
+  await postSystem("start-workers");
+  setSystemStatus("ワーカー起動を依頼しました");
+}
+
+async function onClickCleanupWorkers() {
+  setSystemStatus("掃除中...");
+  const result = await postSystem("cleanup-workers");
+  setSystemStatus(
+    `掃除しました（ワーカー${result.removed_worker_ids.length}件削除・` +
+      `ジョブ${result.recovered_job_ids.length}件を要確認化）`
+  );
+  await renderWorkers();
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchBootId() {
+  try {
+    const response = await fetch("/health");
+    return response.ok ? (await response.json()).boot_id : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+async function waitForNewBootId(oldBootId) {
+  const deadline = Date.now() + SERVER_RESTART_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    await sleep(SERVER_RESTART_POLL_MS);
+    const bootId = await fetchBootId();
+    if (bootId && bootId !== oldBootId) {
+      return true;
+    }
+  }
+  return false;
+}
+
+async function onClickRestartServer() {
+  if (!confirm("サーバーを再起動しますか？")) {
+    return;
+  }
+  setSystemStatus("再起動中...");
+  const oldBootId = await fetchBootId();
+  await postSystem("restart-server");
+  const restarted = await waitForNewBootId(oldBootId);
+  setSystemStatus(restarted ? "再起動しました" : "再起動を確認できませんでした");
+}
+
+function bindSystemControls() {
+  const handlers = {
+    "start-workers-button": onClickStartWorkers,
+    "cleanup-workers-button": onClickCleanupWorkers,
+    "restart-server-button": onClickRestartServer,
+  };
+  Object.entries(handlers).forEach(([id, handler]) =>
+    document.getElementById(id).addEventListener("click", () => runSystemAction(handler))
+  );
 }
 
 function renderBreadcrumb() {
@@ -465,5 +573,6 @@ async function showReport(jobId, subtaskId) {
 }
 
 document.getElementById("issue-create-form").addEventListener("submit", onSubmitIssueForm);
+bindSystemControls();
 
 init();

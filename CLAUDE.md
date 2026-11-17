@@ -26,6 +26,11 @@ GitHub Issue連動型AI開発タスク管理システム。\
 
 ローカルでのFastAPI起動・pytest実行は隔離環境のため自由に行ってよい。
 
+サブタスクのworktree内では、本体の仮想環境へのジャンクションが\
+`./.venv`に作成されている（worktree作成時に自動設定）。\
+`python`コマンドは使わず、`./.venv/Scripts/python.exe -m pytest -q`で\
+テストを実行する。worktree外の絶対パスは操作制限で拒否されるため使わない。
+
 Claude管理塔の自律実行機能（サブタスク実行経由のGitHub自動操作）について、\
 新規実装・未検証の変更は引き続き `yamazawa/claude-tower-test-repo` で検証する。
 
