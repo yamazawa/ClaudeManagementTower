@@ -2,6 +2,7 @@ import json
 import subprocess
 
 GH_TIMEOUT_SECONDS = 60
+ISSUE_LIST_LIMIT = 200
 
 
 class GitHubClientError(RuntimeError):
@@ -24,8 +25,16 @@ def _run_gh(args: list[str]) -> str:
     return result.stdout
 
 
-def list_issues(repo: str) -> list[dict]:
-    output = _run_gh(["issue", "list", "--repo", repo, "--json", "number,title,state"])
+def list_issues(repo: str, state: str = "open") -> list[dict]:
+    output = _run_gh(
+        [
+            "issue", "list",
+            "--repo", repo,
+            "--state", state,
+            "--limit", str(ISSUE_LIST_LIMIT),
+            "--json", "number,title,state",
+        ]
+    )
     return json.loads(output)
 
 
