@@ -8,3 +8,7 @@ yamazawa/ClaudeManagementTower#68 is not mergeable: the merge commit cannot be c
 の通りマージして最新化に失敗。
 調査して必要な修正を実施して
 
+## 実行指示（2026-11-17 23:35:31 UTC）
+
+リベース時の競合解決も含めて「マージして最新化」はやってほしい。そのように修正して。
+
