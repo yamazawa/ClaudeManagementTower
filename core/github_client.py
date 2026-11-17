@@ -43,6 +43,14 @@ def create_issue(repo: str, title: str, body: str) -> dict:
     return {"number": number, "url": url}
 
 
+def edit_issue_title(repo: str, number: int, title: str) -> None:
+    _run_gh(["issue", "edit", str(number), "--repo", repo, "--title", title])
+
+
+def edit_pr_title(repo: str, number: int, title: str) -> None:
+    _run_gh(["pr", "edit", str(number), "--repo", repo, "--title", title])
+
+
 def create_draft_pr(repo: str, base: str, head: str, title: str, body: str) -> dict:
     output = _run_gh(
         [
