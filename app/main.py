@@ -6,7 +6,9 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.routes import jobs, projects, subtasks, system, workers
+from core.config import settings
 from core.db import ensure_default_project, init_db
+from core.pr_sync import start_sync_loop
 
 # サーバー再起動の完了を画面側で判定するための起動ごとの識別子
 BOOT_ID = uuid.uuid4().hex
@@ -16,7 +18,9 @@ BOOT_ID = uuid.uuid4().hex
 async def lifespan(app: FastAPI):
     init_db()
     ensure_default_project()
+    stop_pr_sync = start_sync_loop(settings.pr_sync_interval_seconds)
     yield
+    stop_pr_sync.set()
 
 
 app = FastAPI(title="Claude管理塔", lifespan=lifespan)

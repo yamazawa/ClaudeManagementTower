@@ -3,6 +3,7 @@ import subprocess
 
 GH_TIMEOUT_SECONDS = 60
 ISSUE_LIST_LIMIT = 200
+PR_STATE_LIST_LIMIT = 200
 
 
 class GitHubClientError(RuntimeError):
@@ -87,6 +88,19 @@ def get_pr(repo: str, number: int) -> dict:
             "pr", "view", str(number),
             "--repo", repo,
             "--json", "number,isDraft,state,mergedAt,url",
+        ]
+    )
+    return json.loads(output)
+
+
+def list_pull_request_states(repo: str) -> list[dict]:
+    output = _run_gh(
+        [
+            "pr", "list",
+            "--repo", repo,
+            "--state", "all",
+            "--limit", str(PR_STATE_LIST_LIMIT),
+            "--json", "number,isDraft,state,mergedAt",
         ]
     )
     return json.loads(output)
