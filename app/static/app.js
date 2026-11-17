@@ -11,6 +11,15 @@ const LIFECYCLE_LABELS = {
   closed: "クローズ（未マージ）",
 };
 
+// MR一覧フィルタの値ごとに表示対象のlifecycle_stateを定義する（nullは全件表示）
+const SUBTASK_FILTER_STATES = {
+  unresolved: ["draft", "in_review"],
+  draft: ["draft"],
+  in_review: ["in_review"],
+  merged: ["merged"],
+  all: null,
+};
+
 const WORKER_STATE_LABELS = {
   idle: "待機中",
   busy: "実行中",
@@ -282,9 +291,10 @@ async function selectProject(projectId, projectName) {
 }
 
 async function loadIssues() {
-  const issues = await fetch(`/api/projects/${currentProjectId}/issues`).then((r) =>
-    r.json()
-  );
+  const state = document.getElementById("issue-filter").value;
+  const issues = await fetch(
+    `/api/projects/${currentProjectId}/issues?state=${encodeURIComponent(state)}`
+  ).then((r) => r.json());
   const listEl = document.getElementById("issue-list-items");
   listEl.innerHTML = "";
   if (issues.length === 0) {
@@ -294,11 +304,33 @@ async function loadIssues() {
   for (const issue of issues) {
     const li = document.createElement("li");
     li.className = "issue-item";
+    li.classList.toggle("active", issue.number === currentIssueNumber);
     li.dataset.number = issue.number;
     li.innerHTML = `<span class="number">#${issue.number}</span><span class="issue-item-title">${escapeHtml(issue.title)}</span>`;
     li.addEventListener("click", () => selectIssue(issue.number));
     listEl.appendChild(li);
   }
+}
+
+function filterSubtasks(subtasks) {
+  const states = SUBTASK_FILTER_STATES[document.getElementById("subtask-filter").value];
+  return states ? subtasks.filter((s) => states.includes(s.lifecycle_state)) : subtasks;
+}
+
+function renderSubtaskList() {
+  const container = document.getElementById("subtask-list-container");
+  if (!container) return;
+  const subtasks = filterSubtasks(currentSubtasks);
+  container.innerHTML =
+    subtasks.length === 0
+      ? '<p class="empty">該当するMRはありません。</p>'
+      : `<ul id="subtask-list-items">${subtasks.map(renderSubtaskRow).join("")}</ul>`;
+  container
+    .querySelectorAll(".subtask-row")
+    .forEach((row) =>
+      row.addEventListener("click", () => selectSubtask(Number(row.dataset.subtaskId)))
+    );
+  highlightSelectedSubtaskRow();
 }
 
 async function saveIssueTitle(number, title) {
@@ -360,11 +392,6 @@ async function refreshIssueDetail() {
   currentSubtasks = issue.subtasks;
 
   const listEl = document.getElementById("subtask-list-body");
-  const itemsHtml =
-    currentSubtasks.length === 0
-      ? '<p class="empty">MRはまだありません。</p>'
-      : `<ul id="subtask-list-items">${currentSubtasks.map(renderSubtaskRow).join("")}</ul>`;
-
   listEl.innerHTML = `
     <h3 class="title-heading"><span class="title-number">#${issue.number}</span><span id="issue-title">${escapeHtml(issue.title)}</span></h3>
     <p id="issue-title-status" class="title-status empty"></p>
@@ -379,7 +406,7 @@ async function refreshIssueDetail() {
       <button type="submit">作成</button>
       <p id="subtask-form-status" class="empty"></p>
     </form>
-    ${itemsHtml}
+    <div id="subtask-list-container"></div>
   `;
 
   document
@@ -391,12 +418,7 @@ async function refreshIssueDetail() {
     document.getElementById("issue-title-status"),
     (title) => saveIssueTitle(issue.number, title)
   );
-  document
-    .querySelectorAll(".subtask-row")
-    .forEach((row) =>
-      row.addEventListener("click", () => selectSubtask(Number(row.dataset.subtaskId)))
-    );
-  highlightSelectedSubtaskRow();
+  renderSubtaskList();
 }
 
 function selectSubtask(subtaskId) {
@@ -596,6 +618,8 @@ async function showReport(jobId, subtaskId) {
 }
 
 document.getElementById("issue-create-form").addEventListener("submit", onSubmitIssueForm);
+document.getElementById("issue-filter").addEventListener("change", loadIssues);
+document.getElementById("subtask-filter").addEventListener("change", renderSubtaskList);
 bindSystemControls();
 
 init();
