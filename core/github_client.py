@@ -82,17 +82,6 @@ def mark_pr_ready(repo: str, number: int) -> None:
     _run_gh(["pr", "ready", str(number), "--repo", repo])
 
 
-def get_pr(repo: str, number: int) -> dict:
-    output = _run_gh(
-        [
-            "pr", "view", str(number),
-            "--repo", repo,
-            "--json", "number,isDraft,state,mergedAt,url",
-        ]
-    )
-    return json.loads(output)
-
-
 def list_pull_request_states(repo: str) -> list[dict]:
     output = _run_gh(
         [
