@@ -6,8 +6,12 @@ from core.db import init_db, make_engine
 from core.job_queue import (
     claim_next_job,
     cleanup_stale_workers,
+    delete_all_workers,
     finish_job,
     heartbeat_job,
+    list_live_worker_pids,
+    make_process_identifier,
+    parse_worker_pid,
     recover_stale_jobs,
     register_worker,
     set_worker_state,
@@ -139,6 +143,37 @@ def test_cleanup_stale_workers_keeps_recently_heartbeaten_workers(tmp_path):
     assert removed == []
     with session_factory() as session:
         assert session.get(Worker, worker_id) is not None
+
+
+def test_parse_worker_pid_roundtrip():
+    assert parse_worker_pid(make_process_identifier(1234)) == 1234
+
+
+def test_parse_worker_pid_returns_none_for_other_format():
+    assert parse_worker_pid("worker-a") is None
+
+
+def test_list_live_worker_pids_excludes_stale_workers(tmp_path):
+    _, session_factory = _setup(tmp_path)
+    register_worker(make_process_identifier(100), session_factory=session_factory)
+    stale_id = register_worker(make_process_identifier(200), session_factory=session_factory)
+    register_worker("worker-a", session_factory=session_factory)
+
+    with session_factory() as session:
+        session.get(Worker, stale_id).heartbeat_at = datetime.now(timezone.utc) - timedelta(seconds=120)
+        session.commit()
+
+    assert list_live_worker_pids(timeout_seconds=30, session_factory=session_factory) == [100]
+
+
+def test_delete_all_workers_removes_every_row(tmp_path):
+    _, session_factory = _setup(tmp_path)
+    register_worker("worker-a", session_factory=session_factory)
+    register_worker("worker-b", session_factory=session_factory)
+
+    assert delete_all_workers(session_factory=session_factory) == 2
+    with session_factory() as session:
+        assert session.query(Worker).count() == 0
 
 
 def test_recover_stale_jobs_keeps_recently_heartbeaten_jobs(tmp_path):

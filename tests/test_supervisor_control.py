@@ -1,6 +1,7 @@
 import pytest
 
 import run_all
+from core.config import settings
 from core.supervisor_control import (
     COMMAND_RESTART_SERVER,
     COMMAND_RESTART_WORKERS,
@@ -45,6 +46,26 @@ class _FakeProcess:
         return self.returncode
 
 
+class _FakePool:
+    def __init__(self):
+        self.running = False
+        self.calls = []
+
+    def is_running(self):
+        return self.running
+
+    def start(self):
+        self.calls.append("start")
+        self.running = True
+
+    def stop(self):
+        self.calls.append("stop")
+        self.running = False
+
+    def maintain(self):
+        self.calls.append("maintain")
+
+
 def _make_supervisor(monkeypatch):
     spawned = []
 
@@ -54,11 +75,12 @@ def _make_supervisor(monkeypatch):
         return process
 
     monkeypatch.setattr(run_all.Supervisor, "_spawn", fake_spawn)
-    return run_all.Supervisor(), spawned
+    pool = _FakePool()
+    return run_all.Supervisor(pool=pool), spawned, pool
 
 
 def test_restart_server_stops_old_and_starts_new(monkeypatch):
-    supervisor, spawned = _make_supervisor(monkeypatch)
+    supervisor, spawned, _ = _make_supervisor(monkeypatch)
     supervisor.start_server()
 
     supervisor.handle(COMMAND_RESTART_SERVER)
@@ -68,29 +90,28 @@ def test_restart_server_stops_old_and_starts_new(monkeypatch):
 
 
 def test_start_workers_skips_when_running(monkeypatch):
-    supervisor, spawned = _make_supervisor(monkeypatch)
+    supervisor, _, pool = _make_supervisor(monkeypatch)
     supervisor.start_workers()
 
     supervisor.handle(COMMAND_START_WORKERS)
 
-    assert len(spawned) == 1
+    assert pool.calls == ["start"]
 
 
-def test_start_workers_restarts_after_exit(monkeypatch):
-    supervisor, spawned = _make_supervisor(monkeypatch)
-    supervisor.start_workers()
-    spawned[0].returncode = 0
-
-    supervisor.handle(COMMAND_START_WORKERS)
-
-    assert supervisor.workers is spawned[1]
-
-
-def test_restart_workers_stops_old_and_starts_new(monkeypatch):
-    supervisor, spawned = _make_supervisor(monkeypatch)
+def test_restart_workers_restarts_pool(monkeypatch):
+    supervisor, _, pool = _make_supervisor(monkeypatch)
     supervisor.start_workers()
 
     supervisor.handle(COMMAND_RESTART_WORKERS)
 
-    assert spawned[0].terminated
-    assert supervisor.workers is spawned[1]
+    assert pool.calls == ["start", "start"]
+
+
+def test_tick_handles_requests_then_maintains_pool(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "supervisor_control_dir", str(tmp_path))
+    supervisor, _, pool = _make_supervisor(monkeypatch)
+    request_command(COMMAND_START_WORKERS)
+
+    supervisor.tick()
+
+    assert pool.calls == ["start", "maintain"]
