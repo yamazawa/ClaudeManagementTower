@@ -121,6 +121,8 @@ const SYSTEM_BUTTON_IDS = [
 ];
 const SERVER_RESTART_POLL_MS = 1000;
 const SERVER_RESTART_TIMEOUT_MS = 60000;
+const SYNC_SELF_POLL_MS = 3000;
+const SYNC_SELF_TIMEOUT_MS = 30 * 60 * 1000;
 
 function setSystemStatus(text) {
   document.getElementById("system-status").textContent = text;
@@ -202,6 +204,27 @@ async function onClickRestartServer() {
   setSystemStatus(restarted ? "再起動しました" : "再起動を確認できませんでした");
 }
 
+async function fetchSyncSelfResult() {
+  try {
+    const response = await fetch("/api/system/sync-self");
+    return response.ok ? await response.json() : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+async function waitForSyncSelfResult() {
+  const deadline = Date.now() + SYNC_SELF_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    await sleep(SYNC_SELF_POLL_MS);
+    const result = await fetchSyncSelfResult();
+    if (result && result.status !== "running") {
+      return result;
+    }
+  }
+  return null;
+}
+
 function describeSyncSelfResult(result) {
   const toLabels = (numbers) => numbers.map((n) => `#${n}`).join("、");
   const failedNumbers = result.failed_prs.map((pr) => pr.number);
@@ -231,7 +254,16 @@ async function onClickSyncSelf() {
   }
   setSystemStatus("マージ・最新化中...（競合解消を含むため時間がかかる場合があります）");
   const oldBootId = await fetchBootId();
-  const result = await postSystem("sync-self");
+  await postSystem("sync-self");
+  const result = await waitForSyncSelfResult();
+  if (result === null) {
+    setSystemStatus("マージ・最新化の完了を確認できませんでした");
+    return;
+  }
+  if (result.status === "failed") {
+    setSystemStatus(`マージ・最新化に失敗しました: ${result.error}`);
+    return;
+  }
   const mergedText = describeSyncSelfResult(result);
   setSystemStatus(`${mergedText} 再起動中...`);
   const restarted = await waitForNewBootId(oldBootId);
