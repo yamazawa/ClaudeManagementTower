@@ -22,6 +22,59 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
+/**
+ * タイトル要素をクリックでテキストボックス化する
+ *
+ * Enterまたはフォーカス外れで確定し、Escで取り消す。
+ * onSaveは新タイトルを受け取り、失敗時はエラー文言を返す。
+ */
+function makeTitleEditable(titleEl, statusEl, onSave) {
+  titleEl.classList.add("editable-title");
+  titleEl.title = "クリックしてタイトルを編集";
+  titleEl.addEventListener("click", () => {
+    const original = titleEl.textContent;
+    const input = document.createElement("input");
+    input.type = "text";
+    input.className = "title-input";
+    input.value = original;
+    titleEl.replaceWith(input);
+    input.focus();
+    input.select();
+
+    let finished = false;
+    const finish = async (save) => {
+      if (finished) return;
+      finished = true;
+      const title = input.value.trim();
+      input.replaceWith(titleEl);
+      if (!save || !title || title === original) return;
+
+      titleEl.textContent = title;
+      statusEl.textContent = "更新中...";
+      const error = await onSave(title);
+      if (error) titleEl.textContent = original;
+      statusEl.textContent = error ? `失敗しました: ${error}` : "更新しました";
+    };
+    input.addEventListener("keydown", (event) => {
+      if (event.isComposing) return;
+      if (event.key === "Enter") finish(true);
+      if (event.key === "Escape") finish(false);
+    });
+    input.addEventListener("blur", () => finish(true));
+  });
+}
+
+async function patchTitle(url, title) {
+  const response = await fetch(url, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  if (response.ok) return null;
+  const error = await response.json().catch(() => ({}));
+  return error.detail || response.statusText;
+}
+
 async function pollWorkers() {
   try {
     await renderWorkers();
@@ -219,10 +272,32 @@ async function loadIssues() {
     const li = document.createElement("li");
     li.className = "issue-item";
     li.dataset.number = issue.number;
-    li.innerHTML = `<span class="number">#${issue.number}</span>${issue.title}`;
+    li.innerHTML = `<span class="number">#${issue.number}</span><span class="issue-item-title">${escapeHtml(issue.title)}</span>`;
     li.addEventListener("click", () => selectIssue(issue.number));
     listEl.appendChild(li);
   }
+}
+
+async function saveIssueTitle(number, title) {
+  const error = await patchTitle(`/api/projects/${currentProjectId}/issues/${number}`, title);
+  if (error) return error;
+  const itemTitle = document.querySelector(
+    `.issue-item[data-number="${number}"] .issue-item-title`
+  );
+  if (itemTitle) itemTitle.textContent = title;
+  return null;
+}
+
+async function saveSubtaskTitle(subtaskId, title) {
+  const error = await patchTitle(`/api/subtasks/${subtaskId}`, title);
+  if (error) return error;
+  const subtask = currentSubtasks.find((s) => s.id === subtaskId);
+  if (subtask) subtask.title = title;
+  const rowTitle = document.querySelector(
+    `.subtask-row[data-subtask-id="${subtaskId}"] .subtask-row-title`
+  );
+  if (rowTitle) rowTitle.textContent = title;
+  return null;
 }
 
 function renderSubtaskRow(s) {
@@ -230,7 +305,7 @@ function renderSubtaskRow(s) {
   const prBadge = s.github_pr_number ? `PR #${s.github_pr_number}` : "";
   return `
     <li class="subtask-row" data-subtask-id="${s.id}">
-      <span class="subtask-row-title">${s.title}</span>
+      <span class="subtask-row-title">${escapeHtml(s.title)}</span>
       <span class="subtask-row-meta">${label} ${prBadge}</span>
     </li>
   `;
@@ -268,7 +343,8 @@ async function refreshIssueDetail() {
       : `<ul id="subtask-list-items">${currentSubtasks.map(renderSubtaskRow).join("")}</ul>`;
 
   listEl.innerHTML = `
-    <h3>#${issue.number} ${issue.title}</h3>
+    <h3>#${issue.number} <span id="issue-title">${escapeHtml(issue.title)}</span></h3>
+    <p id="issue-title-status" class="title-status empty"></p>
     <p>
       <a href="${issue.url}" target="_blank" rel="noopener">GitHubで開く</a>
       <button id="sync-button" type="button">同期</button>
@@ -287,6 +363,11 @@ async function refreshIssueDetail() {
     .getElementById("subtask-form")
     .addEventListener("submit", onSubmitSubtaskForm);
   document.getElementById("sync-button").addEventListener("click", onClickSync);
+  makeTitleEditable(
+    document.getElementById("issue-title"),
+    document.getElementById("issue-title-status"),
+    (title) => saveIssueTitle(issue.number, title)
+  );
   document
     .querySelectorAll(".subtask-row")
     .forEach((row) =>
@@ -315,7 +396,8 @@ function renderSubtaskDetail(s) {
   const label = LIFECYCLE_LABELS[s.lifecycle_state] || s.lifecycle_state;
 
   el.innerHTML = `
-    <h3>${s.title}</h3>
+    <h3><span id="subtask-title">${escapeHtml(s.title)}</span></h3>
+    <p id="subtask-title-status" class="title-status empty"></p>
     <p>状態: ${label}${prLink}</p>
     <form class="instruction-form" data-subtask-id="${s.id}">
       <label for="instruction-${s.id}">指示内容</label>
@@ -327,6 +409,11 @@ function renderSubtaskDetail(s) {
   `;
 
   document.querySelector(".instruction-form").addEventListener("submit", onSubmitInstructionForm);
+  makeTitleEditable(
+    document.getElementById("subtask-title"),
+    document.getElementById("subtask-title-status"),
+    (title) => saveSubtaskTitle(s.id, title)
+  );
 
   restoreJobState(s);
 }

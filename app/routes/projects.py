@@ -2,7 +2,14 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from core.db import SessionLocal
-from core.github_client import GitHubClientError, create_issue, get_issue, get_pr, list_issues
+from core.github_client import (
+    GitHubClientError,
+    create_issue,
+    edit_issue_title,
+    get_issue,
+    get_pr,
+    list_issues,
+)
 from core.models import ExecutionJob, Project, Report, Subtask
 
 router = APIRouter(prefix="/api/projects")
@@ -61,6 +68,26 @@ def create_project_issue(project_id: int, payload: CreateIssueRequest):
             return create_issue(project.github_repo, payload.title, payload.body)
         except GitHubClientError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+class UpdateTitleRequest(BaseModel):
+    title: str
+
+
+@router.patch("/{project_id}/issues/{number}")
+def update_issue_title(project_id: int, number: int, payload: UpdateTitleRequest):
+    title = payload.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="title is empty")
+    with SessionLocal() as session:
+        project = session.get(Project, project_id)
+        if project is None:
+            raise HTTPException(status_code=404, detail="project not found")
+        try:
+            edit_issue_title(project.github_repo, number, title)
+        except GitHubClientError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        return {"number": number, "title": title}
 
 
 @router.get("/{project_id}/issues/{number}")
