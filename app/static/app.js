@@ -202,22 +202,37 @@ async function onClickRestartServer() {
   setSystemStatus(restarted ? "再起動しました" : "再起動を確認できませんでした");
 }
 
+function describeSyncSelfResult(result) {
+  const toLabels = (numbers) => numbers.map((n) => `#${n}`).join("、");
+  const failedNumbers = result.failed_prs.map((pr) => pr.number);
+  if (result.merged_pr_numbers.length === 0 && failedNumbers.length === 0) {
+    return "マージ対象のPRはありませんでした。";
+  }
+  const texts = [];
+  if (result.merged_pr_numbers.length > 0) {
+    texts.push(`PR ${toLabels(result.merged_pr_numbers)} をマージしました。`);
+  }
+  if (failedNumbers.length > 0) {
+    const reasons = result.failed_prs.map((pr) => `#${pr.number}: ${pr.error}`).join(" / ");
+    texts.push(`PR ${toLabels(failedNumbers)} はマージできませんでした（${reasons}）。`);
+  }
+  return texts.join(" ");
+}
+
 async function onClickSyncSelf() {
   if (
     !confirm(
       "Claude管理塔リポジトリで、Draftが外れている全PRをマージし、" +
-        "最新化してサーバー・ワーカーを再起動します。よろしいですか？"
+        "最新化してサーバー・ワーカーを再起動します。" +
+        "競合しているPRはClaudeが競合を解消してからマージします。よろしいですか？"
     )
   ) {
     return;
   }
-  setSystemStatus("マージ・最新化中...");
+  setSystemStatus("マージ・最新化中...（競合解消を含むため時間がかかる場合があります）");
   const oldBootId = await fetchBootId();
   const result = await postSystem("sync-self");
-  const mergedText =
-    result.merged_pr_numbers.length === 0
-      ? "マージ対象のPRはありませんでした。"
-      : `PR ${result.merged_pr_numbers.map((n) => `#${n}`).join("、")} をマージしました。`;
+  const mergedText = describeSyncSelfResult(result);
   setSystemStatus(`${mergedText} 再起動中...`);
   const restarted = await waitForNewBootId(oldBootId);
   setSystemStatus(`${mergedText} ${restarted ? "再起動しました" : "再起動を確認できませんでした"}`);

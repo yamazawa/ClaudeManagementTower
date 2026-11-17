@@ -3,6 +3,7 @@ from fastapi import HTTPException
 
 from app.routes import system
 from core.github_client import GitHubClientError
+from core.pr_merger import PrMergeError
 from core.supervisor_control import (
     COMMAND_RESTART_SERVER,
     COMMAND_RESTART_WORKERS,
@@ -59,7 +60,9 @@ def test_sync_self_merges_only_non_draft_prs(monkeypatch):
         lambda repo: [{"number": 1, "isDraft": False}, {"number": 2, "isDraft": True}],
     )
     merged = []
-    monkeypatch.setattr(system, "merge_pull_request", lambda repo, number: merged.append(number))
+    monkeypatch.setattr(
+        system, "merge_pr_with_update", lambda repo, path, base, pr: merged.append(pr["number"])
+    )
     monkeypatch.setattr(system, "pull_latest", lambda path, branch: None)
     requested = []
     monkeypatch.setattr(system, "request_command", requested.append)
@@ -67,7 +70,33 @@ def test_sync_self_merges_only_non_draft_prs(monkeypatch):
     result = system.sync_self()
 
     assert merged == [1]
-    assert result == {"merged_pr_numbers": [1]}
+    assert result == {"merged_pr_numbers": [1], "failed_prs": []}
+    assert requested == [COMMAND_RESTART_SERVER, COMMAND_RESTART_WORKERS]
+
+
+def test_sync_self_continues_after_pr_failure(monkeypatch):
+    monkeypatch.setattr(system, "is_supervised", lambda: True)
+    monkeypatch.setattr(
+        system,
+        "list_open_pull_requests",
+        lambda repo: [{"number": 1, "isDraft": False}, {"number": 2, "isDraft": False}],
+    )
+
+    def merge(repo, path, base, pr):
+        if pr["number"] == 1:
+            raise PrMergeError("競合が解消されていません")
+
+    monkeypatch.setattr(system, "merge_pr_with_update", merge)
+    monkeypatch.setattr(system, "pull_latest", lambda path, branch: None)
+    requested = []
+    monkeypatch.setattr(system, "request_command", requested.append)
+
+    result = system.sync_self()
+
+    assert result == {
+        "merged_pr_numbers": [2],
+        "failed_prs": [{"number": 1, "error": "競合が解消されていません"}],
+    }
     assert requested == [COMMAND_RESTART_SERVER, COMMAND_RESTART_WORKERS]
 
 
