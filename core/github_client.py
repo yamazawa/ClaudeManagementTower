@@ -81,3 +81,14 @@ def get_pr(repo: str, number: int) -> dict:
         ]
     )
     return json.loads(output)
+
+
+def list_open_pull_requests(repo: str) -> list[dict]:
+    output = _run_gh(
+        ["pr", "list", "--repo", repo, "--state", "open", "--json", "number,isDraft"]
+    )
+    return json.loads(output)
+
+
+def merge_pull_request(repo: str, number: int) -> None:
+    _run_gh(["pr", "merge", str(number), "--repo", repo, "--merge", "--delete-branch"])

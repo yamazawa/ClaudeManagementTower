@@ -108,6 +108,7 @@ const SYSTEM_BUTTON_IDS = [
   "start-workers-button",
   "cleanup-workers-button",
   "restart-server-button",
+  "sync-self-button",
 ];
 const SERVER_RESTART_POLL_MS = 1000;
 const SERVER_RESTART_TIMEOUT_MS = 60000;
@@ -192,11 +193,33 @@ async function onClickRestartServer() {
   setSystemStatus(restarted ? "再起動しました" : "再起動を確認できませんでした");
 }
 
+async function onClickSyncSelf() {
+  if (
+    !confirm(
+      "Claude管理塔リポジトリで、Draftが外れている全PRをマージし、" +
+        "最新化してサーバー・ワーカーを再起動します。よろしいですか？"
+    )
+  ) {
+    return;
+  }
+  setSystemStatus("マージ・最新化中...");
+  const oldBootId = await fetchBootId();
+  const result = await postSystem("sync-self");
+  const mergedText =
+    result.merged_pr_numbers.length === 0
+      ? "マージ対象のPRはありませんでした。"
+      : `PR ${result.merged_pr_numbers.map((n) => `#${n}`).join("、")} をマージしました。`;
+  setSystemStatus(`${mergedText} 再起動中...`);
+  const restarted = await waitForNewBootId(oldBootId);
+  setSystemStatus(`${mergedText} ${restarted ? "再起動しました" : "再起動を確認できませんでした"}`);
+}
+
 function bindSystemControls() {
   const handlers = {
     "start-workers-button": onClickStartWorkers,
     "cleanup-workers-button": onClickCleanupWorkers,
     "restart-server-button": onClickRestartServer,
+    "sync-self-button": onClickSyncSelf,
   };
   Object.entries(handlers).forEach(([id, handler]) =>
     document.getElementById(id).addEventListener("click", () => runSystemAction(handler))
