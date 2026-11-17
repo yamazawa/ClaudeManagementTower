@@ -1,21 +1,20 @@
-import subprocess
-import sys
+import time
 
 from core.config import settings
+from core.db import init_db
+from worker.pool import WorkerPool, spawn_worker
 
 
 def main() -> None:
-    print(f"[launcher] worker.count={settings.worker_count}個のワーカーを起動します")
-    processes = [
-        subprocess.Popen([sys.executable, "-u", "-m", "worker.main"])
-        for _ in range(settings.worker_count)
-    ]
+    init_db()
+    pool = WorkerPool(settings.worker_count, spawn=spawn_worker)
+    pool.start()
     try:
-        for process in processes:
-            process.wait()
+        while True:
+            time.sleep(settings.worker_poll_interval_seconds)
+            pool.maintain()
     except KeyboardInterrupt:
-        for process in processes:
-            process.terminate()
+        pool.stop()
 
 
 if __name__ == "__main__":

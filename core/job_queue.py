@@ -1,3 +1,4 @@
+import uuid
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import text
@@ -24,6 +25,43 @@ _CLAIM_SQL = text(
     RETURNING id, subtask_id
     """
 )
+
+
+_PROCESS_IDENTIFIER_PREFIX = "worker"
+
+
+def make_process_identifier(pid: int) -> str:
+    return f"{_PROCESS_IDENTIFIER_PREFIX}-{pid}-{uuid.uuid4().hex[:8]}"
+
+
+def parse_worker_pid(process_identifier: str) -> int | None:
+    """ワーカー識別子からPIDを取り出す
+
+    make_process_identifierの形式でない場合はNoneを返す。
+    """
+    parts = process_identifier.split("-")
+    if len(parts) != 3 or parts[0] != _PROCESS_IDENTIFIER_PREFIX or not parts[1].isdigit():
+        return None
+    return int(parts[1])
+
+
+def list_live_worker_pids(
+    timeout_seconds: int,
+    session_factory: sessionmaker = SessionLocal,
+) -> list[int]:
+    """心拍が途絶えていないワーカーのPID一覧を返す"""
+    threshold = datetime.now(timezone.utc) - timedelta(seconds=timeout_seconds)
+    with session_factory() as session:
+        workers = session.query(Worker).filter(Worker.heartbeat_at >= threshold).all()
+        pids = [parse_worker_pid(worker.process_identifier) for worker in workers]
+    return [pid for pid in pids if pid is not None]
+
+
+def delete_all_workers(session_factory: sessionmaker = SessionLocal) -> int:
+    with session_factory() as session:
+        deleted = session.query(Worker).delete()
+        session.commit()
+    return deleted
 
 
 def register_worker(process_identifier: str, session_factory: sessionmaker = SessionLocal) -> int:
