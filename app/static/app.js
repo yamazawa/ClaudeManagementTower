@@ -260,7 +260,17 @@ function showProjectList() {
   currentIssueNumber = null;
   document.getElementById("project-view").hidden = false;
   document.getElementById("issue-view").hidden = true;
+  clearIssueDetail();
   renderBreadcrumb();
+}
+
+// 別リポジトリへ切り替えた際に前のIssue表示が残らないよう、Issue未選択の表示に戻す
+function clearIssueDetail() {
+  document.getElementById("issue-heading").textContent = "Issue";
+  document.getElementById("subtask-list-body").innerHTML =
+    '<p class="empty">左の一覧からIssueを選択してください。</p>';
+  document.getElementById("subtask-panel").hidden = true;
+  renderSubtaskDetail(null);
 }
 
 async function init() {
