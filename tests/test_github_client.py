@@ -8,6 +8,7 @@ from core.github_client import (
     GitHubClientError,
     edit_issue_title,
     edit_pr_title,
+    get_pr_mergeable,
     list_issues,
     list_open_pull_requests,
     merge_pull_request,
@@ -66,8 +67,24 @@ def test_list_open_pull_requests_parses_json(monkeypatch):
 
     assert result == [{"number": 1, "isDraft": False}, {"number": 2, "isDraft": True}]
     assert calls == [
-        ["gh", "pr", "list", "--repo", "owner/repo", "--state", "open", "--json", "number,isDraft"]
+        [
+            "gh", "pr", "list", "--repo", "owner/repo", "--state", "open",
+            "--json", "number,isDraft,headRefName,baseRefName",
+        ]
     ]
+
+
+def test_get_pr_mergeable_returns_state(monkeypatch):
+    calls = []
+
+    def run(args, **kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, stdout='{"mergeable": "CONFLICTING"}', stderr="")
+
+    monkeypatch.setattr(github_client.subprocess, "run", run)
+
+    assert get_pr_mergeable("owner/repo", 5) == "CONFLICTING"
+    assert calls == [["gh", "pr", "view", "5", "--repo", "owner/repo", "--json", "mergeable"]]
 
 
 @pytest.mark.parametrize("state", ["open", "closed", "all"])
