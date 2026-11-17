@@ -212,7 +212,7 @@ async function loadIssues() {
   const listEl = document.getElementById("issue-list-items");
   listEl.innerHTML = "";
   if (issues.length === 0) {
-    listEl.innerHTML = '<li class="empty">タスクがありません。</li>';
+    listEl.innerHTML = '<li class="empty">Issueがありません。</li>';
     return;
   }
   for (const issue of issues) {
@@ -264,7 +264,7 @@ async function refreshIssueDetail() {
   const listEl = document.getElementById("subtask-list-body");
   const itemsHtml =
     currentSubtasks.length === 0
-      ? '<p class="empty">サブタスクはまだありません。</p>'
+      ? '<p class="empty">MRはまだありません。</p>'
       : `<ul id="subtask-list-items">${currentSubtasks.map(renderSubtaskRow).join("")}</ul>`;
 
   listEl.innerHTML = `
@@ -305,7 +305,7 @@ function selectSubtask(subtaskId) {
 function renderSubtaskDetail(s) {
   const el = document.getElementById("subtask-detail-body");
   if (!s) {
-    el.innerHTML = '<p class="empty">左の一覧からサブタスクを選択してください。</p>';
+    el.innerHTML = '<p class="empty">左の一覧からMRを選択してください。</p>';
     return;
   }
 
