@@ -343,7 +343,7 @@ async function refreshIssueDetail() {
       : `<ul id="subtask-list-items">${currentSubtasks.map(renderSubtaskRow).join("")}</ul>`;
 
   listEl.innerHTML = `
-    <h3>#${issue.number} <span id="issue-title">${escapeHtml(issue.title)}</span></h3>
+    <h3 class="title-heading"><span class="title-number">#${issue.number}</span><span id="issue-title">${escapeHtml(issue.title)}</span></h3>
     <p id="issue-title-status" class="title-status empty"></p>
     <p>
       <a href="${issue.url}" target="_blank" rel="noopener">GitHubで開く</a>
