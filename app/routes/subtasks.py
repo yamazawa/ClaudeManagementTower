@@ -10,7 +10,7 @@ from core.git_client import (
     push_branch,
     slugify,
 )
-from core.github_client import GitHubClientError, create_draft_pr
+from core.github_client import GitHubClientError, create_draft_pr, edit_pr_title
 from core.models import ExecutionJob, Project, Subtask
 
 router = APIRouter(prefix="/api/subtasks")
@@ -93,6 +93,32 @@ def create_subtask(payload: CreateSubtaskRequest):
             "pr_url": pr["url"],
             "lifecycle_state": subtask.lifecycle_state,
         }
+
+
+class UpdateSubtaskTitleRequest(BaseModel):
+    title: str
+
+
+@router.patch("/{subtask_id}")
+def update_subtask_title(subtask_id: int, payload: UpdateSubtaskTitleRequest):
+    title = payload.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="title is empty")
+    with SessionLocal() as session:
+        subtask = session.get(Subtask, subtask_id)
+        if subtask is None:
+            raise HTTPException(status_code=404, detail="subtask not found")
+        project = session.get(Project, subtask.project_id)
+
+        if subtask.github_pr_number is not None:
+            try:
+                edit_pr_title(project.github_repo, subtask.github_pr_number, title)
+            except GitHubClientError as exc:
+                raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+        subtask.title = title
+        session.commit()
+        return {"id": subtask.id, "title": subtask.title}
 
 
 class ExecuteSubtaskRequest(BaseModel):
