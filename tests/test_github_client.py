@@ -8,6 +8,7 @@ from core.github_client import (
     GitHubClientError,
     edit_issue_title,
     edit_pr_title,
+    list_issues,
     list_open_pull_requests,
     merge_pull_request,
 )
@@ -67,6 +68,45 @@ def test_list_open_pull_requests_parses_json(monkeypatch):
     assert calls == [
         ["gh", "pr", "list", "--repo", "owner/repo", "--state", "open", "--json", "number,isDraft"]
     ]
+
+
+@pytest.mark.parametrize("state", ["open", "closed", "all"])
+def test_list_issues_passes_state(monkeypatch, state):
+    calls = []
+
+    def run(args, **kwargs):
+        calls.append(args)
+        stdout = json.dumps([{"number": 3, "title": "t", "state": "OPEN"}])
+        return subprocess.CompletedProcess(args, 0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(github_client.subprocess, "run", run)
+
+    result = list_issues("owner/repo", state)
+
+    assert result == [{"number": 3, "title": "t", "state": "OPEN"}]
+    assert calls == [
+        [
+            "gh", "issue", "list",
+            "--repo", "owner/repo",
+            "--state", state,
+            "--limit", str(github_client.ISSUE_LIST_LIMIT),
+            "--json", "number,title,state",
+        ]
+    ]
+
+
+def test_list_issues_defaults_to_open(monkeypatch):
+    calls = []
+
+    def run(args, **kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 0, stdout="[]", stderr="")
+
+    monkeypatch.setattr(github_client.subprocess, "run", run)
+
+    list_issues("owner/repo")
+
+    assert calls[0][calls[0].index("--state") + 1] == "open"
 
 
 def test_merge_pull_request_runs_gh_pr_merge(monkeypatch):

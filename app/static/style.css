@@ -258,6 +258,12 @@ h2 {
   padding-bottom: 8px;
 }
 
+.list-filter {
+  display: block;
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
 #issue-list-items {
   list-style: none;
   margin: 0;

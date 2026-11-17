@@ -1,3 +1,5 @@
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
@@ -49,12 +51,12 @@ def get_projects():
 
 
 @router.get("/{project_id}/issues")
-def get_issues(project_id: int):
+def get_issues(project_id: int, state: Literal["open", "closed", "all"] = "open"):
     with SessionLocal() as session:
         project = session.get(Project, project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="project not found")
-        return list_issues(project.github_repo)
+        return list_issues(project.github_repo, state)
 
 
 @router.post("/{project_id}/issues")

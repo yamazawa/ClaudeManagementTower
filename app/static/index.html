@@ -32,6 +32,14 @@
 <main id="issue-view" hidden>
   <section id="issue-list" aria-label="Issue一覧">
     <h2>Issue一覧</h2>
+    <label class="list-filter">
+      表示
+      <select id="issue-filter">
+        <option value="open" selected>未解決</option>
+        <option value="closed">完了</option>
+        <option value="all">全部</option>
+      </select>
+    </label>
     <form id="issue-create-form">
       <input type="text" name="title" placeholder="タイトル" required />
       <button type="submit">作成</button>
@@ -41,6 +49,16 @@
   </section>
   <section id="subtask-list" aria-label="MR一覧">
     <h2>MR一覧</h2>
+    <label class="list-filter">
+      表示
+      <select id="subtask-filter">
+        <option value="unresolved" selected>未解決</option>
+        <option value="draft">Draft</option>
+        <option value="in_review">レビュー中</option>
+        <option value="merged">マージ済</option>
+        <option value="all">全部</option>
+      </select>
+    </label>
     <div id="subtask-list-body">
       <p class="empty">左の一覧からIssueを選択してください。</p>
     </div>
