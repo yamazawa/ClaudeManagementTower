@@ -391,9 +391,9 @@ async function refreshIssueDetail() {
   ).then((r) => r.json());
   currentSubtasks = issue.subtasks;
 
-  const listEl = document.getElementById("subtask-list-body");
-  listEl.innerHTML = `
-    <h3 class="title-heading"><span class="title-number">#${issue.number}</span><span id="issue-title">${escapeHtml(issue.title)}</span></h3>
+  document.getElementById("issue-heading").innerHTML =
+    `<span class="title-number">#${issue.number}</span><span id="issue-title">${escapeHtml(issue.title)}</span>`;
+  document.getElementById("subtask-list-body").innerHTML = `
     <p id="issue-title-status" class="title-status empty"></p>
     <p>
       <a href="${issue.url}" target="_blank" rel="noopener">GitHubで開く</a>
@@ -401,17 +401,10 @@ async function refreshIssueDetail() {
       <span id="sync-status" class="empty"></span>
     </p>
     <p>${(issue.body || "").replace(/\n/g, "<br>")}</p>
-    <form id="subtask-form">
-      <input type="text" name="title" placeholder="タイトル" required />
-      <button type="submit">作成</button>
-      <p id="subtask-form-status" class="empty"></p>
-    </form>
-    <div id="subtask-list-container"></div>
   `;
+  resetSubtaskForm();
+  document.getElementById("subtask-panel").hidden = false;
 
-  document
-    .getElementById("subtask-form")
-    .addEventListener("submit", onSubmitSubtaskForm);
   document.getElementById("sync-button").addEventListener("click", onClickSync);
   makeTitleEditable(
     document.getElementById("issue-title"),
@@ -419,6 +412,17 @@ async function refreshIssueDetail() {
     (title) => saveIssueTitle(issue.number, title)
   );
   renderSubtaskList();
+}
+
+/* MR作成フォームの初期化
+
+フォームはIssue切り替え後も使い回すため、入力値と状態表示を初期状態に戻す。
+*/
+function resetSubtaskForm() {
+  const form = document.getElementById("subtask-form");
+  form.reset();
+  form.querySelector("button").disabled = false;
+  document.getElementById("subtask-form-status").textContent = "";
 }
 
 function selectSubtask(subtaskId) {
@@ -620,6 +624,7 @@ async function showReport(jobId, subtaskId) {
 document.getElementById("issue-create-form").addEventListener("submit", onSubmitIssueForm);
 document.getElementById("issue-filter").addEventListener("change", loadIssues);
 document.getElementById("subtask-filter").addEventListener("change", renderSubtaskList);
+document.getElementById("subtask-form").addEventListener("submit", onSubmitSubtaskForm);
 bindSystemControls();
 
 init();

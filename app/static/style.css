@@ -258,6 +258,17 @@ h2 {
   padding-bottom: 8px;
 }
 
+/* ペイン内の小見出し
+
+Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り線を付ける。
+*/
+.section-heading {
+  font-size: 14px;
+  margin: 16px 0 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
 /* 一覧の状態フィルタ
 
 ラベルは補助テキストと同じ色にし、選択欄は他の入力欄と枠線・角丸を揃える。
