@@ -52,6 +52,20 @@ python -u run_all.py
 競合解消用のworktreeは`WORKTREE_BASE_DIR`配下の`merge-pr-{PR番号}`に作成し、再実行時は再利用する。\
 競合を解消できなかったPRはマージせず、画面に理由を表示して残りのPRの処理を続ける。
 
+### 自動復旧（死活監視）
+
+`run_all.py`の停止・再起動忘れに備え、タスクスケジューラで\
+`scripts/watchdog.ps1`を5分おきに実行する運用にしている。\
+`/health`への応答が無ければ`run_all.py`を自動起動する。\
+`run_all.py`自身が多重起動防止のロックを持つため、\
+既に起動中の場合に重ねて実行しても安全。
+
+タスク登録例（現在のユーザー権限で、5分おきに実行）。
+
+```
+schtasks /create /tn "ClaudeTowerWatchdog" /sc minute /mo 5 /rl LIMITED /f /tr "powershell.exe -NoProfile -WindowStyle Hidden -File C:\git\ClaudeManagementTower\scripts\watchdog.ps1"
+```
+
 ### 個別起動（デバッグ用途）
 
 サーバー・ワーカーのどちらかだけを再起動したい場合は個別に起動できる。\
