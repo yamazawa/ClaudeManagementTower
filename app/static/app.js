@@ -404,42 +404,55 @@ function renderSubtaskList() {
       row.addEventListener("click", () => selectSubtask(Number(row.dataset.subtaskId)))
     );
   highlightSelectedSubtaskRow();
-  updateCloseIssueButton();
+  updateIssueToggleButton();
 }
 
 /**
- * Issueを閉じるボタンの表示を切り替える
+ * POST操作の実行
  *
- * Issueが未クローズで、未解決のMRが無い場合のみ表示する。
+ * 成功時は応答本文、失敗時はエラー文言を返す。
  */
-function updateCloseIssueButton() {
-  const button = document.getElementById("close-issue-button");
-  if (!button) return;
-  const unresolvedStates = SUBTASK_FILTER_STATES.unresolved;
-  const hasUnresolved = currentSubtasks.some((s) => unresolvedStates.includes(s.lifecycle_state));
-  button.hidden = currentIssueState !== "OPEN" || hasUnresolved;
+async function postAction(url) {
+  const response = await fetch(url, { method: "POST" });
+  const body = await response.json().catch(() => ({}));
+  return response.ok ? { body } : { error: body.detail || response.statusText };
 }
 
-async function onClickCloseIssue() {
-  if (!confirm(`Issue #${currentIssueNumber} を閉じますか？`)) return;
-  const button = document.getElementById("close-issue-button");
+/**
+ * Issueの閉じる・再開ボタンの表示を切り替える
+ *
+ * クローズ済の場合は再開ボタンにする。
+ * マージ済MRが1個以上で未解決MRが無い場合はプライマリ色にする。
+ * 未解決MRが残る場合はクローズできないため無効化する。
+ */
+function updateIssueToggleButton() {
+  const button = document.getElementById("issue-toggle-button");
+  if (!button) return;
+  const isOpen = currentIssueState === "OPEN";
+  const unresolvedStates = SUBTASK_FILTER_STATES.unresolved;
+  const hasUnresolved = currentSubtasks.some((s) => unresolvedStates.includes(s.lifecycle_state));
+  const hasMerged = currentSubtasks.some((s) => s.lifecycle_state === "merged");
+  button.textContent = isOpen ? "閉じる" : "再開";
+  button.classList.toggle("primary", isOpen && hasMerged && !hasUnresolved);
+  button.disabled = isOpen && hasUnresolved;
+  button.title = button.disabled ? "未解決のMRがあるため閉じられません" : "";
+}
+
+async function onClickIssueToggle() {
+  const isOpen = currentIssueState === "OPEN";
+  const verb = isOpen ? "閉じ" : "再開し";
+  if (!confirm(`Issue #${currentIssueNumber} を${verb}ますか？`)) return;
+  const button = document.getElementById("issue-toggle-button");
   const statusEl = document.getElementById("issue-close-status");
   button.disabled = true;
-  statusEl.textContent = "クローズ中...";
-  const response = await fetch(
-    `/api/projects/${currentProjectId}/issues/${currentIssueNumber}/close`,
-    { method: "POST" }
+  statusEl.textContent = "更新中...";
+  const { body, error } = await postAction(
+    `/api/projects/${currentProjectId}/issues/${currentIssueNumber}/${isOpen ? "close" : "reopen"}`
   );
-  button.disabled = false;
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({}));
-    statusEl.textContent = `失敗しました: ${error.detail || response.statusText}`;
-    return;
-  }
-  currentIssueState = "CLOSED";
-  updateCloseIssueButton();
-  statusEl.textContent = "Issueを閉じました";
-  await loadIssues();
+  if (!error) currentIssueState = body.state;
+  updateIssueToggleButton();
+  statusEl.textContent = error ? `失敗しました: ${error}` : `Issueを${verb}ました`;
+  if (!error) await loadIssues();
 }
 
 async function saveIssueTitle(number, title) {
@@ -511,16 +524,14 @@ async function refreshIssueDetail() {
   currentSubtasks = issue.subtasks;
 
   document.getElementById("issue-heading").innerHTML =
-    `${renderTitleNumber(`Issue #${issue.number}`, issue.url)}<span id="issue-title">${escapeHtml(issue.title)}</span>`;
+    `${renderTitleNumber(`Issue #${issue.number}`, issue.url)}<span id="issue-title">${escapeHtml(issue.title)}</span>` +
+    `<button type="button" id="issue-toggle-button" class="title-action-button"></button>`;
   document.getElementById("subtask-list-body").innerHTML = `
     <p id="issue-title-status" class="title-status empty"></p>
-    <p class="issue-actions">
-      <button type="button" id="close-issue-button" hidden>Issueを閉じる</button>
-    </p>
     <p id="issue-close-status" class="title-status empty"></p>
   `;
   currentIssueState = issue.state;
-  document.getElementById("close-issue-button").addEventListener("click", onClickCloseIssue);
+  document.getElementById("issue-toggle-button").addEventListener("click", onClickIssueToggle);
   resetSubtaskForm();
   document.getElementById("subtask-panel").hidden = false;
 

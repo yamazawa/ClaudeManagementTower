@@ -428,31 +428,39 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
   cursor: pointer;
 }
 
-/* Issue操作の行
+/* 見出し右端の閉じる・再開ボタン
 
-Issueを閉じるボタンを並べる。
+通常は白表示とし、primaryクラスでプライマリ色にする。
 */
-.issue-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-#close-issue-button {
+.title-action-button {
+  flex-shrink: 0;
+  margin-left: auto;
   font: inherit;
   font-size: 13px;
-  padding: 5px 12px;
+  font-weight: normal;
+  padding: 3px 12px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: #fff;
+  color: var(--ink);
   cursor: pointer;
 }
 
-#close-issue-button:hover:not(:disabled) {
+.title-action-button:hover:not(:disabled) {
   background: var(--soft);
 }
 
-#close-issue-button:disabled {
+.title-action-button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.title-action-button.primary:hover:not(:disabled) {
+  filter: brightness(0.9);
+}
+
+.title-action-button:disabled {
   opacity: 0.6;
   cursor: default;
 }
