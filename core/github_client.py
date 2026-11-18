@@ -3,6 +3,7 @@ import subprocess
 
 GH_TIMEOUT_SECONDS = 60
 ISSUE_LIST_LIMIT = 200
+PR_STATE_LIST_LIMIT = 200
 
 
 class GitHubClientError(RuntimeError):
@@ -81,12 +82,14 @@ def mark_pr_ready(repo: str, number: int) -> None:
     _run_gh(["pr", "ready", str(number), "--repo", repo])
 
 
-def get_pr(repo: str, number: int) -> dict:
+def list_pull_request_states(repo: str) -> list[dict]:
     output = _run_gh(
         [
-            "pr", "view", str(number),
+            "pr", "list",
             "--repo", repo,
-            "--json", "number,isDraft,state,mergedAt,url",
+            "--state", "all",
+            "--limit", str(PR_STATE_LIST_LIMIT),
+            "--json", "number,isDraft,state,mergedAt",
         ]
     )
     return json.loads(output)
@@ -94,9 +97,19 @@ def get_pr(repo: str, number: int) -> dict:
 
 def list_open_pull_requests(repo: str) -> list[dict]:
     output = _run_gh(
-        ["pr", "list", "--repo", repo, "--state", "open", "--json", "number,isDraft"]
+        [
+            "pr", "list",
+            "--repo", repo,
+            "--state", "open",
+            "--json", "number,isDraft,headRefName,baseRefName",
+        ]
     )
     return json.loads(output)
+
+
+def get_pr_mergeable(repo: str, number: int) -> str:
+    output = _run_gh(["pr", "view", str(number), "--repo", repo, "--json", "mergeable"])
+    return json.loads(output)["mergeable"]
 
 
 def merge_pull_request(repo: str, number: int) -> None:

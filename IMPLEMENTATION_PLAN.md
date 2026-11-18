@@ -35,9 +35,13 @@
 - Claudeには`.claude-tower/report.html`への自己完結HTMLレポート出力を、system_promptの追記（`claude_code`プリセット + append）で指示する。ワーカーはこのファイルを`reports/job-{id}.html`へコピーしてReportテーブルへ記録する（Phase 7実装・実機確認済み）。
 - ジョブが例外なく完走したら（job.status=succeeded）、Claudeの作業判断の成否に関わらずDraftを解除し、サブタスクのlifecycle_stateを`in_review`にする。Claude自身の成功/一部成功/失敗の判断はレポートの中身で人間が確認する（Phase 7確定）。
 - Nワーカーは`python -m worker.launcher`が`worker.count`個のサブプロセスとして起動する。単独起動（`python -m worker.main`）はデバッグ用途とする（Phase 8実装・実機確認済み）。
+- ワーカー群は`worker/pool.py`の`WorkerPool`が直接の子プロセスとして管理し、終了したワーカーを再起動して常にN個を維持する。`run_all.py`はランチャーのサブプロセスを挟まず`WorkerPool`を直接保持する。`python -m worker.launcher`も同じ`WorkerPool`で動作する（Issue #69）。
+- `WorkerPool`の起動・停止時は、心拍のある登録済みワーカーをPID指定で停止し、ワーカー行を全削除する。ワーカーは自分の行が削除されていた場合は再登録せず終了する（Issue #69）。
 - `git worktree add`はリポジトリ単位で`filelock`による排他を行う（共有Gitメタデータの同時変更を避けるため。Phase 8実装済み）。
 - 各ワーカーはジョブ実行中、別スレッドで`heartbeat_interval_seconds`ごとにjob/workerのheartbeat_atを更新する。ポーリングのたびに`stale_timeout_seconds`を超えて更新のないrunningジョブを`needs_attention`にする。要確認ジョブは自動再実行しない（Phase 8実装・ワーカー強制終了での実機確認済み）。
 - Webサーバーはリクエスト処理中にClaude Codeを直接起動して待機しない。
+- 「マージして最新化」は別スレッドで実行し、結果を制御ディレクトリの`sync-self-result.json`に残す。画面は結果をポーリングして完了を待つ（Issue #69）。
+- 競合したPRはベースブランチをPRブランチへmergeで取り込み、Claudeが競合を解消してからマージする。rebaseは履歴の書き換えとforce pushが必要になるため採用しない（Issue #69）。
 - Claude実行は公式Claude Agent SDK（Python）を使う。内部的にはCLIサブプロセス方式と同じCLIバイナリ・同じエージェントループを使うが、`can_use_tool`コールバックでworktree外操作を確実に拒否できる点を優先してSDKを採用する。
 - `can_use_tool`コールバックは`PermissionResultAllow`/`PermissionResultDeny`を返す（dictを返すとSDK側でエラーになる。Phase 1実機検証済み）。
 - Webサーバー・ワーカープロセスは環境変数`PYTHONIOENCODING=utf-8`を設定して起動する（Windows既定のcp932では、Claude出力やGitHubの日本語データを標準出力に表示する際に文字化け・UnicodeEncodeErrorが発生するため。Phase 1・2で実機確認済み）。
@@ -71,8 +75,11 @@
 
 ## 1.6 実装提案（初期実装として採用）
 - API一覧（`/api/projects`等）は設計書記載の案を初期実装とする。
-- PR/Issue状態同期はポーリング＋画面の「同期」操作とする。Webhookは不採用。
-- 画面に「同期」ボタンを実装済み（手動トリガー）。将来的には定期ポーリングによる自動同期に置き換え、同期ボタンをなくす方向にしたい（ユーザー要望、未着手）。
+- PR状態同期はサーバー側の定期ポーリングとする。Webhookは不採用。
+- サーバーは`PR_SYNC_INTERVAL_SECONDS`（既定5秒）ごとにPR状態をDBへ反映する。
+- 画面は3秒ごとにDB上のMR状態を取得し、変化があれば表示を更新する。
+- アプリ自身が状態を変えた場合（Draft解除・マージ）は、DBを即時更新する。
+- 手動の「同期」ボタンは廃止した。
 - フォルダ構成は設計書14.3の構成案を採用する。
 
 # 2. 共通ガイドラインの適用（CommonGuideLine.md）
@@ -175,6 +182,12 @@ worktree作成の排他ロック（filelock）にも同様にタイムアウト�
 ユーザーから、画面のワーカー稼働状況に「待機中×5」と過去に起動した全ワーカーが表示され続ける点を指摘された。\
 調査の結果、ワーカーは待機中（ジョブがない間）は心拍（heartbeat_at）を更新しておらず、プロセスが終了していても「待機中」と表示され続ける不具合だった。\
 `worker/main.py`のポーリングループで待機中も毎回心拍を更新するよう修正し、`WORKER_OFFLINE_TIMEOUT_SECONDS`（既定30秒）を超えて心拍のないワーカーを「オフライン」として区別し、実行中/待機中の集計から除外するよう修正した。
+
+ユーザーから、N=3の設定でワーカーが9個稼働表示される点を指摘された（Issue #69）。\
+原因は`run_all.py`がワーカー再起動時にランチャープロセスのみを終了しており、ランチャーが起動したワーカーが取り残されていたこと。\
+Windowsの`terminate()`は対象プロセスのみを終了し、孫プロセスは終了しない。\
+ワーカー管理を`WorkerPool`に集約し、スーパーバイザーがワーカーを直接の子プロセスとして管理するよう修正した。\
+起動時に登録済みワーカーを停止する処理により、既に取り残されているワーカーも次回起動時に停止される。
 
 # 8. 自己運用（本体リポジトリでの自律実行）への移行判断（2026-11-17）
 

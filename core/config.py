@@ -13,10 +13,12 @@ class Settings(BaseSettings):
     job_heartbeat_interval_seconds: int = 5
     job_stale_timeout_seconds: int = 60
     worker_offline_timeout_seconds: int = 30
+    worker_respawn_delay_seconds: float = 5.0
     database_path: str = "claude_tower.db"
     cloudflare_access_aud: str = ""
     supervisor_control_dir: str = ".tower-control"
     supervisor_poll_interval_seconds: float = 1.0
+    pr_sync_interval_seconds: float = 5.0
     self_repo: str = "yamazawa/ClaudeManagementTower"
 
 

@@ -4,6 +4,7 @@ import sys
 import time
 
 from core.config import settings
+from core.db import init_db
 from core.supervisor_control import (
     COMMAND_RESTART_SERVER,
     COMMAND_RESTART_WORKERS,
@@ -11,24 +12,24 @@ from core.supervisor_control import (
     SUPERVISED_ENV,
     take_requested_commands,
 )
+from worker.pool import WorkerPool, spawn_worker, stop_process
 
 SERVER_ARGS = ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000"]
-WORKERS_ARGS = ["-u", "-m", "worker.launcher"]
-STOP_TIMEOUT_SECONDS = 10
 
 
 class Supervisor:
     """サーバー・ワーカーの起動管理
 
     サーバーからの要求ファイルを監視し、サーバー再起動・ワーカー起動を行う。
+    ワーカーは中間プロセスを挟まず、ワーカープールで直接管理する。
     """
 
-    def __init__(self) -> None:
+    def __init__(self, pool: WorkerPool | None = None) -> None:
         self.env = os.environ.copy()
         self.env.setdefault("PYTHONIOENCODING", "utf-8")
         self.env[SUPERVISED_ENV] = "1"
         self.server: subprocess.Popen | None = None
-        self.workers: subprocess.Popen | None = None
+        self.workers = pool or WorkerPool(settings.worker_count, spawn=lambda: spawn_worker(self.env))
 
     def _spawn(self, args: list[str]) -> subprocess.Popen:
         return subprocess.Popen([sys.executable, *args], env=self.env)
@@ -39,20 +40,18 @@ class Supervisor:
 
     def restart_server(self) -> None:
         print("[run_all] サーバーを再起動します")
-        _stop(self.server)
+        stop_process(self.server)
         self.start_server()
 
     def start_workers(self) -> None:
-        if self.workers is not None and self.workers.poll() is None:
+        if self.workers.is_running():
             print("[run_all] ワーカーは起動済みのため何もしません")
             return
-        print("[run_all] ワーカーを起動します")
-        self.workers = self._spawn(WORKERS_ARGS)
+        self.workers.start()
 
     def restart_workers(self) -> None:
         print("[run_all] ワーカーを再起動します")
-        _stop(self.workers)
-        self.workers = self._spawn(WORKERS_ARGS)
+        self.workers.start()
 
     def handle(self, command: str) -> None:
         handlers = {
@@ -62,6 +61,11 @@ class Supervisor:
         }
         handlers[command]()
 
+    def tick(self) -> None:
+        for command in take_requested_commands():
+            self.handle(command)
+        self.workers.maintain()
+
     def run(self) -> None:
         take_requested_commands()
         self.start_server()
@@ -69,25 +73,14 @@ class Supervisor:
         try:
             while True:
                 time.sleep(settings.supervisor_poll_interval_seconds)
-                for command in take_requested_commands():
-                    self.handle(command)
+                self.tick()
         except KeyboardInterrupt:
-            _stop(self.server)
-            _stop(self.workers)
-
-
-def _stop(process: subprocess.Popen | None) -> None:
-    if process is None or process.poll() is not None:
-        return
-    process.terminate()
-    try:
-        process.wait(timeout=STOP_TIMEOUT_SECONDS)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        process.wait()
+            stop_process(self.server)
+            self.workers.stop()
 
 
 def main() -> None:
+    init_db()
     Supervisor().run()
 
 

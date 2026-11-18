@@ -105,3 +105,54 @@ def push_branch(worktree_path: str, branch_name: str) -> None:
 
 def pull_latest(repo_path: str, branch: str) -> None:
     _run_git(["pull", "origin", branch], cwd=repo_path)
+
+
+def prepare_detached_worktree(repo_path: str, worktree_path: str, branch: str) -> None:
+    """リモートブランチの最新をdetached HEADでworktreeに用意する
+
+    対象ブランチは別worktreeでチェックアウト中の場合があるため、
+    ブランチを作らずdetached HEADで扱う。
+    worktreeが既にあれば再利用し、途中のマージ状態は破棄する。
+    """
+    _run_git(["fetch", "origin"], cwd=repo_path)
+    target = f"origin/{branch}"
+    if Path(worktree_path).exists():
+        _run_git(["checkout", "--force", "--detach", target], cwd=worktree_path)
+    else:
+        _run_git(["worktree", "add", "--detach", worktree_path, target], cwd=repo_path)
+    link_shared_venv(repo_path, worktree_path)
+
+
+def merge_remote_branch(worktree_path: str, branch: str, message: str) -> bool:
+    """origin/{branch}をマージし、競合なく完了したかを返す
+
+    競合した場合はマージ途中の状態のまま残す。
+    """
+    try:
+        _run_git(["merge", "--no-ff", "-m", message, f"origin/{branch}"], cwd=worktree_path)
+    except GitClientError:
+        if not list_unmerged_files(worktree_path):
+            raise
+        return False
+    return True
+
+
+def list_unmerged_files(worktree_path: str) -> list[str]:
+    output = _run_git(["diff", "--name-only", "--diff-filter=U"], cwd=worktree_path)
+    return [line for line in output.splitlines() if line]
+
+
+def is_merge_in_progress(worktree_path: str) -> bool:
+    try:
+        _run_git(["rev-parse", "-q", "--verify", "MERGE_HEAD"], cwd=worktree_path)
+    except GitClientError:
+        return False
+    return True
+
+
+def commit_merge(worktree_path: str) -> None:
+    _run_git(["commit", "--no-edit"], cwd=worktree_path)
+
+
+def push_head_to(worktree_path: str, branch: str) -> None:
+    _run_git(["push", "origin", f"HEAD:refs/heads/{branch}"], cwd=worktree_path)

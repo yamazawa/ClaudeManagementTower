@@ -2,12 +2,8 @@ import pytest
 from fastapi import HTTPException
 
 from app.routes import system
-from core.github_client import GitHubClientError
-from core.supervisor_control import (
-    COMMAND_RESTART_SERVER,
-    COMMAND_RESTART_WORKERS,
-    COMMAND_START_WORKERS,
-)
+from core.self_sync import SelfSyncAlreadyRunning
+from core.supervisor_control import COMMAND_RESTART_SERVER, COMMAND_START_WORKERS
 
 
 def test_request_rejected_when_not_supervised(monkeypatch):
@@ -51,34 +47,37 @@ def test_sync_self_rejected_when_not_supervised(monkeypatch):
     assert error.value.status_code == 409
 
 
-def test_sync_self_merges_only_non_draft_prs(monkeypatch):
+def test_sync_self_starts_background_run(monkeypatch):
     monkeypatch.setattr(system, "is_supervised", lambda: True)
-    monkeypatch.setattr(
-        system,
-        "list_open_pull_requests",
-        lambda repo: [{"number": 1, "isDraft": False}, {"number": 2, "isDraft": True}],
-    )
-    merged = []
-    monkeypatch.setattr(system, "merge_pull_request", lambda repo, number: merged.append(number))
-    monkeypatch.setattr(system, "pull_latest", lambda path, branch: None)
-    requested = []
-    monkeypatch.setattr(system, "request_command", requested.append)
+    started = []
+    monkeypatch.setattr(system, "start_self_sync", started.append)
 
-    result = system.sync_self()
-
-    assert merged == [1]
-    assert result == {"merged_pr_numbers": [1]}
-    assert requested == [COMMAND_RESTART_SERVER, COMMAND_RESTART_WORKERS]
+    assert system.sync_self() == {"accepted": True}
+    assert len(started) == 1
 
 
-def test_sync_self_raises_on_github_failure(monkeypatch):
+def test_sync_self_rejected_while_running(monkeypatch):
     monkeypatch.setattr(system, "is_supervised", lambda: True)
 
-    def fail(repo):
-        raise GitHubClientError("boom")
+    def already_running(repo_path):
+        raise SelfSyncAlreadyRunning("実行中")
 
-    monkeypatch.setattr(system, "list_open_pull_requests", fail)
+    monkeypatch.setattr(system, "start_self_sync", already_running)
 
     with pytest.raises(HTTPException) as error:
         system.sync_self()
-    assert error.value.status_code == 500
+    assert error.value.status_code == 409
+
+
+def test_get_sync_self_result_returns_saved_result(monkeypatch):
+    monkeypatch.setattr(system, "read_result", lambda: {"status": "running"})
+
+    assert system.get_sync_self_result() == {"status": "running"}
+
+
+def test_get_sync_self_result_404_when_never_run(monkeypatch):
+    monkeypatch.setattr(system, "read_result", lambda: None)
+
+    with pytest.raises(HTTPException) as error:
+        system.get_sync_self_result()
+    assert error.value.status_code == 404

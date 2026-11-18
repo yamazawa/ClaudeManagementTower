@@ -9,7 +9,6 @@ from core.github_client import (
     create_issue,
     edit_issue_title,
     get_issue,
-    get_pr,
     list_issues,
 )
 from core.models import ExecutionJob, Project, Report, Subtask
@@ -92,65 +91,50 @@ def update_issue_title(project_id: int, number: int, payload: UpdateTitleRequest
         return {"number": number, "title": title}
 
 
+def _subtask_summaries(session, project: Project, number: int) -> list[dict]:
+    subtasks = (
+        session.query(Subtask)
+        .filter_by(project_id=project.id, github_issue_number=number)
+        .order_by(Subtask.id)
+        .all()
+    )
+    return [
+        {
+            "id": s.id,
+            "title": s.title,
+            "instruction": s.instruction,
+            "lifecycle_state": s.lifecycle_state,
+            "github_pr_number": s.github_pr_number,
+            "pr_url": (
+                f"https://github.com/{project.github_repo}/pull/{s.github_pr_number}"
+                if s.github_pr_number
+                else None
+            ),
+            "latest_job": _latest_job_summary(session, s.id),
+        }
+        for s in subtasks
+    ]
+
+
+def _get_project_or_404(session, project_id: int) -> Project:
+    project = session.get(Project, project_id)
+    if project is None:
+        raise HTTPException(status_code=404, detail="project not found")
+    return project
+
+
 @router.get("/{project_id}/issues/{number}")
 def get_issue_detail(project_id: int, number: int):
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
-        if project is None:
-            raise HTTPException(status_code=404, detail="project not found")
+        project = _get_project_or_404(session, project_id)
         issue = get_issue(project.github_repo, number)
-        subtasks = (
-            session.query(Subtask)
-            .filter_by(project_id=project.id, github_issue_number=number)
-            .all()
-        )
-        issue["subtasks"] = [
-            {
-                "id": s.id,
-                "title": s.title,
-                "instruction": s.instruction,
-                "lifecycle_state": s.lifecycle_state,
-                "github_pr_number": s.github_pr_number,
-                "pr_url": (
-                    f"https://github.com/{project.github_repo}/pull/{s.github_pr_number}"
-                    if s.github_pr_number
-                    else None
-                ),
-                "latest_job": _latest_job_summary(session, s.id),
-            }
-            for s in subtasks
-        ]
+        issue["subtasks"] = _subtask_summaries(session, project, number)
         return issue
 
 
-def _lifecycle_state_from_pr(pr: dict) -> str:
-    if pr.get("mergedAt"):
-        return "merged"
-    if pr.get("state") == "CLOSED":
-        return "closed"
-    if pr.get("isDraft"):
-        return "draft"
-    return "in_review"
-
-
-@router.post("/{project_id}/sync")
-def sync_project(project_id: int):
+@router.get("/{project_id}/issues/{number}/subtasks")
+def get_issue_subtasks(project_id: int, number: int):
+    """画面の自動更新用にDB上のサブタスク一覧を返す（GitHubへは問い合わせない）"""
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
-        if project is None:
-            raise HTTPException(status_code=404, detail="project not found")
-
-        subtasks = (
-            session.query(Subtask)
-            .filter(Subtask.project_id == project.id, Subtask.github_pr_number.isnot(None))
-            .all()
-        )
-        updated = []
-        for subtask in subtasks:
-            pr = get_pr(project.github_repo, subtask.github_pr_number)
-            new_state = _lifecycle_state_from_pr(pr)
-            if new_state != subtask.lifecycle_state:
-                subtask.lifecycle_state = new_state
-                updated.append({"subtask_id": subtask.id, "lifecycle_state": new_state})
-        session.commit()
-        return {"updated": updated}
+        project = _get_project_or_404(session, project_id)
+        return _subtask_summaries(session, project, number)
