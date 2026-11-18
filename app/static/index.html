@@ -53,17 +53,16 @@
       <p class="empty">左の一覧からIssueを選択してください。</p>
     </div>
     <div id="subtask-panel" hidden>
-      <h3 class="section-heading">MR一覧</h3>
-      <label class="list-filter">
-        表示
-        <select id="subtask-filter">
+      <h3 class="section-heading section-heading-with-filter">
+        MR一覧
+        <select id="subtask-filter" class="heading-filter" aria-label="MR一覧の表示フィルタ">
           <option value="unresolved" selected>未解決</option>
           <option value="draft">Draft</option>
           <option value="in_review">レビュー中</option>
           <option value="merged">マージ済</option>
           <option value="all">全部</option>
         </select>
-      </label>
+      </h3>
       <div id="subtask-list-container"></div>
       <form id="subtask-form">
         <input type="text" name="title" placeholder="タイトル" required />
