@@ -31,6 +31,52 @@ const SUBTASK_FILTER_STATES = {
   all: null,
 };
 
+// MRの状態ごとの操作ボタン（primaryはプライマリ色で表示する）
+const SUBTASK_ACTIONS = {
+  [LIFECYCLE.draft]: [
+    { action: "execute", label: "実装", primary: true },
+    { action: "cancel", label: "Cancel" },
+  ],
+  [LIFECYCLE.resolved]: [
+    { action: "merge", label: "Merge", primary: true },
+    { action: "execute", label: "再実装" },
+    { action: "cancel", label: "Cancel" },
+  ],
+  [LIFECYCLE.merged]: [],
+  [LIFECYCLE.canceled]: [{ action: "reopen", label: "ReOpen" }],
+};
+
+// 状態を変える操作ごとのAPIパスと表示文言
+const SUBTASK_STATE_ACTIONS = {
+  cancel: {
+    path: "close",
+    confirm: "をCancel（マージせずクローズ）しますか？",
+    progress: "Cancel中...",
+    done: "MRをCancelしました",
+  },
+  reopen: {
+    path: "reopen",
+    confirm: "をReOpenしますか？",
+    progress: "ReOpen中...",
+    done: "MRをReOpenしました",
+  },
+  merge: {
+    path: "merge",
+    confirm: "をマージしますか？競合している場合はClaudeが競合を解消してからマージします。",
+    progress: "マージ中...（競合解消を含むため時間がかかる場合があります）",
+    done: "MRをマージしました",
+  },
+};
+
+// 実行中とみなすジョブの状態（実行中はMRの操作ボタンを無効化する）
+const ACTIVE_JOB_STATUSES = ["queued", "running"];
+
+// 操作中（API応答待ち・実装の実行中）のMRのID
+const busySubtaskIds = new Set();
+// 監視中のジョブID
+const pollingJobIds = new Set();
+const JOB_POLL_MS = 3000;
+
 // Issue一覧のMR数で解決済とみなす状態と、数えない状態（マージされずクローズ）
 const MR_COUNT_RESOLVED_STATE = LIFECYCLE.merged;
 const MR_COUNT_EXCLUDED_STATE = LIFECYCLE.canceled;
@@ -716,26 +762,20 @@ function renderSubtaskDetail(s) {
     return;
   }
 
-  heading.innerHTML =
-    `${renderSubtaskNumber(s)}${renderMrTitle(s, { id: "subtask-title" })}` +
-    `<button type="button" id="subtask-toggle-button" class="title-action-button"></button>`;
+  heading.innerHTML = `${renderSubtaskNumber(s)}${renderMrTitle(s, { id: "subtask-title" })}`;
   el.innerHTML = `
     <p id="subtask-title-status" class="title-status empty"></p>
-    <p id="subtask-close-status" class="title-status empty"></p>
     <p id="subtask-state-line">${renderSubtaskStateLine(s)}</p>
-    <form class="instruction-form" data-subtask-id="${s.id}">
+    <div class="instruction-form">
       <textarea id="instruction-${s.id}" name="instruction" aria-label="指示内容" placeholder="Claudeへの指示内容を入力してください">${escapeHtml(s.instruction)}</textarea>
-      <button type="submit">実行する</button>
-    </form>
+      <div id="subtask-actions" class="subtask-actions" data-subtask-id="${s.id}"></div>
+    </div>
+    <p id="subtask-action-status" class="title-status empty"></p>
     <p class="job-status empty" data-subtask-id="${s.id}"></p>
     <iframe class="report-frame" sandbox="" data-subtask-id="${s.id}" hidden></iframe>
   `;
 
-  document.querySelector(".instruction-form").addEventListener("submit", onSubmitInstructionForm);
-  document
-    .getElementById("subtask-toggle-button")
-    .addEventListener("click", () => onClickSubtaskToggle(s.id));
-  updateSubtaskToggleButton(s);
+  renderSubtaskActions(s);
   makeTitleEditable(
     document.getElementById("subtask-title"),
     document.getElementById("subtask-title-status"),
@@ -754,10 +794,8 @@ function restoreJobState(s) {
   const statusEl = document.querySelector(`.job-status[data-subtask-id="${s.id}"]`);
   statusEl.textContent = `状態: ${job.status}`;
 
-  if (job.status === "queued" || job.status === "running") {
-    const button = document.querySelector(`.instruction-form[data-subtask-id="${s.id}"] button`);
-    button.disabled = true;
-    pollJob(job.id, s.id, button);
+  if (isJobActive(job)) {
+    pollJob(job.id, s.id);
     return;
   }
 
@@ -800,7 +838,7 @@ async function refreshSubtaskStates() {
 /**
  * 選択中MRの状態表示を更新する
  *
- * 状態行・見出しの番号・閉じる/再開ボタンのみ差し替える。
+ * 状態行・見出しの番号・操作ボタンのみ差し替える。
  */
 function refreshSelectedSubtaskState() {
   const selected = currentSubtasks.find((s) => s.id === currentSelectedSubtaskId);
@@ -809,43 +847,74 @@ function refreshSelectedSubtaskState() {
   if (stateLine) stateLine.innerHTML = renderSubtaskStateLine(selected);
   const numberEl = document.querySelector("#subtask-heading .title-number");
   if (numberEl) numberEl.outerHTML = renderSubtaskNumber(selected);
-  updateSubtaskToggleButton(selected);
+  renderSubtaskActions(selected);
+}
+
+function isJobActive(job) {
+  return !!job && ACTIVE_JOB_STATUSES.includes(job.status);
 }
 
 /**
- * MRの閉じる・再開ボタンの表示を切り替える
+ * MRの操作ボタンを状態に応じて描画する
  *
- * クローズ済の場合は再開ボタンにする。
- * マージ済のMRは閉じる・再開できないため非表示にする。
+ * 操作中・実装の実行中は全ボタンを無効化する。
+ * 実装できない状態では指示内容を読み取り専用にする。
  */
-function updateSubtaskToggleButton(s) {
-  const button = document.getElementById("subtask-toggle-button");
-  if (!button) return;
-  button.hidden = s.lifecycle_state === LIFECYCLE.merged;
-  button.disabled = false;
-  button.textContent = s.lifecycle_state === LIFECYCLE.canceled ? "再開" : "閉じる";
+function renderSubtaskActions(s) {
+  const container = document.getElementById("subtask-actions");
+  if (!container || Number(container.dataset.subtaskId) !== s.id) return;
+  const actions = SUBTASK_ACTIONS[s.lifecycle_state] || [];
+  const busy = busySubtaskIds.has(s.id) || isJobActive(s.latest_job);
+  container.innerHTML = actions.map((a) => renderSubtaskActionButton(a, busy)).join("");
+  container
+    .querySelectorAll("button")
+    .forEach((b) => b.addEventListener("click", () => onClickSubtaskAction(s.id, b.dataset.action)));
+  const textarea = document.getElementById(`instruction-${s.id}`);
+  if (textarea) textarea.readOnly = !actions.some((a) => a.action === "execute");
 }
 
-async function onClickSubtaskToggle(subtaskId) {
+function renderSubtaskActionButton(action, disabled) {
+  const classes = ["subtask-action-button", action.primary ? "primary" : ""].filter(Boolean).join(" ");
+  return (
+    `<button type="button" class="${classes}" data-action="${action.action}"` +
+    `${disabled ? " disabled" : ""}>${action.label}</button>`
+  );
+}
+
+function setSubtaskBusy(subtaskId, busy) {
+  if (busy) busySubtaskIds.add(subtaskId);
+  else busySubtaskIds.delete(subtaskId);
+  refreshSelectedSubtaskState();
+}
+
+async function onClickSubtaskAction(subtaskId, action) {
   const subtask = currentSubtasks.find((s) => s.id === subtaskId);
   if (!subtask) return;
-  const isClosed = subtask.lifecycle_state === LIFECYCLE.canceled;
-  const verb = isClosed ? "再開し" : "閉じ";
-  if (!confirm(`MR「${subtask.title}」を${verb}ますか？`)) return;
-  const button = document.getElementById("subtask-toggle-button");
-  const statusEl = document.getElementById("subtask-close-status");
-  button.disabled = true;
-  statusEl.textContent = "更新中...";
-  const { body, error } = await postAction(
-    `/api/subtasks/${subtaskId}/${isClosed ? "reopen" : "close"}`
-  );
-  if (!error) subtask.lifecycle_state = body.lifecycle_state;
+  if (action === "execute") {
+    await executeSubtask(subtask);
+    return;
+  }
+  await runSubtaskStateAction(subtask, SUBTASK_STATE_ACTIONS[action]);
+}
+
+/**
+ * Cancel・ReOpen・Mergeの実行
+ *
+ * 成功時はサーバーが返した状態を反映し、一覧とIssueのMR数も更新する。
+ */
+async function runSubtaskStateAction(subtask, def) {
+  if (!confirm(`MR「${subtask.title}」${def.confirm}`)) return;
+  const statusEl = document.getElementById("subtask-action-status");
+  setSubtaskBusy(subtask.id, true);
+  statusEl.textContent = def.progress;
+  const { body, error } = await postAction(`/api/subtasks/${subtask.id}/${def.path}`);
+  const latest = currentSubtasks.find((s) => s.id === subtask.id);
+  if (!error && latest) latest.lifecycle_state = body.lifecycle_state;
+  busySubtaskIds.delete(subtask.id);
   updateIssueMrCounts(currentIssueNumber, currentSubtasks);
   renderSubtaskList();
-  if (currentSelectedSubtaskId === subtaskId) refreshSelectedSubtaskState();
-  if (statusEl.isConnected) {
-    statusEl.textContent = error ? `失敗しました: ${error}` : `MRを${verb}ました`;
-  }
+  refreshSelectedSubtaskState();
+  if (statusEl.isConnected) statusEl.textContent = error ? `失敗しました: ${error}` : def.done;
 }
 
 /**
@@ -972,51 +1041,75 @@ async function openCreatedSubtask(issueNumber, subtaskId) {
   document.getElementById(`instruction-${subtaskId}`)?.focus();
 }
 
-async function startExecution(subtaskId, instruction, button) {
-  const statusEl = document.querySelector(`.job-status[data-subtask-id="${subtaskId}"]`);
-  button.disabled = true;
+/**
+ * 実装・再実装の実行
+ *
+ * 入力中の指示内容で実行し、終了までMRの操作ボタンを無効化する。
+ */
+async function executeSubtask(subtask) {
+  const instruction = document.getElementById(`instruction-${subtask.id}`)?.value;
+  const statusEl = document.querySelector(`.job-status[data-subtask-id="${subtask.id}"]`);
+  if (!instruction) {
+    statusEl.textContent = "指示内容を入力してください";
+    return;
+  }
+  setSubtaskBusy(subtask.id, true);
   statusEl.textContent = "実行待ち...";
 
-  const body = instruction ? JSON.stringify({ instruction }) : undefined;
-  const { job_id: jobId } = await fetch(`/api/subtasks/${subtaskId}/execute`, {
+  const response = await fetch(`/api/subtasks/${subtask.id}/execute`, {
     method: "POST",
-    headers: body ? { "Content-Type": "application/json" } : undefined,
-    body,
-  }).then((r) => r.json());
-
-  pollJob(jobId, subtaskId, button);
-}
-
-async function onSubmitInstructionForm(event) {
-  event.preventDefault();
-  const form = event.target;
-  const subtaskId = form.dataset.subtaskId;
-  const instruction = form.instruction.value;
-  if (!instruction) {
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ instruction }),
+  }).catch(() => null);
+  if (!response || !response.ok) {
+    statusEl.textContent = "実行を開始できませんでした";
+    setSubtaskBusy(subtask.id, false);
     return;
   }
-  const button = form.querySelector("button");
-  await startExecution(subtaskId, instruction, button);
+  pollJob((await response.json()).job_id, subtask.id);
 }
 
-async function pollJob(jobId, subtaskId, button) {
+/**
+ * ジョブの終了まで状態を監視する
+ *
+ * MR詳細の再描画のたびに呼ばれるため、同じジョブは重複して監視しない。
+ */
+function pollJob(jobId, subtaskId) {
+  if (pollingJobIds.has(jobId)) return;
+  pollingJobIds.add(jobId);
+  busySubtaskIds.add(subtaskId);
+  pollJobLoop(jobId, subtaskId);
+}
+
+async function pollJobLoop(jobId, subtaskId) {
+  const job = await fetch(`/api/jobs/${jobId}`)
+    .then((r) => r.json())
+    .catch(() => null);
   const statusEl = document.querySelector(`.job-status[data-subtask-id="${subtaskId}"]`);
-  const job = await fetch(`/api/jobs/${jobId}`).then((r) => r.json());
-  statusEl.textContent = `状態: ${job.status}`;
+  if (statusEl && job) statusEl.textContent = `状態: ${job.status}`;
 
-  if (job.status === "queued" || job.status === "running") {
-    setTimeout(() => pollJob(jobId, subtaskId, button), 3000);
+  // 取得失敗時（サーバー再起動中など）も監視を継続する
+  if (!job || isJobActive(job)) {
+    setTimeout(() => pollJobLoop(jobId, subtaskId), JOB_POLL_MS);
     return;
   }
+  pollingJobIds.delete(jobId);
+  busySubtaskIds.delete(subtaskId);
+  await onJobFinished(job, jobId, subtaskId);
+}
 
-  if (job.status === "succeeded") {
-    // refreshIssueDetailが詳細ペインの選択状態を消すため、再描画してから選択し直す
-    await refreshIssueDetail();
-    selectSubtask(Number(subtaskId));
-    await showReport(jobId, subtaskId);
-  } else {
-    button.disabled = false;
+async function onJobFinished(job, jobId, subtaskId) {
+  if (job.status !== "succeeded") {
+    // 失敗時はジョブ状態を取り直してボタンを戻す
+    await refreshSubtaskStates().catch(() => {});
+    refreshSelectedSubtaskState();
+    return;
   }
+  if (currentSelectedSubtaskId !== subtaskId) return;
+  // refreshIssueDetailが詳細ペインの選択状態を消すため、再描画してから選択し直す
+  await refreshIssueDetail();
+  selectSubtask(subtaskId);
+  await showReport(jobId, subtaskId);
 }
 
 async function showReport(jobId, subtaskId) {
