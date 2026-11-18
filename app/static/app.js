@@ -43,7 +43,7 @@ function escapeHtml(text) {
  */
 function makeTitleEditable(titleEl, statusEl, onSave) {
   titleEl.classList.add("editable-title");
-  titleEl.title = "クリックしてタイトルを編集";
+  updateTitleTooltip(titleEl);
   titleEl.addEventListener("click", () => {
     const original = titleEl.textContent;
     const input = document.createElement("input");
@@ -63,9 +63,11 @@ function makeTitleEditable(titleEl, statusEl, onSave) {
       if (!save || !title || title === original) return;
 
       titleEl.textContent = title;
+      updateTitleTooltip(titleEl);
       statusEl.textContent = "更新中...";
       const error = await onSave(title);
       if (error) titleEl.textContent = original;
+      updateTitleTooltip(titleEl);
       statusEl.textContent = error ? `失敗しました: ${error}` : "更新しました";
     };
     input.addEventListener("keydown", (event) => {
@@ -75,6 +77,15 @@ function makeTitleEditable(titleEl, statusEl, onSave) {
     });
     input.addEventListener("blur", () => finish(true));
   });
+}
+
+/**
+ * タイトルのツールチップ更新
+ *
+ * 省略表示されても読めるよう、全文と編集方法を表示する。
+ */
+function updateTitleTooltip(titleEl) {
+  titleEl.title = `${titleEl.textContent}\n（クリックしてタイトルを編集）`;
 }
 
 async function patchTitle(url, title) {
