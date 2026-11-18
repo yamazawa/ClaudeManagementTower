@@ -90,7 +90,7 @@ def test_reopen_issue_route_reports_gh_failure(session_factory, monkeypatch):
     assert exc.value.status_code == 500
 
 
-@pytest.mark.parametrize("state", ["draft", "in_review"])
+@pytest.mark.parametrize("state", ["draft", "resolved"])
 def test_close_subtask_closes_pr(session_factory, monkeypatch, state):
     subtask_id = _add_subtask(session_factory, state)
     calls = []
@@ -99,11 +99,11 @@ def test_close_subtask_closes_pr(session_factory, monkeypatch, state):
     result = subtasks.close_subtask(subtask_id)
 
     assert calls == [("owner/repo", 7)]
-    assert result["lifecycle_state"] == "closed"
-    assert _state_of(session_factory, subtask_id) == "closed"
+    assert result["lifecycle_state"] == "canceled"
+    assert _state_of(session_factory, subtask_id) == "canceled"
 
 
-@pytest.mark.parametrize("state", ["merged", "closed"])
+@pytest.mark.parametrize("state", ["merged", "canceled"])
 def test_close_subtask_rejects_resolved(session_factory, monkeypatch, state):
     subtask_id = _add_subtask(session_factory, state)
     calls = []
@@ -131,9 +131,9 @@ def test_close_subtask_keeps_state_on_gh_failure(session_factory, monkeypatch):
     assert _state_of(session_factory, subtask_id) == "draft"
 
 
-@pytest.mark.parametrize(("is_draft", "expected"), [(True, "draft"), (False, "in_review")])
+@pytest.mark.parametrize(("is_draft", "expected"), [(True, "draft"), (False, "resolved")])
 def test_reopen_subtask_restores_state_from_pr(session_factory, monkeypatch, is_draft, expected):
-    subtask_id = _add_subtask(session_factory, "closed")
+    subtask_id = _add_subtask(session_factory, "canceled")
     calls = []
     monkeypatch.setattr(subtasks, "reopen_pr", lambda *args: calls.append(args))
     monkeypatch.setattr(
@@ -150,14 +150,14 @@ def test_reopen_subtask_restores_state_from_pr(session_factory, monkeypatch, is_
 
 
 def test_reopen_subtask_without_pr_becomes_draft(session_factory, monkeypatch):
-    subtask_id = _add_subtask(session_factory, "closed", pr_number=None)
+    subtask_id = _add_subtask(session_factory, "canceled", pr_number=None)
 
     result = subtasks.reopen_subtask(subtask_id)
 
     assert result["lifecycle_state"] == "draft"
 
 
-@pytest.mark.parametrize("state", ["draft", "in_review", "merged"])
+@pytest.mark.parametrize("state", ["draft", "resolved", "merged"])
 def test_reopen_subtask_rejects_not_closed(session_factory, state):
     subtask_id = _add_subtask(session_factory, state)
 
@@ -168,7 +168,7 @@ def test_reopen_subtask_rejects_not_closed(session_factory, state):
 
 
 def test_reopen_subtask_keeps_state_on_gh_failure(session_factory, monkeypatch):
-    subtask_id = _add_subtask(session_factory, "closed")
+    subtask_id = _add_subtask(session_factory, "canceled")
 
     def fail(*args):
         raise GitHubClientError("boom")
@@ -179,4 +179,4 @@ def test_reopen_subtask_keeps_state_on_gh_failure(session_factory, monkeypatch):
         subtasks.reopen_subtask(subtask_id)
 
     assert exc.value.status_code == 500
-    assert _state_of(session_factory, subtask_id) == "closed"
+    assert _state_of(session_factory, subtask_id) == "canceled"

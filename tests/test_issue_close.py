@@ -54,7 +54,7 @@ def test_close_issue_runs_gh_issue_close(monkeypatch):
     assert calls == [["gh", "issue", "close", "12", "--repo", "owner/repo"]]
 
 
-@pytest.mark.parametrize("states", [[], ["merged"], ["merged", "closed"]])
+@pytest.mark.parametrize("states", [[], ["merged"], ["merged", "canceled"]])
 def test_close_issue_route_closes_when_no_unresolved_mr(session_factory, monkeypatch, states):
     for state in states:
         _add_subtask(session_factory, state)
@@ -68,7 +68,7 @@ def test_close_issue_route_closes_when_no_unresolved_mr(session_factory, monkeyp
     assert result == {"number": 5, "state": "CLOSED"}
 
 
-@pytest.mark.parametrize("state", ["draft", "in_review"])
+@pytest.mark.parametrize("state", ["draft", "resolved"])
 def test_close_issue_route_rejects_unresolved_mr(session_factory, monkeypatch, state):
     _add_subtask(session_factory, "merged")
     _add_subtask(session_factory, state)

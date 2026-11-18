@@ -44,9 +44,9 @@ def _states(factory):
     ("pr", "expected"),
     [
         ({"mergedAt": "2026-01-01T00:00:00Z", "state": "MERGED", "isDraft": False}, "merged"),
-        ({"mergedAt": None, "state": "CLOSED", "isDraft": False}, "closed"),
+        ({"mergedAt": None, "state": "CLOSED", "isDraft": False}, "canceled"),
         ({"mergedAt": None, "state": "OPEN", "isDraft": True}, "draft"),
-        ({"mergedAt": None, "state": "OPEN", "isDraft": False}, "in_review"),
+        ({"mergedAt": None, "state": "OPEN", "isDraft": False}, "resolved"),
     ],
 )
 def test_lifecycle_state_from_pr(pr, expected):
@@ -55,8 +55,8 @@ def test_lifecycle_state_from_pr(pr, expected):
 
 def test_sync_updates_changed_states(session_factory, monkeypatch):
     _add_subtask(session_factory, 10, "draft", "b10")
-    _add_subtask(session_factory, 11, "in_review", "b11")
-    _add_subtask(session_factory, 12, "in_review", "b12")
+    _add_subtask(session_factory, 11, "resolved", "b11")
+    _add_subtask(session_factory, 12, "resolved", "b12")
     monkeypatch.setattr(
         pr_sync,
         "list_pull_request_states",
@@ -69,10 +69,10 @@ def test_sync_updates_changed_states(session_factory, monkeypatch):
     updated = pr_sync.sync_all_projects(session_factory)
 
     assert updated == [
-        {"subtask_id": 1, "lifecycle_state": "in_review"},
+        {"subtask_id": 1, "lifecycle_state": "resolved"},
         {"subtask_id": 2, "lifecycle_state": "merged"},
     ]
-    assert _states(session_factory) == {10: "in_review", 11: "merged", 12: "in_review"}
+    assert _states(session_factory) == {10: "resolved", 11: "merged", 12: "resolved"}
 
 
 def test_sync_skips_github_when_no_targets(session_factory, monkeypatch):
@@ -87,17 +87,17 @@ def test_sync_skips_github_when_no_targets(session_factory, monkeypatch):
 
 
 def test_mark_prs_merged(session_factory):
-    _add_subtask(session_factory, 10, "in_review", "b10")
-    _add_subtask(session_factory, 11, "in_review", "b11")
+    _add_subtask(session_factory, 10, "resolved", "b10")
+    _add_subtask(session_factory, 11, "resolved", "b11")
 
     pr_sync.mark_prs_merged("owner/repo", [10], session_factory)
 
-    assert _states(session_factory) == {10: "merged", 11: "in_review"}
+    assert _states(session_factory) == {10: "merged", 11: "resolved"}
 
 
 def test_mark_prs_merged_ignores_other_repo(session_factory):
-    _add_subtask(session_factory, 10, "in_review", "b10")
+    _add_subtask(session_factory, 10, "resolved", "b10")
 
     pr_sync.mark_prs_merged("other/repo", [10], session_factory)
 
-    assert _states(session_factory) == {10: "in_review"}
+    assert _states(session_factory) == {10: "resolved"}

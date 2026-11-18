@@ -19,14 +19,12 @@ from core.github_client import (
     get_pr_state,
     reopen_pr,
 )
+from core.lifecycle import LifecycleState
 from core.models import ExecutionJob, Project, Subtask
 from core.mr_naming import compose_mr_title, next_default_suffix
 from core.pr_sync import lifecycle_state_from_pr
 
 router = APIRouter(prefix="/api/subtasks")
-
-# クローズ可能な（未解決の）MRのlifecycle_state
-OPEN_LIFECYCLE_STATES = ("draft", "in_review")
 
 
 class CreateSubtaskRequest(BaseModel):
@@ -99,7 +97,7 @@ def create_subtask(payload: CreateSubtaskRequest):
             instruction=payload.instruction,
             branch_name=branch_name,
             github_pr_number=pr["number"],
-            lifecycle_state="draft",
+            lifecycle_state=LifecycleState.DRAFT,
         )
         session.add(subtask)
         session.commit()
@@ -162,21 +160,21 @@ def close_subtask(subtask_id: int):
     """
     with SessionLocal() as session:
         subtask, project = _get_subtask_and_project(session, subtask_id)
-        if subtask.lifecycle_state not in OPEN_LIFECYCLE_STATES:
+        if subtask.lifecycle_state not in LifecycleState.OPEN_STATES:
             raise HTTPException(status_code=409, detail="未解決のMRではありません")
         try:
             if subtask.github_pr_number is not None:
                 close_pr(project.github_repo, subtask.github_pr_number)
         except GitHubClientError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
-        subtask.lifecycle_state = "closed"
+        subtask.lifecycle_state = LifecycleState.CANCELED
         session.commit()
         return {"id": subtask.id, "lifecycle_state": subtask.lifecycle_state}
 
 
 def _reopen_pr_and_get_state(project: Project, pr_number: int | None) -> str:
     if pr_number is None:
-        return "draft"
+        return LifecycleState.DRAFT
     reopen_pr(project.github_repo, pr_number)
     return lifecycle_state_from_pr(get_pr_state(project.github_repo, pr_number))
 
@@ -189,7 +187,7 @@ def reopen_subtask(subtask_id: int):
     """
     with SessionLocal() as session:
         subtask, project = _get_subtask_and_project(session, subtask_id)
-        if subtask.lifecycle_state != "closed":
+        if subtask.lifecycle_state != LifecycleState.CANCELED:
             raise HTTPException(status_code=409, detail="クローズ済のMRではありません")
         try:
             new_state = _reopen_pr_and_get_state(project, subtask.github_pr_number)

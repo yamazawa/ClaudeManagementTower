@@ -78,7 +78,7 @@ def test_get_issues_includes_mr_counts(session_factory, monkeypatch):
     monkeypatch.setattr(
         projects, "list_issues", lambda repo, state: [{"number": 5}, {"number": 6}]
     )
-    _add_subtasks(session_factory, 5, ["merged", "merged", "in_review", "closed", "draft"])
+    _add_subtasks(session_factory, 5, ["merged", "merged", "resolved", "canceled", "draft"])
 
     issues = projects.get_issues(1)
 
@@ -98,7 +98,7 @@ def test_get_issue_subtasks_returns_db_states(session_factory):
                 instruction="",
                 branch_name="b",
                 github_pr_number=9,
-                lifecycle_state="in_review",
+                lifecycle_state="resolved",
             )
         )
         session.commit()
@@ -106,7 +106,7 @@ def test_get_issue_subtasks_returns_db_states(session_factory):
     subtasks = projects.get_issue_subtasks(1, 5)
 
     assert [(s["lifecycle_state"], s["pr_url"]) for s in subtasks] == [
-        ("in_review", "https://github.com/owner/repo/pull/9")
+        ("resolved", "https://github.com/owner/repo/pull/9")
     ]
 
 

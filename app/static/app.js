@@ -6,25 +6,34 @@ let currentIssueTitle = null;
 let currentSubtasks = [];
 let currentSelectedSubtaskId = null;
 
+// MRのlifecycle_state（core/lifecycle.pyと合わせる）
+const LIFECYCLE = {
+  draft: "draft",
+  resolved: "resolved",
+  merged: "merged",
+  canceled: "canceled",
+};
+
 const LIFECYCLE_LABELS = {
-  draft: "Draft",
-  in_review: "レビュー中",
-  merged: "マージ済",
-  closed: "クローズ（未マージ）",
+  [LIFECYCLE.draft]: "Draft",
+  [LIFECYCLE.resolved]: "Resolved",
+  [LIFECYCLE.merged]: "Merged",
+  [LIFECYCLE.canceled]: "Canceled",
 };
 
 // MR一覧フィルタの値ごとに表示対象のlifecycle_stateを定義する（nullは全件表示）
 const SUBTASK_FILTER_STATES = {
-  unresolved: ["draft", "in_review"],
-  draft: ["draft"],
-  in_review: ["in_review"],
-  merged: ["merged"],
+  unresolved: [LIFECYCLE.draft, LIFECYCLE.resolved],
+  draft: [LIFECYCLE.draft],
+  resolved: [LIFECYCLE.resolved],
+  merged: [LIFECYCLE.merged],
+  canceled: [LIFECYCLE.canceled],
   all: null,
 };
 
 // Issue一覧のMR数で解決済とみなす状態と、数えない状態（マージされずクローズ）
-const MR_COUNT_RESOLVED_STATE = "merged";
-const MR_COUNT_EXCLUDED_STATE = "closed";
+const MR_COUNT_RESOLVED_STATE = LIFECYCLE.merged;
+const MR_COUNT_EXCLUDED_STATE = LIFECYCLE.canceled;
 
 // MR状態の自動更新間隔（サーバー側のPR同期間隔と合わせて10秒以内に反映させる）
 const SUBTASK_POLL_MS = 3000;
@@ -812,15 +821,15 @@ function refreshSelectedSubtaskState() {
 function updateSubtaskToggleButton(s) {
   const button = document.getElementById("subtask-toggle-button");
   if (!button) return;
-  button.hidden = s.lifecycle_state === "merged";
+  button.hidden = s.lifecycle_state === LIFECYCLE.merged;
   button.disabled = false;
-  button.textContent = s.lifecycle_state === "closed" ? "再開" : "閉じる";
+  button.textContent = s.lifecycle_state === LIFECYCLE.canceled ? "再開" : "閉じる";
 }
 
 async function onClickSubtaskToggle(subtaskId) {
   const subtask = currentSubtasks.find((s) => s.id === subtaskId);
   if (!subtask) return;
-  const isClosed = subtask.lifecycle_state === "closed";
+  const isClosed = subtask.lifecycle_state === LIFECYCLE.canceled;
   const verb = isClosed ? "再開し" : "閉じ";
   if (!confirm(`MR「${subtask.title}」を${verb}ますか？`)) return;
   const button = document.getElementById("subtask-toggle-button");

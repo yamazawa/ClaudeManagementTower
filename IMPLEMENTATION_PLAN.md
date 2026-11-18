@@ -33,7 +33,7 @@
 - サブタスクごとに専用Git worktreeを割り当てる。worktreeは`WORKTREE_BASE_DIR`配下、ブランチ名と同名のフォルダに作成する（Phase 4実装済み）。
 - ブランチ作成後、サブタスクのタイトル・指示内容を`.claude-tower/subtask.md`に書き出す初期コミットを1件追加してからDraft PRを作成する（差分ゼロではDraft PR作成不可のため。Phase 1実機検証済み、ダミーコミットではなく意味のある内容とする）。
 - Claudeには`.claude-tower/report.html`への自己完結HTMLレポート出力を、system_promptの追記（`claude_code`プリセット + append）で指示する。ワーカーはこのファイルを`reports/job-{id}.html`へコピーしてReportテーブルへ記録する（Phase 7実装・実機確認済み）。
-- ジョブが例外なく完走したら（job.status=succeeded）、Claudeの作業判断の成否に関わらずDraftを解除し、サブタスクのlifecycle_stateを`in_review`にする。Claude自身の成功/一部成功/失敗の判断はレポートの中身で人間が確認する（Phase 7確定）。
+- ジョブが例外なく完走したら（job.status=succeeded）、Claudeの作業判断の成否に関わらずDraftを解除し、サブタスクのlifecycle_stateを`resolved`にする。Claude自身の成功/一部成功/失敗の判断はレポートの中身で人間が確認する（Phase 7確定）。
 - Nワーカーは`python -m worker.launcher`が`worker.count`個のサブプロセスとして起動する。単独起動（`python -m worker.main`）はデバッグ用途とする（Phase 8実装・実機確認済み）。
 - ワーカー群は`worker/pool.py`の`WorkerPool`が直接の子プロセスとして管理し、終了したワーカーを再起動して常にN個を維持する。`run_all.py`はランチャーのサブプロセスを挟まず`WorkerPool`を直接保持する。`python -m worker.launcher`も同じ`WorkerPool`で動作する（Issue #69）。
 - `WorkerPool`の起動・停止時は、心拍のある登録済みワーカーをPID指定で停止し、ワーカー行を全削除する。ワーカーは自分の行が削除されていた場合は再登録せず終了する（Issue #69）。
@@ -160,7 +160,7 @@ Phase 9完了時点で全て解消済み。
 | 6 | Claudeの実行中・成功・失敗を管理塔で確認できる | 確認済み |
 | 7 | 指示・応答・ログ・HTMLレポートが履歴に残る | 確認済み |
 | 8 | Claudeの判断内容・理由をHTMLで確認できる | 確認済み |
-| 9 | Claude実装成功だけではサブタスクが完了にならない | 確認済み。job成功後はin_review止まりで、マージするまでmergedにならない |
+| 9 | Claude実装成功だけではサブタスクが完了にならない | 確認済み。job成功後はresolved止まりで、マージするまでmergedにならない |
 | 10 | PRマージを同期すると該当サブタスクが完了になる | 確認済み。実際にPRをマージし、syncでlifecycle_stateがmergedになった |
 | 11 | 複数サブタスクが残っているIssueを最初のPRマージだけで閉じない | 確認済み。コードにIssueクローズ処理が存在しないことも確認した |
 | 12 | スマホから認証付きで閲覧・指示できる | 確認済み。実機のスマートフォンからログインし、新規サブタスク作成フォームでの指示送信を確認した |
