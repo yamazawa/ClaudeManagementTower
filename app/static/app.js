@@ -494,6 +494,16 @@ async function selectIssue(number) {
   renderSubtaskDetail(null);
 }
 
+/**
+ * 見出しの番号表示
+ *
+ * URLがある場合はGitHubを開くリンクにする。
+ */
+function renderTitleNumber(label, url) {
+  if (!url) return `<span class="title-number">${label}</span>`;
+  return `<a class="title-number" href="${url}" target="_blank" rel="noopener" title="GitHubで開く">${label}</a>`;
+}
+
 async function refreshIssueDetail() {
   const issue = await fetch(
     `/api/projects/${currentProjectId}/issues/${currentIssueNumber}`
@@ -501,12 +511,11 @@ async function refreshIssueDetail() {
   currentSubtasks = issue.subtasks;
 
   document.getElementById("issue-heading").innerHTML =
-    `<span class="title-number">Issue #${issue.number}</span><span id="issue-title">${escapeHtml(issue.title)}</span>`;
+    `${renderTitleNumber(`Issue #${issue.number}`, issue.url)}<span id="issue-title">${escapeHtml(issue.title)}</span>`;
   document.getElementById("subtask-list-body").innerHTML = `
     <p id="issue-title-status" class="title-status empty"></p>
     <p class="issue-actions">
       <button type="button" id="close-issue-button" hidden>Issueを閉じる</button>
-      <a href="${issue.url}" target="_blank" rel="noopener">GitHubで開く</a>
     </p>
     <p id="issue-close-status" class="title-status empty"></p>
   `;
