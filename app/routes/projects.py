@@ -71,24 +71,36 @@ def get_issues(project_id: int, state: Literal["open", "closed", "all"] = "open"
             raise HTTPException(status_code=404, detail="project not found")
         issues = list_issues(project.github_repo, state)
         counts = _mr_counts_by_issue(session, project.id)
-        empty = {"resolved": 0, "total": 0}
+        empty = {"resolved": 0, "unresolved": 0, "total": 0}
         return [{**i, "mr_counts": counts.get(i["number"], empty)} for i in issues]
 
 
 def _mr_counts_by_issue(session, project_id: int) -> dict[int, dict]:
-    """Issueごとの解決済MR数・MR総数
+    """Issueごとの解決済MR数・未解決MR数・MR総数
 
-    マージされずクローズされたMRはどちらにも数えない。
+    マージされずクローズされたMRはいずれにも数えない。
+    未解決MR数は一覧の閉じるボタンの活性判定に使う。
     """
     is_resolved = case((Subtask.lifecycle_state == RESOLVED_LIFECYCLE_STATE, 1), else_=0)
+    is_unresolved = case(
+        (Subtask.lifecycle_state.in_(UNRESOLVED_LIFECYCLE_STATES), 1), else_=0
+    )
     rows = (
-        session.query(Subtask.github_issue_number, func.sum(is_resolved), func.count())
+        session.query(
+            Subtask.github_issue_number,
+            func.sum(is_resolved),
+            func.sum(is_unresolved),
+            func.count(),
+        )
         .filter_by(project_id=project_id)
         .filter(Subtask.lifecycle_state != UNCOUNTED_LIFECYCLE_STATE)
         .group_by(Subtask.github_issue_number)
         .all()
     )
-    return {number: {"resolved": resolved, "total": total} for number, resolved, total in rows}
+    return {
+        number: {"resolved": resolved, "unresolved": unresolved, "total": total}
+        for number, resolved, unresolved, total in rows
+    }
 
 
 @router.post("/{project_id}/issues")
