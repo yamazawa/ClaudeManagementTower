@@ -22,6 +22,10 @@ const SUBTASK_FILTER_STATES = {
   all: null,
 };
 
+// Issue一覧のMR数で解決済とみなす状態と、数えない状態（マージされずクローズ）
+const MR_COUNT_RESOLVED_STATE = "merged";
+const MR_COUNT_EXCLUDED_STATE = "closed";
+
 // MR状態の自動更新間隔（サーバー側のPR同期間隔と合わせて10秒以内に反映させる）
 const SUBTASK_POLL_MS = 3000;
 
@@ -347,7 +351,7 @@ function renderBreadcrumb() {
   el.innerHTML = `
     <a href="#" id="breadcrumb-projects">リポジトリ一覧</a>
     <span class="breadcrumb-sep">&rsaquo;</span>
-    <span class="breadcrumb-current">${currentProjectName}</span>
+    <span class="breadcrumb-current">${escapeHtml(currentProjectName)}</span>
   `;
   document
     .getElementById("breadcrumb-projects")
@@ -386,8 +390,8 @@ async function init() {
     for (const project of projects) {
       const li = document.createElement("li");
       li.className = "project-item";
-      li.innerHTML = `<span class="project-name">${project.name}</span><span class="project-branch">${project.default_branch}</span>`;
-      li.addEventListener("click", () => selectProject(project.id, project.name));
+      li.innerHTML = `<span class="project-name">${escapeHtml(project.display_name)}</span><span class="project-branch">${project.default_branch}</span>`;
+      li.addEventListener("click", () => selectProject(project));
       listEl.appendChild(li);
     }
   }
@@ -395,13 +399,25 @@ async function init() {
   pollSubtaskStates();
 }
 
-async function selectProject(projectId, projectName) {
-  currentProjectId = projectId;
-  currentProjectName = projectName;
+async function selectProject(project) {
+  currentProjectId = project.id;
+  currentProjectName = project.display_name;
   document.getElementById("project-view").hidden = true;
   document.getElementById("issue-view").hidden = false;
   renderBreadcrumb();
+  renderRepoHeading(project);
   await loadIssues();
+}
+
+/**
+ * リポジトリ見出しの表示
+ *
+ * 「Repo #番号 表示名」とし、番号部分はGitHubのリポジトリページへのリンクにする。
+ */
+function renderRepoHeading(project) {
+  const label = project.repo_number ? `Repo #${project.repo_number}` : "Repo";
+  document.getElementById("repo-heading").innerHTML =
+    `${renderTitleNumber(label, project.repo_url)}<span id="repo-title">${escapeHtml(project.display_name)}</span>`;
 }
 
 async function loadIssues() {
@@ -420,7 +436,10 @@ async function loadIssues() {
     li.className = "issue-item";
     li.classList.toggle("active", issue.number === currentIssueNumber);
     li.dataset.number = issue.number;
-    li.innerHTML = `<span class="number">#${issue.number}</span><span class="issue-item-title">${escapeHtml(issue.title)}</span>`;
+    li.innerHTML = `
+      <span class="issue-item-label"><span class="number">#${issue.number}</span><span class="issue-item-title">${escapeHtml(issue.title)}</span></span>
+      <span class="issue-item-meta" title="解決済MR数 / MR総数">${issue.mr_counts.resolved}/${issue.mr_counts.total}</span>
+    `;
     li.addEventListener("click", () => selectIssue(issue.number));
     listEl.appendChild(li);
   }
@@ -566,6 +585,7 @@ async function refreshIssueDetail() {
   ).then((r) => r.json());
   currentSubtasks = issue.subtasks;
   currentIssueTitle = issue.title;
+  updateIssueMrCounts(issue.number, issue.subtasks);
 
   document.getElementById("issue-heading").innerHTML =
     `${renderTitleNumber(`Issue #${issue.number}`, issue.url)}<span id="issue-title">${escapeHtml(issue.title)}</span>`;
@@ -703,11 +723,26 @@ async function refreshSubtaskStates() {
 
   currentSubtasks = subtasks;
   renderSubtaskList();
+  updateIssueMrCounts(issueNumber, subtasks);
   const selected = currentSubtasks.find((s) => s.id === currentSelectedSubtaskId);
   const stateLine = document.getElementById("subtask-state-line");
   if (selected && stateLine) stateLine.innerHTML = renderSubtaskStateLine(selected);
   const numberEl = document.querySelector("#subtask-heading .title-number");
   if (selected && numberEl) numberEl.outerHTML = renderSubtaskNumber(selected);
+}
+
+/**
+ * Issue一覧のMR数を更新する
+ *
+ * Issue一覧をGitHubから再取得せず、表示中IssueのMR状態から数え直す。
+ * 集計方法はIssue一覧APIと合わせる。
+ */
+function updateIssueMrCounts(issueNumber, subtasks) {
+  const metaEl = document.querySelector(`.issue-item[data-number="${issueNumber}"] .issue-item-meta`);
+  if (!metaEl) return;
+  const counted = subtasks.filter((s) => s.lifecycle_state !== MR_COUNT_EXCLUDED_STATE);
+  const resolved = counted.filter((s) => s.lifecycle_state === MR_COUNT_RESOLVED_STATE).length;
+  metaEl.textContent = `${resolved}/${counted.length}`;
 }
 
 async function onSubmitIssueForm(event) {

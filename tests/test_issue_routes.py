@@ -32,6 +32,16 @@ def _capture_list_issues(monkeypatch):
     return calls
 
 
+def test_get_projects_includes_repo_display_info(session_factory):
+    [project] = projects.get_projects()
+
+    assert (project["repo_number"], project["display_name"], project["repo_url"]) == (
+        None,
+        "p",
+        "https://github.com/owner/repo",
+    )
+
+
 def test_get_issues_passes_state(session_factory, monkeypatch):
     calls = _capture_list_issues(monkeypatch)
 
@@ -46,6 +56,36 @@ def test_get_issues_defaults_to_open(session_factory, monkeypatch):
     projects.get_issues(1)
 
     assert calls == [("owner/repo", "open")]
+
+
+def _add_subtasks(session_factory, issue_number, states):
+    with session_factory() as session:
+        session.add_all(
+            Subtask(
+                project_id=1,
+                github_issue_number=issue_number,
+                title="t",
+                instruction="",
+                branch_name=f"b-{issue_number}-{i}",
+                lifecycle_state=state,
+            )
+            for i, state in enumerate(states)
+        )
+        session.commit()
+
+
+def test_get_issues_includes_mr_counts(session_factory, monkeypatch):
+    monkeypatch.setattr(
+        projects, "list_issues", lambda repo, state: [{"number": 5}, {"number": 6}]
+    )
+    _add_subtasks(session_factory, 5, ["merged", "merged", "in_review", "closed", "draft"])
+
+    issues = projects.get_issues(1)
+
+    assert [i["mr_counts"] for i in issues] == [
+        {"resolved": 2, "total": 4},
+        {"resolved": 0, "total": 0},
+    ]
 
 
 def test_get_issue_subtasks_returns_db_states(session_factory):
