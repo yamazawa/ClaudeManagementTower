@@ -431,18 +431,44 @@ async function loadIssues() {
     listEl.innerHTML = '<li class="empty">Issueがありません。</li>';
     return;
   }
-  for (const issue of issues) {
-    const li = document.createElement("li");
-    li.className = "issue-item";
-    li.classList.toggle("active", issue.number === currentIssueNumber);
-    li.dataset.number = issue.number;
-    li.innerHTML = `
-      <span class="issue-item-label"><span class="number">#${issue.number}</span><span class="issue-item-title">${escapeHtml(issue.title)}</span></span>
-      <span class="issue-item-meta" title="解決済MR数 / MR総数">${issue.mr_counts.resolved}/${issue.mr_counts.total}</span>
-    `;
-    li.addEventListener("click", () => selectIssue(issue.number));
-    listEl.appendChild(li);
-  }
+  issues.forEach((issue) => listEl.appendChild(renderIssueItem(issue)));
+}
+
+/**
+ * Issue一覧の1行
+ *
+ * 見出しと同様に番号リンク・1行省略のタイトル・閉じるボタンを並べる。
+ * リンクとボタンのクリックではIssueを選択しない。
+ */
+function renderIssueItem(issue) {
+  const li = document.createElement("li");
+  li.className = "issue-item";
+  li.classList.toggle("active", issue.number === currentIssueNumber);
+  li.dataset.number = issue.number;
+  li.dataset.state = issue.state;
+  li.innerHTML = `
+    ${renderTitleNumber(`Issue #${issue.number}`, issue.url)}
+    <span class="issue-item-title" title="${escapeAttr(issue.title)}">${escapeHtml(issue.title)}</span>
+    <span class="issue-item-meta" title="解決済MR数 / MR総数"></span>
+    <button type="button" class="title-action-button issue-item-toggle"></button>
+  `;
+  updateIssueItemCounts(li, issue.mr_counts);
+  li.addEventListener("click", () => selectIssue(issue.number));
+  li.querySelector(".title-number").addEventListener("click", (e) => e.stopPropagation());
+  const button = li.querySelector(".issue-item-toggle");
+  button.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleIssue(issue.number, li.dataset.state === "OPEN", button);
+  });
+  return li;
+}
+
+/**
+ * Issue一覧の行のMR数と閉じるボタンを更新する
+ */
+function updateIssueItemCounts(li, counts) {
+  li.querySelector(".issue-item-meta").textContent = `${counts.resolved}/${counts.total}`;
+  applyIssueToggleState(li.querySelector(".issue-item-toggle"), li.dataset.state === "OPEN", counts);
 }
 
 function filterSubtasks(subtasks) {
@@ -484,35 +510,50 @@ async function postAction(url) {
  * クローズ済の場合は再開ボタンにする。
  * マージ済MRが1個以上で未解決MRが無い場合はプライマリ色にする。
  * 未解決MRが残る場合はクローズできないため無効化する。
+ * 見出しと一覧の行で共通に使う。
  */
-function updateIssueToggleButton() {
-  const button = document.getElementById("issue-toggle-button");
-  if (!button) return;
-  const isOpen = currentIssueState === "OPEN";
-  const unresolvedStates = SUBTASK_FILTER_STATES.unresolved;
-  const hasUnresolved = currentSubtasks.some((s) => unresolvedStates.includes(s.lifecycle_state));
-  const hasMerged = currentSubtasks.some((s) => s.lifecycle_state === "merged");
+function applyIssueToggleState(button, isOpen, counts) {
+  const hasUnresolved = counts.unresolved > 0;
   button.textContent = isOpen ? "閉じる" : "再開";
-  button.classList.toggle("primary", isOpen && hasMerged && !hasUnresolved);
+  button.classList.toggle("primary", isOpen && counts.resolved > 0 && !hasUnresolved);
   button.disabled = isOpen && hasUnresolved;
   button.title = button.disabled ? "未解決のMRがあるため閉じられません" : "";
 }
 
-async function onClickIssueToggle() {
-  const isOpen = currentIssueState === "OPEN";
-  const verb = isOpen ? "閉じ" : "再開し";
-  if (!confirm(`Issue #${currentIssueNumber} を${verb}ますか？`)) return;
+function updateIssueToggleButton() {
   const button = document.getElementById("issue-toggle-button");
-  const statusEl = document.getElementById("issue-close-status");
+  if (!button) return;
+  applyIssueToggleState(button, currentIssueState === "OPEN", countMrs(currentSubtasks));
+}
+
+function onClickIssueToggle() {
+  const button = document.getElementById("issue-toggle-button");
+  toggleIssue(currentIssueNumber, currentIssueState === "OPEN", button);
+}
+
+/**
+ * Issueを閉じる・再開する
+ *
+ * 見出し・一覧のどちらのボタンからも呼ぶ。
+ * 表示中Issueの場合は見出しに結果を表示し、それ以外は失敗時のみ通知する。
+ * 成否に関わらず一覧を再取得してボタンの状態を戻す。
+ */
+async function toggleIssue(number, isOpen, button) {
+  const verb = isOpen ? "閉じ" : "再開し";
+  if (!confirm(`Issue #${number} を${verb}ますか？`)) return;
+  const isCurrent = number === currentIssueNumber;
+  const statusEl = isCurrent ? document.getElementById("issue-close-status") : null;
   button.disabled = true;
-  statusEl.textContent = "更新中...";
+  if (statusEl) statusEl.textContent = "更新中...";
   const { body, error } = await postAction(
-    `/api/projects/${currentProjectId}/issues/${currentIssueNumber}/${isOpen ? "close" : "reopen"}`
+    `/api/projects/${currentProjectId}/issues/${number}/${isOpen ? "close" : "reopen"}`
   );
-  if (!error) currentIssueState = body.state;
+  if (!error && number === currentIssueNumber) currentIssueState = body.state;
   updateIssueToggleButton();
-  statusEl.textContent = error ? `失敗しました: ${error}` : `Issueを${verb}ました`;
-  if (!error) await loadIssues();
+  const message = error ? `失敗しました: ${error}` : `Issueを${verb}ました`;
+  if (statusEl) statusEl.textContent = message;
+  else if (error) alert(message);
+  await loadIssues();
 }
 
 /**
@@ -530,7 +571,10 @@ async function saveIssueTitle(number, title) {
   const itemTitle = document.querySelector(
     `.issue-item[data-number="${number}"] .issue-item-title`
   );
-  if (itemTitle) itemTitle.textContent = title;
+  if (itemTitle) {
+    itemTitle.textContent = title;
+    itemTitle.title = title;
+  }
   currentIssueTitle = title;
   const failedCount = (body.failed_subtasks || []).length;
   document.getElementById("issue-rename-status").textContent =
@@ -802,11 +846,23 @@ async function onClickSubtaskToggle(subtaskId) {
  * 集計方法はIssue一覧APIと合わせる。
  */
 function updateIssueMrCounts(issueNumber, subtasks) {
-  const metaEl = document.querySelector(`.issue-item[data-number="${issueNumber}"] .issue-item-meta`);
-  if (!metaEl) return;
+  const li = document.querySelector(`.issue-item[data-number="${issueNumber}"]`);
+  if (li) updateIssueItemCounts(li, countMrs(subtasks));
+}
+
+/**
+ * 解決済MR数・未解決MR数・MR総数を数える
+ *
+ * 集計方法はIssue一覧APIのmr_countsと合わせる。
+ */
+function countMrs(subtasks) {
   const counted = subtasks.filter((s) => s.lifecycle_state !== MR_COUNT_EXCLUDED_STATE);
-  const resolved = counted.filter((s) => s.lifecycle_state === MR_COUNT_RESOLVED_STATE).length;
-  metaEl.textContent = `${resolved}/${counted.length}`;
+  const countIn = (states) => counted.filter((s) => states.includes(s.lifecycle_state)).length;
+  return {
+    resolved: countIn([MR_COUNT_RESOLVED_STATE]),
+    unresolved: countIn(SUBTASK_FILTER_STATES.unresolved),
+    total: counted.length,
+  };
 }
 
 async function onSubmitIssueForm(event) {
