@@ -83,8 +83,8 @@ def test_get_issues_includes_mr_counts(session_factory, monkeypatch):
     issues = projects.get_issues(1)
 
     assert [i["mr_counts"] for i in issues] == [
-        {"resolved": 2, "total": 4},
-        {"resolved": 0, "total": 0},
+        {"resolved": 2, "unresolved": 2, "total": 4},
+        {"resolved": 0, "unresolved": 0, "total": 0},
     ]
 
 

@@ -350,9 +350,23 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
   background: var(--soft);
 }
 
-.issue-item-label,
 .subtask-row-title {
   font-size: 13.5px;
+}
+
+/* Issue一覧の行
+
+見出しと同様に番号リンク・タイトル・MR数・閉じるボタンを1行に並べる。
+*/
+.issue-item {
+  align-items: center;
+  justify-content: flex-start;
+  font-size: 13.5px;
+}
+
+.issue-item .title-action-button {
+  font-size: 12px;
+  padding: 2px 10px;
 }
 
 /* 命名規則に沿っていないMR名 */
@@ -362,12 +376,6 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
 
 .mr-title-warning::before {
   content: "\26A0  ";
-}
-
-.issue-item .number {
-  color: var(--muted);
-  font-size: 12px;
-  margin-right: 6px;
 }
 
 .issue-item-meta,
@@ -481,7 +489,8 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
 全文はツールチップで表示する。 */
 #repo-title,
 #issue-title,
-#subtask-title {
+#subtask-title,
+.issue-item-title {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
