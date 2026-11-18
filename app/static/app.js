@@ -586,9 +586,11 @@ function renderSubtaskDetail(s) {
   }
 
   heading.innerHTML =
-    `${renderSubtaskNumber(s)}<span id="subtask-title">${escapeHtml(s.title)}</span>`;
+    `${renderSubtaskNumber(s)}<span id="subtask-title">${escapeHtml(s.title)}</span>` +
+    `<button type="button" id="subtask-toggle-button" class="title-action-button"></button>`;
   el.innerHTML = `
     <p id="subtask-title-status" class="title-status empty"></p>
+    <p id="subtask-close-status" class="title-status empty"></p>
     <p id="subtask-state-line">${renderSubtaskStateLine(s)}</p>
     <form class="instruction-form" data-subtask-id="${s.id}">
       <textarea id="instruction-${s.id}" name="instruction" aria-label="指示内容" placeholder="Claudeへの指示内容を入力してください">${escapeHtml(s.instruction)}</textarea>
@@ -599,6 +601,10 @@ function renderSubtaskDetail(s) {
   `;
 
   document.querySelector(".instruction-form").addEventListener("submit", onSubmitInstructionForm);
+  document
+    .getElementById("subtask-toggle-button")
+    .addEventListener("click", () => onClickSubtaskToggle(s.id));
+  updateSubtaskToggleButton(s);
   makeTitleEditable(
     document.getElementById("subtask-title"),
     document.getElementById("subtask-title-status"),
@@ -656,11 +662,57 @@ async function refreshSubtaskStates() {
 
   currentSubtasks = subtasks;
   renderSubtaskList();
+  refreshSelectedSubtaskState();
+}
+
+/**
+ * 選択中MRの状態表示を更新する
+ *
+ * 状態行・見出しの番号・閉じる/再開ボタンのみ差し替える。
+ */
+function refreshSelectedSubtaskState() {
   const selected = currentSubtasks.find((s) => s.id === currentSelectedSubtaskId);
+  if (!selected) return;
   const stateLine = document.getElementById("subtask-state-line");
-  if (selected && stateLine) stateLine.innerHTML = renderSubtaskStateLine(selected);
+  if (stateLine) stateLine.innerHTML = renderSubtaskStateLine(selected);
   const numberEl = document.querySelector("#subtask-heading .title-number");
-  if (selected && numberEl) numberEl.outerHTML = renderSubtaskNumber(selected);
+  if (numberEl) numberEl.outerHTML = renderSubtaskNumber(selected);
+  updateSubtaskToggleButton(selected);
+}
+
+/**
+ * MRの閉じる・再開ボタンの表示を切り替える
+ *
+ * クローズ済の場合は再開ボタンにする。
+ * マージ済のMRは閉じる・再開できないため非表示にする。
+ */
+function updateSubtaskToggleButton(s) {
+  const button = document.getElementById("subtask-toggle-button");
+  if (!button) return;
+  button.hidden = s.lifecycle_state === "merged";
+  button.disabled = false;
+  button.textContent = s.lifecycle_state === "closed" ? "再開" : "閉じる";
+}
+
+async function onClickSubtaskToggle(subtaskId) {
+  const subtask = currentSubtasks.find((s) => s.id === subtaskId);
+  if (!subtask) return;
+  const isClosed = subtask.lifecycle_state === "closed";
+  const verb = isClosed ? "再開し" : "閉じ";
+  if (!confirm(`MR「${subtask.title}」を${verb}ますか？`)) return;
+  const button = document.getElementById("subtask-toggle-button");
+  const statusEl = document.getElementById("subtask-close-status");
+  button.disabled = true;
+  statusEl.textContent = "更新中...";
+  const { body, error } = await postAction(
+    `/api/subtasks/${subtaskId}/${isClosed ? "reopen" : "close"}`
+  );
+  if (!error) subtask.lifecycle_state = body.lifecycle_state;
+  renderSubtaskList();
+  if (currentSelectedSubtaskId === subtaskId) refreshSelectedSubtaskState();
+  if (statusEl.isConnected) {
+    statusEl.textContent = error ? `失敗しました: ${error}` : `MRを${verb}ました`;
+  }
 }
 
 async function onSubmitIssueForm(event) {
