@@ -1,14 +1,7 @@
-# サブタスク: 調査
+# サブタスク: 現在 Mr 一覧 と表示しているところにIssue名を表示して欲しい。それで MR 一覧が書かれてるところの上にタイトルで Mr 一覧 と表示して一覧表示の下に作成の UI を置いて欲しい
 
 
-## 実行指示（2026-11-17 23:27:09 UTC）
+## 実行指示（2026-11-17 22:55:47 UTC）
 
-yamazawa/ClaudeManagementTower#68 is not mergeable: the merge commit cannot be cleanly created. To have the pull request merged after all the requirements have been met, add the `--auto` flag.
-
-の通りマージして最新化に失敗。
-調査して必要な修正を実施して
-
-## 実行指示（2026-11-17 23:35:31 UTC）
-
-リベース時の競合解決も含めて「マージして最新化」はやってほしい。そのように修正して。
+現在 Mr 一覧 と表示しているところにIssue名を表示して欲しい。それで MR 一覧が書かれてるところの上にタイトルで Mr 一覧 と表示して一覧表示の下に作成の UI を置いて欲しい
 
