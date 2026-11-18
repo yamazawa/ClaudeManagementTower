@@ -13,6 +13,7 @@ from core.github_client import (
     list_issues,
 )
 from core.models import ExecutionJob, Project, Report, Subtask
+from core.repo_catalog import describe_repo
 
 router = APIRouter(prefix="/api/projects")
 
@@ -48,6 +49,7 @@ def get_projects():
                 "name": p.name,
                 "github_repo": p.github_repo,
                 "default_branch": p.default_branch,
+                **describe_repo(p.github_repo, p.name),
             }
             for p in projects
         ]

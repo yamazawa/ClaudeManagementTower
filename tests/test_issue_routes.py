@@ -32,6 +32,16 @@ def _capture_list_issues(monkeypatch):
     return calls
 
 
+def test_get_projects_includes_repo_display_info(session_factory):
+    [project] = projects.get_projects()
+
+    assert (project["repo_number"], project["display_name"], project["repo_url"]) == (
+        None,
+        "p",
+        "https://github.com/owner/repo",
+    )
+
+
 def test_get_issues_passes_state(session_factory, monkeypatch):
     calls = _capture_list_issues(monkeypatch)
 
