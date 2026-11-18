@@ -433,6 +433,35 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
   cursor: pointer;
 }
 
+/* Issue操作の行
+
+Issueを閉じるボタンとGitHubリンクを横並びにする。
+*/
+.issue-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+#close-issue-button {
+  font: inherit;
+  font-size: 13px;
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+
+#close-issue-button:hover:not(:disabled) {
+  background: var(--soft);
+}
+
+#close-issue-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
 .editable-title {
   cursor: text;
   border-bottom: 1px dashed transparent;
