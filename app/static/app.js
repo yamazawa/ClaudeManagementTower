@@ -484,11 +484,10 @@ function renderSubtaskList() {
     subtasks.length === 0
       ? '<p class="empty">該当するMRはありません。</p>'
       : `<ul id="subtask-list-items">${subtasks.map(renderSubtaskRow).join("")}</ul>`;
-  container
-    .querySelectorAll(".subtask-row")
-    .forEach((row) =>
-      row.addEventListener("click", () => selectSubtask(Number(row.dataset.subtaskId)))
-    );
+  container.querySelectorAll(".subtask-row").forEach((row) => {
+    row.addEventListener("click", () => selectSubtask(Number(row.dataset.subtaskId)));
+    row.querySelector(".title-number").addEventListener("click", (e) => e.stopPropagation());
+  });
   highlightSelectedSubtaskRow();
   updateIssueToggleButton();
 }
@@ -596,15 +595,30 @@ async function saveSubtaskTitle(subtaskId, suffix) {
   return null;
 }
 
+/**
+ * MR一覧の1行
+ *
+ * Issue一覧と同様に番号リンク・1行省略のタイトル・状態を並べる。
+ * リンクのクリックではMRを選択しない。
+ */
 function renderSubtaskRow(s) {
-  const label = LIFECYCLE_LABELS[s.lifecycle_state] || s.lifecycle_state;
-  const prBadge = s.github_pr_number ? `PR #${s.github_pr_number}` : "";
   return `
     <li class="subtask-row" data-subtask-id="${s.id}">
+      ${renderSubtaskNumber(s)}
       ${renderMrTitle(s, { className: "subtask-row-title" })}
-      <span class="subtask-row-meta">${label} ${prBadge}</span>
+      ${renderSubtaskState(s)}
     </li>
   `;
+}
+
+/**
+ * MRの状態表示
+ *
+ * 一覧の行と詳細の見出しで共通に使う。
+ */
+function renderSubtaskState(s) {
+  const label = LIFECYCLE_LABELS[s.lifecycle_state] || s.lifecycle_state;
+  return `<span class="subtask-state">${label}</span>`;
 }
 
 function highlightSelectedSubtaskRow() {
