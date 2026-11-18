@@ -15,6 +15,7 @@ def session_factory(tmp_path, monkeypatch):
     factory = sessionmaker(bind=engine)
     monkeypatch.setattr(projects, "SessionLocal", factory)
     monkeypatch.setattr(subtasks, "SessionLocal", factory)
+    monkeypatch.setattr(subtasks, "get_issue", lambda repo, number: {"title": "親"})
     with factory() as session:
         session.add(
             Project(name="p", github_repo="owner/repo", repo_path="x", default_branch="master")
@@ -23,12 +24,12 @@ def session_factory(tmp_path, monkeypatch):
     return factory
 
 
-def _add_subtask(factory, pr_number):
+def _add_subtask(factory, pr_number, title="旧タイトル"):
     with factory() as session:
         subtask = Subtask(
             project_id=1,
             github_issue_number=5,
-            title="旧タイトル",
+            title=title,
             instruction="",
             branch_name="issue-5-old",
             github_pr_number=pr_number,
@@ -62,10 +63,10 @@ def test_update_subtask_title_updates_pr_and_db(session_factory, monkeypatch):
 
     subtasks.update_subtask_title(subtask_id, subtasks.UpdateSubtaskTitleRequest(title="新"))
 
-    assert calls == [("owner/repo", 9, "新")]
+    assert calls == [("owner/repo", 9, "親ー新")]
     with session_factory() as session:
         reloaded = session.get(Subtask, subtask_id)
-        assert reloaded.title == "新"
+        assert reloaded.title == "親ー新"
         assert reloaded.branch_name == "issue-5-old"
 
 
@@ -93,4 +94,4 @@ def test_update_subtask_title_without_pr_updates_db_only(session_factory, monkey
 
     assert calls == []
     with session_factory() as session:
-        assert session.get(Subtask, subtask_id).title == "新"
+        assert session.get(Subtask, subtask_id).title == "親ー新"

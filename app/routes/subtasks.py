@@ -103,13 +103,18 @@ def create_subtask(payload: CreateSubtaskRequest):
 
 
 class UpdateSubtaskTitleRequest(BaseModel):
+    # MR固有名（MR名のIssue名より後ろの部分）
     title: str
 
 
 @router.patch("/{subtask_id}")
 def update_subtask_title(subtask_id: int, payload: UpdateSubtaskTitleRequest):
-    title = payload.title.strip()
-    if not title:
+    """MR名のMR固有名部分を変更する
+
+    Issue名は最新のものをGitHubから取得して付け直す。
+    """
+    suffix = payload.title.strip()
+    if not suffix:
         raise HTTPException(status_code=400, detail="title is empty")
     with SessionLocal() as session:
         subtask = session.get(Subtask, subtask_id)
@@ -117,11 +122,13 @@ def update_subtask_title(subtask_id: int, payload: UpdateSubtaskTitleRequest):
             raise HTTPException(status_code=404, detail="subtask not found")
         project = session.get(Project, subtask.project_id)
 
-        if subtask.github_pr_number is not None:
-            try:
+        try:
+            issue_title = get_issue(project.github_repo, subtask.github_issue_number)["title"]
+            title = compose_mr_title(issue_title, suffix)
+            if subtask.github_pr_number is not None:
                 edit_pr_title(project.github_repo, subtask.github_pr_number, title)
-            except GitHubClientError as exc:
-                raise HTTPException(status_code=500, detail=str(exc)) from exc
+        except GitHubClientError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
         subtask.title = title
         session.commit()
