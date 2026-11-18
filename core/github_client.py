@@ -97,9 +97,19 @@ def list_pull_request_states(repo: str) -> list[dict]:
 
 def list_open_pull_requests(repo: str) -> list[dict]:
     output = _run_gh(
-        ["pr", "list", "--repo", repo, "--state", "open", "--json", "number,isDraft"]
+        [
+            "pr", "list",
+            "--repo", repo,
+            "--state", "open",
+            "--json", "number,isDraft,headRefName,baseRefName",
+        ]
     )
     return json.loads(output)
+
+
+def get_pr_mergeable(repo: str, number: int) -> str:
+    output = _run_gh(["pr", "view", str(number), "--repo", repo, "--json", "mergeable"])
+    return json.loads(output)["mergeable"]
 
 
 def merge_pull_request(repo: str, number: int) -> None:

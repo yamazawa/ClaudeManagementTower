@@ -60,6 +60,18 @@ AGENT_POLICY_PROMPT = """
 外部スクリプト・外部リソースは読み込まない。
 """
 
+CONFLICT_RESOLUTION_POLICY_PROMPT = """
+あなたはClaude管理塔のマージ競合解決ワーカーです。
+対象：ベースブランチを取り込み中で競合しているPRブランチのworktree。
+1. 競合ファイルを読み、両側の変更意図を確認する。
+2. 両側の変更を活かす形で競合マーカーを解消する。
+3. 解消したファイルを git add する。
+4. テストがあれば実行し、失敗したら修正して git add する。
+5. git commit・git push・git merge --abort は行わない。
+6. 判断に迷う箇所と採用理由を最終応答で報告する。
+7. 機密情報の公開、権限外操作、破壊的操作は行わない。
+"""
+
 
 def restrict_to_worktree(worktree: str) -> Callable:
     worktree_abs = os.path.abspath(worktree)
@@ -86,6 +98,7 @@ async def run_claude(
     worktree: str,
     resume: str | None = None,
     on_message: Callable[[object], None] | None = None,
+    policy_prompt: str = AGENT_POLICY_PROMPT,
 ) -> tuple[str | None, str | None]:
     options = ClaudeAgentOptions(
         cwd=worktree,
@@ -95,7 +108,7 @@ async def run_claude(
         system_prompt={
             "type": "preset",
             "preset": "claude_code",
-            "append": AGENT_POLICY_PROMPT,
+            "append": policy_prompt,
         },
     )
     session_id = None
