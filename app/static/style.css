@@ -407,18 +407,13 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
   margin-top: 8px;
 }
 
-.instruction-form label {
-  font-size: 12.5px;
-  color: var(--muted);
-}
-
 .instruction-form textarea {
   font: inherit;
   font-size: 13px;
   padding: 6px 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  min-height: 90px;
+  min-height: 270px;
   resize: vertical;
 }
 
@@ -435,7 +430,7 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
 
 /* Issue操作の行
 
-Issueを閉じるボタンとGitHubリンクを横並びにする。
+Issueを閉じるボタンを並べる。
 */
 .issue-actions {
   display: flex;
@@ -482,11 +477,12 @@ Issueを閉じるボタンとGitHubリンクを横並びにする。
   white-space: nowrap;
 }
 
-/* Issueタイトルの1行表示
+/* Issue・MRタイトルの1行表示
 
 収まらない場合は末尾を...で省略する。
 全文はツールチップで表示する。 */
-#issue-title {
+#issue-title,
+#subtask-title {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;

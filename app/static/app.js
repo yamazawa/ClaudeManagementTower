@@ -494,6 +494,16 @@ async function selectIssue(number) {
   renderSubtaskDetail(null);
 }
 
+/**
+ * 見出しの番号表示
+ *
+ * URLがある場合はGitHubを開くリンクにする。
+ */
+function renderTitleNumber(label, url) {
+  if (!url) return `<span class="title-number">${label}</span>`;
+  return `<a class="title-number" href="${url}" target="_blank" rel="noopener" title="GitHubで開く">${label}</a>`;
+}
+
 async function refreshIssueDetail() {
   const issue = await fetch(
     `/api/projects/${currentProjectId}/issues/${currentIssueNumber}`
@@ -501,12 +511,11 @@ async function refreshIssueDetail() {
   currentSubtasks = issue.subtasks;
 
   document.getElementById("issue-heading").innerHTML =
-    `<span class="title-number">Issue #${issue.number}</span><span id="issue-title">${escapeHtml(issue.title)}</span>`;
+    `${renderTitleNumber(`Issue #${issue.number}`, issue.url)}<span id="issue-title">${escapeHtml(issue.title)}</span>`;
   document.getElementById("subtask-list-body").innerHTML = `
     <p id="issue-title-status" class="title-status empty"></p>
     <p class="issue-actions">
       <button type="button" id="close-issue-button" hidden>Issueを閉じる</button>
-      <a href="${issue.url}" target="_blank" rel="noopener">GitHubで開く</a>
     </p>
     <p id="issue-close-status" class="title-status empty"></p>
   `;
@@ -542,27 +551,36 @@ function selectSubtask(subtaskId) {
 }
 
 function renderSubtaskStateLine(s) {
-  const prLink = s.pr_url
-    ? ` <a href="${s.pr_url}" target="_blank" rel="noopener">PR #${s.github_pr_number}</a>`
-    : "";
   const label = LIFECYCLE_LABELS[s.lifecycle_state] || s.lifecycle_state;
-  return `状態: ${label}${prLink}`;
+  return `状態: ${label}`;
+}
+
+/**
+ * MR見出しの番号表示
+ *
+ * PR作成前は番号が無いため「MR」のみ表示する。
+ */
+function renderSubtaskNumber(s) {
+  const label = s.github_pr_number ? `MR #${s.github_pr_number}` : "MR";
+  return renderTitleNumber(label, s.pr_url);
 }
 
 function renderSubtaskDetail(s) {
   const el = document.getElementById("subtask-detail-body");
+  const heading = document.getElementById("subtask-heading");
   if (!s) {
+    heading.textContent = "MR";
     el.innerHTML = '<p class="empty">左の一覧からMRを選択してください。</p>';
     return;
   }
 
+  heading.innerHTML =
+    `${renderSubtaskNumber(s)}<span id="subtask-title">${escapeHtml(s.title)}</span>`;
   el.innerHTML = `
-    <h3><span id="subtask-title">${escapeHtml(s.title)}</span></h3>
     <p id="subtask-title-status" class="title-status empty"></p>
     <p id="subtask-state-line">${renderSubtaskStateLine(s)}</p>
     <form class="instruction-form" data-subtask-id="${s.id}">
-      <label for="instruction-${s.id}">指示内容</label>
-      <textarea id="instruction-${s.id}" name="instruction" placeholder="Claudeへの指示内容を入力してください">${escapeHtml(s.instruction)}</textarea>
+      <textarea id="instruction-${s.id}" name="instruction" aria-label="指示内容" placeholder="Claudeへの指示内容を入力してください">${escapeHtml(s.instruction)}</textarea>
       <button type="submit">実行する</button>
     </form>
     <p class="job-status empty" data-subtask-id="${s.id}"></p>
@@ -630,6 +648,8 @@ async function refreshSubtaskStates() {
   const selected = currentSubtasks.find((s) => s.id === currentSelectedSubtaskId);
   const stateLine = document.getElementById("subtask-state-line");
   if (selected && stateLine) stateLine.innerHTML = renderSubtaskStateLine(selected);
+  const numberEl = document.querySelector("#subtask-heading .title-number");
+  if (selected && numberEl) numberEl.outerHTML = renderSubtaskNumber(selected);
 }
 
 async function onSubmitIssueForm(event) {
