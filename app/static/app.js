@@ -697,11 +697,6 @@ function selectSubtask(subtaskId) {
   renderSubtaskDetail(subtask);
 }
 
-function renderSubtaskStateLine(s) {
-  const label = LIFECYCLE_LABELS[s.lifecycle_state] || s.lifecycle_state;
-  return `状態: ${label}`;
-}
-
 /**
  * MR見出しの番号表示
  *
@@ -722,12 +717,11 @@ function renderSubtaskDetail(s) {
   }
 
   heading.innerHTML =
-    `${renderSubtaskNumber(s)}${renderMrTitle(s, { id: "subtask-title" })}` +
+    `${renderSubtaskNumber(s)}${renderMrTitle(s, { id: "subtask-title" })}${renderSubtaskState(s)}` +
     `<button type="button" id="subtask-toggle-button" class="title-action-button"></button>`;
   el.innerHTML = `
     <p id="subtask-title-status" class="title-status empty"></p>
     <p id="subtask-close-status" class="title-status empty"></p>
-    <p id="subtask-state-line">${renderSubtaskStateLine(s)}</p>
     <form class="instruction-form" data-subtask-id="${s.id}">
       <textarea id="instruction-${s.id}" name="instruction" aria-label="指示内容" placeholder="Claudeへの指示内容を入力してください">${escapeHtml(s.instruction)}</textarea>
       <button type="submit">実行する</button>
@@ -805,13 +799,13 @@ async function refreshSubtaskStates() {
 /**
  * 選択中MRの状態表示を更新する
  *
- * 状態行・見出しの番号・閉じる/再開ボタンのみ差し替える。
+ * 見出しの番号・状態と閉じる/再開ボタンのみ差し替える。
  */
 function refreshSelectedSubtaskState() {
   const selected = currentSubtasks.find((s) => s.id === currentSelectedSubtaskId);
   if (!selected) return;
-  const stateLine = document.getElementById("subtask-state-line");
-  if (stateLine) stateLine.innerHTML = renderSubtaskStateLine(selected);
+  const stateEl = document.querySelector("#subtask-heading .subtask-state");
+  if (stateEl) stateEl.outerHTML = renderSubtaskState(selected);
   const numberEl = document.querySelector("#subtask-heading .title-number");
   if (numberEl) numberEl.outerHTML = renderSubtaskNumber(selected);
   updateSubtaskToggleButton(selected);
