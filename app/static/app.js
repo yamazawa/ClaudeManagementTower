@@ -889,8 +889,27 @@ async function onSubmitIssueForm(event) {
   }
 
   form.reset();
-  statusEl.textContent = "作成しました";
+  const { number } = await response.json();
   await loadIssues();
+  await createDefaultSubtask(number, statusEl);
+}
+
+/**
+ * Issue作成直後に規定値のMRを作成して開く
+ *
+ * MR固有名は空欄で作成し、サーバー側で連番を割り当てる。
+ * MR作成に失敗してもIssueは作成済のため、Issueを開いて結果を表示する。
+ */
+async function createDefaultSubtask(issueNumber, statusEl) {
+  statusEl.textContent = "Issueを作成しました。MRを作成中...";
+  const { body, error } = await createSubtask(issueNumber, "");
+  if (error) {
+    statusEl.textContent = `Issueを作成しましたが、MRの作成に失敗しました: ${error}`;
+    await selectIssue(issueNumber);
+    return;
+  }
+  statusEl.textContent = "IssueとMRを作成しました";
+  await openCreatedSubtask(issueNumber, body.id);
 }
 
 async function onSubmitSubtaskForm(event) {
