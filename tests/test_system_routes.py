@@ -61,12 +61,15 @@ def test_sync_self_merges_only_non_draft_prs(monkeypatch):
     merged = []
     monkeypatch.setattr(system, "merge_pull_request", lambda repo, number: merged.append(number))
     monkeypatch.setattr(system, "pull_latest", lambda path, branch: None)
+    marked = []
+    monkeypatch.setattr(system, "mark_prs_merged", lambda repo, numbers: marked.extend(numbers))
     requested = []
     monkeypatch.setattr(system, "request_command", requested.append)
 
     result = system.sync_self()
 
     assert merged == [1]
+    assert marked == [1]
     assert result == {"merged_pr_numbers": [1]}
     assert requested == [COMMAND_RESTART_SERVER, COMMAND_RESTART_WORKERS]
 

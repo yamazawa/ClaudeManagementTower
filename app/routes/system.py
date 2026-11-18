@@ -6,6 +6,7 @@ from core.config import settings
 from core.git_client import GitClientError, pull_latest
 from core.github_client import GitHubClientError, list_open_pull_requests, merge_pull_request
 from core.job_queue import cleanup_stale_workers, recover_stale_jobs
+from core.pr_sync import mark_prs_merged
 from core.supervisor_control import (
     COMMAND_RESTART_SERVER,
     COMMAND_RESTART_WORKERS,
@@ -49,6 +50,7 @@ def sync_self() -> dict:
                 merge_pull_request(settings.self_repo, pr["number"])
                 merged.append(pr["number"])
 
+        mark_prs_merged(settings.self_repo, merged)
         pull_latest(os.getcwd(), "master")
     except (GitHubClientError, GitClientError) as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc

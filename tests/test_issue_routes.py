@@ -1,9 +1,10 @@
 import pytest
+from fastapi import HTTPException
 from sqlalchemy.orm import sessionmaker
 
 from app.routes import projects
 from core.db import init_db, make_engine
-from core.models import Project
+from core.models import Project, Subtask
 
 
 @pytest.fixture
@@ -45,3 +46,31 @@ def test_get_issues_defaults_to_open(session_factory, monkeypatch):
     projects.get_issues(1)
 
     assert calls == [("owner/repo", "open")]
+
+
+def test_get_issue_subtasks_returns_db_states(session_factory):
+    with session_factory() as session:
+        session.add(
+            Subtask(
+                project_id=1,
+                github_issue_number=5,
+                title="t",
+                instruction="",
+                branch_name="b",
+                github_pr_number=9,
+                lifecycle_state="in_review",
+            )
+        )
+        session.commit()
+
+    subtasks = projects.get_issue_subtasks(1, 5)
+
+    assert [(s["lifecycle_state"], s["pr_url"]) for s in subtasks] == [
+        ("in_review", "https://github.com/owner/repo/pull/9")
+    ]
+
+
+def test_get_issue_subtasks_unknown_project(session_factory):
+    with pytest.raises(HTTPException) as error:
+        projects.get_issue_subtasks(99, 5)
+    assert error.value.status_code == 404

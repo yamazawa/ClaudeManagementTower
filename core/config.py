@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     cloudflare_access_aud: str = ""
     supervisor_control_dir: str = ".tower-control"
     supervisor_poll_interval_seconds: float = 1.0
+    pr_sync_interval_seconds: float = 5.0
     self_repo: str = "yamazawa/ClaudeManagementTower"
 
 
