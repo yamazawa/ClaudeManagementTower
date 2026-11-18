@@ -107,7 +107,7 @@ def test_list_issues_passes_state(monkeypatch, state):
             "--repo", "owner/repo",
             "--state", state,
             "--limit", str(github_client.ISSUE_LIST_LIMIT),
-            "--json", "number,title,state",
+            "--json", "number,title,state,url",
         ]
     ]
 

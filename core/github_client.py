@@ -33,7 +33,7 @@ def list_issues(repo: str, state: str = "open") -> list[dict]:
             "--repo", repo,
             "--state", state,
             "--limit", str(ISSUE_LIST_LIMIT),
-            "--json", "number,title,state",
+            "--json", "number,title,state,url",
         ]
     )
     return json.loads(output)
