@@ -580,8 +580,7 @@ function renderSubtaskDetail(s) {
     <p id="subtask-title-status" class="title-status empty"></p>
     <p id="subtask-state-line">${renderSubtaskStateLine(s)}</p>
     <form class="instruction-form" data-subtask-id="${s.id}">
-      <label for="instruction-${s.id}">指示内容</label>
-      <textarea id="instruction-${s.id}" name="instruction" placeholder="Claudeへの指示内容を入力してください">${escapeHtml(s.instruction)}</textarea>
+      <textarea id="instruction-${s.id}" name="instruction" aria-label="指示内容" placeholder="Claudeへの指示内容を入力してください">${escapeHtml(s.instruction)}</textarea>
       <button type="submit">実行する</button>
     </form>
     <p class="job-status empty" data-subtask-id="${s.id}"></p>
