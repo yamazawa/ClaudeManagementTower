@@ -2,6 +2,9 @@ import os
 import subprocess
 import sys
 import time
+from pathlib import Path
+
+from filelock import FileLock, Timeout
 
 from core.config import settings
 from core.db import init_db
@@ -15,6 +18,7 @@ from core.supervisor_control import (
 from worker.pool import WorkerPool, spawn_worker, stop_process
 
 SERVER_ARGS = ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000"]
+SINGLETON_LOCK_PATH = Path(settings.supervisor_control_dir) / "supervisor.lock"
 
 
 class Supervisor:
@@ -79,9 +83,32 @@ class Supervisor:
             self.workers.stop()
 
 
+def try_acquire_singleton_lock(path: Path) -> FileLock | None:
+    """既に起動中であれば取得できないロックを試みる
+
+    run_all.pyの多重起動（サーバー・ワーカーの奪い合い）を防ぐため、
+    取得できない場合はNoneを返す。呼び出し側はプロセスを起動せず終了する。
+    """
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock = FileLock(str(path))
+    try:
+        lock.acquire(timeout=0)
+    except Timeout:
+        return None
+    return lock
+
+
 def main() -> None:
-    init_db()
-    Supervisor().run()
+    lock = try_acquire_singleton_lock(SINGLETON_LOCK_PATH)
+    if lock is None:
+        print("[run_all] 既に起動中のため終了します")
+        return
+
+    try:
+        init_db()
+        Supervisor().run()
+    finally:
+        lock.release()
 
 
 if __name__ == "__main__":

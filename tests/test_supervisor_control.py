@@ -11,6 +11,21 @@ from core.supervisor_control import (
 )
 
 
+def test_try_acquire_singleton_lock_blocks_second_instance(tmp_path):
+    lock_path = tmp_path / "supervisor.lock"
+
+    first = run_all.try_acquire_singleton_lock(lock_path)
+    second = run_all.try_acquire_singleton_lock(lock_path)
+
+    assert first is not None
+    assert second is None
+
+    first.release()
+    third = run_all.try_acquire_singleton_lock(lock_path)
+    assert third is not None
+    third.release()
+
+
 def test_request_then_take_returns_command_once(tmp_path):
     control_dir = str(tmp_path / "control")
     request_command(COMMAND_RESTART_SERVER, control_dir)
