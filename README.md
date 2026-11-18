@@ -47,6 +47,20 @@ python -u run_all.py
 ワーカーの起動・再起動時は、登録済みで稼働中のワーカー（取り残されたプロセスを含む）を停止してから起動する。
 - ワーカー掃除：オフラインのワーカー行を削除し、停滞したジョブを要確認にする。
 
+### 自動復旧（死活監視）
+
+`run_all.py`の停止・再起動忘れに備え、タスクスケジューラで\
+`scripts/watchdog.ps1`を5分おきに実行する運用にしている。\
+`/health`への応答が無ければ`run_all.py`を自動起動する。\
+`run_all.py`自身が多重起動防止のロックを持つため、\
+既に起動中の場合に重ねて実行しても安全。
+
+タスク登録例（現在のユーザー権限で、5分おきに実行）。
+
+```
+schtasks /create /tn "ClaudeTowerWatchdog" /sc minute /mo 5 /rl LIMITED /f /tr "powershell.exe -NoProfile -WindowStyle Hidden -File C:\git\ClaudeManagementTower\scripts\watchdog.ps1"
+```
+
 ### 個別起動（デバッグ用途）
 
 サーバー・ワーカーのどちらかだけを再起動したい場合は個別に起動できる。\
