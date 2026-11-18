@@ -481,6 +481,7 @@ Issueを閉じるボタンを並べる。
 
 収まらない場合は末尾を...で省略する。
 全文はツールチップで表示する。 */
+#repo-title,
 #issue-title,
 #subtask-title {
   min-width: 0;

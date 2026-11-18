@@ -306,7 +306,7 @@ function renderBreadcrumb() {
   el.innerHTML = `
     <a href="#" id="breadcrumb-projects">リポジトリ一覧</a>
     <span class="breadcrumb-sep">&rsaquo;</span>
-    <span class="breadcrumb-current">${currentProjectName}</span>
+    <span class="breadcrumb-current">${escapeHtml(currentProjectName)}</span>
   `;
   document
     .getElementById("breadcrumb-projects")
@@ -345,8 +345,8 @@ async function init() {
     for (const project of projects) {
       const li = document.createElement("li");
       li.className = "project-item";
-      li.innerHTML = `<span class="project-name">${project.name}</span><span class="project-branch">${project.default_branch}</span>`;
-      li.addEventListener("click", () => selectProject(project.id, project.name));
+      li.innerHTML = `<span class="project-name">${escapeHtml(project.display_name)}</span><span class="project-branch">${project.default_branch}</span>`;
+      li.addEventListener("click", () => selectProject(project));
       listEl.appendChild(li);
     }
   }
@@ -354,13 +354,25 @@ async function init() {
   pollSubtaskStates();
 }
 
-async function selectProject(projectId, projectName) {
-  currentProjectId = projectId;
-  currentProjectName = projectName;
+async function selectProject(project) {
+  currentProjectId = project.id;
+  currentProjectName = project.display_name;
   document.getElementById("project-view").hidden = true;
   document.getElementById("issue-view").hidden = false;
   renderBreadcrumb();
+  renderRepoHeading(project);
   await loadIssues();
+}
+
+/**
+ * リポジトリ見出しの表示
+ *
+ * 「Repo #番号 表示名」とし、番号部分はGitHubのリポジトリページへのリンクにする。
+ */
+function renderRepoHeading(project) {
+  const label = project.repo_number ? `Repo #${project.repo_number}` : "Repo";
+  document.getElementById("repo-heading").innerHTML =
+    `${renderTitleNumber(label, project.repo_url)}<span id="repo-title">${escapeHtml(project.display_name)}</span>`;
 }
 
 async function loadIssues() {
