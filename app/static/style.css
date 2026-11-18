@@ -482,11 +482,12 @@ Issueを閉じるボタンを並べる。
   white-space: nowrap;
 }
 
-/* Issueタイトルの1行表示
+/* Issue・MRタイトルの1行表示
 
 収まらない場合は末尾を...で省略する。
 全文はツールチップで表示する。 */
-#issue-title {
+#issue-title,
+#subtask-title {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
