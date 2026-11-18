@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from core.db import SessionLocal
 from core.github_client import (
     GitHubClientError,
+    close_issue,
     create_issue,
     edit_issue_title,
     get_issue,
@@ -14,6 +15,9 @@ from core.github_client import (
 from core.models import ExecutionJob, Project, Report, Subtask
 
 router = APIRouter(prefix="/api/projects")
+
+# Issueクローズを妨げる未解決MRのlifecycle_state
+UNRESOLVED_LIFECYCLE_STATES = ("draft", "in_review")
 
 
 def _latest_job_summary(session, subtask_id: int) -> dict | None:
@@ -130,6 +134,29 @@ def get_issue_detail(project_id: int, number: int):
         issue = get_issue(project.github_repo, number)
         issue["subtasks"] = _subtask_summaries(session, project, number)
         return issue
+
+
+@router.post("/{project_id}/issues/{number}/close")
+def close_project_issue(project_id: int, number: int):
+    """Issueをクローズする
+
+    未解決（Draft・レビュー中）のMRが残っている場合は拒否する。
+    """
+    with SessionLocal() as session:
+        project = _get_project_or_404(session, project_id)
+        unresolved = (
+            session.query(Subtask)
+            .filter_by(project_id=project.id, github_issue_number=number)
+            .filter(Subtask.lifecycle_state.in_(UNRESOLVED_LIFECYCLE_STATES))
+            .count()
+        )
+        if unresolved:
+            raise HTTPException(status_code=409, detail="未解決のMRが残っています")
+        try:
+            close_issue(project.github_repo, number)
+        except GitHubClientError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        return {"number": number, "state": "CLOSED"}
 
 
 @router.get("/{project_id}/issues/{number}/subtasks")

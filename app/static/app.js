@@ -1,6 +1,7 @@
 let currentProjectId = null;
 let currentProjectName = null;
 let currentIssueNumber = null;
+let currentIssueState = null;
 let currentSubtasks = [];
 let currentSelectedSubtaskId = null;
 
@@ -392,6 +393,42 @@ function renderSubtaskList() {
       row.addEventListener("click", () => selectSubtask(Number(row.dataset.subtaskId)))
     );
   highlightSelectedSubtaskRow();
+  updateCloseIssueButton();
+}
+
+/**
+ * Issueを閉じるボタンの表示を切り替える
+ *
+ * Issueが未クローズで、未解決のMRが無い場合のみ表示する。
+ */
+function updateCloseIssueButton() {
+  const button = document.getElementById("close-issue-button");
+  if (!button) return;
+  const unresolvedStates = SUBTASK_FILTER_STATES.unresolved;
+  const hasUnresolved = currentSubtasks.some((s) => unresolvedStates.includes(s.lifecycle_state));
+  button.hidden = currentIssueState !== "OPEN" || hasUnresolved;
+}
+
+async function onClickCloseIssue() {
+  if (!confirm(`Issue #${currentIssueNumber} を閉じますか？`)) return;
+  const button = document.getElementById("close-issue-button");
+  const statusEl = document.getElementById("issue-close-status");
+  button.disabled = true;
+  statusEl.textContent = "クローズ中...";
+  const response = await fetch(
+    `/api/projects/${currentProjectId}/issues/${currentIssueNumber}/close`,
+    { method: "POST" }
+  );
+  button.disabled = false;
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({}));
+    statusEl.textContent = `失敗しました: ${error.detail || response.statusText}`;
+    return;
+  }
+  currentIssueState = "CLOSED";
+  updateCloseIssueButton();
+  statusEl.textContent = "Issueを閉じました";
+  await loadIssues();
 }
 
 async function saveIssueTitle(number, title) {
@@ -453,14 +490,17 @@ async function refreshIssueDetail() {
   currentSubtasks = issue.subtasks;
 
   document.getElementById("issue-heading").innerHTML =
-    `<span class="title-number">#${issue.number}</span><span id="issue-title">${escapeHtml(issue.title)}</span>`;
+    `<span class="title-number">Issue #${issue.number}</span><span id="issue-title">${escapeHtml(issue.title)}</span>`;
   document.getElementById("subtask-list-body").innerHTML = `
     <p id="issue-title-status" class="title-status empty"></p>
-    <p>
+    <p class="issue-actions">
+      <button type="button" id="close-issue-button" hidden>Issueを閉じる</button>
       <a href="${issue.url}" target="_blank" rel="noopener">GitHubで開く</a>
     </p>
-    <p>${(issue.body || "").replace(/\n/g, "<br>")}</p>
+    <p id="issue-close-status" class="title-status empty"></p>
   `;
+  currentIssueState = issue.state;
+  document.getElementById("close-issue-button").addEventListener("click", onClickCloseIssue);
   resetSubtaskForm();
   document.getElementById("subtask-panel").hidden = false;
 
