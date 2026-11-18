@@ -57,6 +57,10 @@ def edit_issue_title(repo: str, number: int, title: str) -> None:
     _run_gh(["issue", "edit", str(number), "--repo", repo, "--title", title])
 
 
+def close_issue(repo: str, number: int) -> None:
+    _run_gh(["issue", "close", str(number), "--repo", repo])
+
+
 def edit_pr_title(repo: str, number: int, title: str) -> None:
     _run_gh(["pr", "edit", str(number), "--repo", repo, "--title", title])
 
