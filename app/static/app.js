@@ -901,8 +901,27 @@ async function onSubmitIssueForm(event) {
   }
 
   form.reset();
-  statusEl.textContent = "作成しました";
+  const { number } = await response.json();
   await loadIssues();
+  await createDefaultSubtask(number, statusEl);
+}
+
+/**
+ * Issue作成直後に規定値のMRを作成して開く
+ *
+ * MR固有名は空欄で作成し、サーバー側で連番を割り当てる。
+ * MR作成に失敗してもIssueは作成済のため、Issueを開いて結果を表示する。
+ */
+async function createDefaultSubtask(issueNumber, statusEl) {
+  statusEl.textContent = "Issueを作成しました。MRを作成中...";
+  const { body, error } = await createSubtask(issueNumber, "");
+  if (error) {
+    statusEl.textContent = `Issueを作成しましたが、MRの作成に失敗しました: ${error}`;
+    await selectIssue(issueNumber);
+    return;
+  }
+  statusEl.textContent = "IssueとMRを作成しました";
+  await openCreatedSubtask(issueNumber, body.id);
 }
 
 async function onSubmitSubtaskForm(event) {
@@ -914,24 +933,46 @@ async function onSubmitSubtaskForm(event) {
   statusEl.textContent = "作成中...";
   form.querySelector("button").disabled = true;
 
+  const issueNumber = currentIssueNumber;
+  const { body, error } = await createSubtask(issueNumber, title);
+  if (error) {
+    statusEl.textContent = `失敗しました: ${error}`;
+    form.querySelector("button").disabled = false;
+    return;
+  }
+
+  await openCreatedSubtask(issueNumber, body.id);
+}
+
+/**
+ * MRの作成
+ *
+ * MR固有名が空欄の場合はサーバー側で連番を割り当てる。
+ * 成功時は応答本文、失敗時はエラー文言を返す。
+ */
+async function createSubtask(issueNumber, title) {
   const response = await fetch("/api/subtasks", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       project_id: currentProjectId,
-      github_issue_number: currentIssueNumber,
+      github_issue_number: issueNumber,
       title,
     }),
   });
+  const body = await response.json().catch(() => ({}));
+  return response.ok ? { body } : { error: body.detail || response.statusText };
+}
 
-  if (!response.ok) {
-    const error = await response.json();
-    statusEl.textContent = `失敗しました: ${error.detail}`;
-    form.querySelector("button").disabled = false;
-    return;
-  }
-
-  await selectIssue(currentIssueNumber);
+/**
+ * 作成したMRを開いて指示内容の入力欄にフォーカスする
+ *
+ * Issueを選択し直してMR一覧を再取得してから、作成したMRを選択する。
+ */
+async function openCreatedSubtask(issueNumber, subtaskId) {
+  await selectIssue(issueNumber);
+  selectSubtask(subtaskId);
+  document.getElementById(`instruction-${subtaskId}`)?.focus();
 }
 
 async function startExecution(subtaskId, instruction, button) {
