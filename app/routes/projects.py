@@ -12,6 +12,7 @@ from core.github_client import (
     edit_issue_title,
     get_issue,
     list_issues,
+    reopen_issue,
 )
 from core.models import ExecutionJob, Project, Report, Subtask
 from core.repo_catalog import describe_repo
@@ -183,6 +184,17 @@ def close_project_issue(project_id: int, number: int):
         except GitHubClientError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
         return {"number": number, "state": "CLOSED"}
+
+
+@router.post("/{project_id}/issues/{number}/reopen")
+def reopen_project_issue(project_id: int, number: int):
+    with SessionLocal() as session:
+        project = _get_project_or_404(session, project_id)
+        try:
+            reopen_issue(project.github_repo, number)
+        except GitHubClientError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        return {"number": number, "state": "OPEN"}
 
 
 @router.get("/{project_id}/issues/{number}/subtasks")
