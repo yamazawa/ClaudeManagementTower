@@ -482,6 +482,17 @@ Issueを閉じるボタンとGitHubリンクを横並びにする。
   white-space: nowrap;
 }
 
+/* Issueタイトルの1行表示
+
+収まらない場合は末尾を...で省略する。
+全文はツールチップで表示する。 */
+#issue-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .title-input {
   font: inherit;
   font-size: 16px;
