@@ -5,6 +5,7 @@
   --line: #dce3ec;
   --accent: #335eea;
   --soft: #edf2ff;
+  --warning: #b45309;
 }
 
 * {
@@ -379,6 +380,15 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
 
 .subtask-row-title {
   font-size: 13.5px;
+}
+
+/* 命名規則に沿っていないMR名 */
+.mr-title-warning {
+  color: var(--warning);
+}
+
+.mr-title-warning::before {
+  content: "\26A0  ";
 }
 
 .subtask-row-meta {
