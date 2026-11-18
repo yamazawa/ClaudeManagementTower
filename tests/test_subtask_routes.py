@@ -1,5 +1,66 @@
+import pytest
+from sqlalchemy.orm import sessionmaker
+
 from app.routes import subtasks
-from core.models import Project
+from core.db import init_db, make_engine
+from core.models import Project, Subtask
+
+
+@pytest.fixture
+def session_factory(tmp_path, monkeypatch):
+    engine = make_engine(str(tmp_path / "test.db"))
+    init_db(bind=engine)
+    factory = sessionmaker(bind=engine)
+    monkeypatch.setattr(subtasks, "SessionLocal", factory)
+    with factory() as session:
+        session.add(_project())
+        session.commit()
+    return factory
+
+
+@pytest.fixture
+def created(monkeypatch):
+    calls = []
+
+    def fake_create(project, issue_number, title, instruction, slug_suffix, slug_source=None):
+        calls.append({"title": title, "slug_source": slug_source})
+        return f"issue-{issue_number}-{slug_suffix}", {"number": 10 + slug_suffix, "url": "u"}
+
+    monkeypatch.setattr(subtasks, "_create_branch_and_draft_pr", fake_create)
+    monkeypatch.setattr(subtasks, "get_issue", lambda repo, number: {"title": "あいうえお"})
+    return calls
+
+
+def _create(title):
+    return subtasks.create_subtask(
+        subtasks.CreateSubtaskRequest(project_id=1, github_issue_number=5, title=title)
+    )
+
+
+def test_create_subtask_composes_issue_title(session_factory, created):
+    result = _create("かきくけこ")
+
+    assert result["title"] == "あいうえおーかきくけこ"
+    assert created[0]["slug_source"] == "かきくけこ"
+
+
+def test_create_subtask_with_blank_title_uses_free_number(session_factory, created):
+    with session_factory() as session:
+        session.add(
+            Subtask(
+                project_id=1,
+                github_issue_number=5,
+                title="あいうえおー①",
+                instruction="",
+                branch_name="issue-5-x",
+                lifecycle_state="draft",
+            )
+        )
+        session.commit()
+
+    result = _create("  ")
+
+    assert result["title"] == "あいうえおー②"
 
 
 def _project():
