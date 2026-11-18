@@ -10,11 +10,23 @@ from core.git_client import (
     push_branch,
     slugify,
 )
-from core.github_client import GitHubClientError, create_draft_pr, edit_pr_title, get_issue
+from core.github_client import (
+    GitHubClientError,
+    close_pr,
+    create_draft_pr,
+    edit_pr_title,
+    get_issue,
+    get_pr_state,
+    reopen_pr,
+)
 from core.models import ExecutionJob, Project, Subtask
 from core.mr_naming import compose_mr_title, next_default_suffix
+from core.pr_sync import lifecycle_state_from_pr
 
 router = APIRouter(prefix="/api/subtasks")
+
+# クローズ可能な（未解決の）MRのlifecycle_state
+OPEN_LIFECYCLE_STATES = ("draft", "in_review")
 
 
 class CreateSubtaskRequest(BaseModel):
@@ -133,6 +145,59 @@ def update_subtask_title(subtask_id: int, payload: UpdateSubtaskTitleRequest):
         subtask.title = title
         session.commit()
         return {"id": subtask.id, "title": subtask.title}
+
+
+def _get_subtask_and_project(session, subtask_id: int) -> tuple[Subtask, Project]:
+    subtask = session.get(Subtask, subtask_id)
+    if subtask is None:
+        raise HTTPException(status_code=404, detail="subtask not found")
+    return subtask, session.get(Project, subtask.project_id)
+
+
+@router.post("/{subtask_id}/close")
+def close_subtask(subtask_id: int):
+    """MRをクローズする
+
+    マージ済のMRは閉じられないため拒否する。
+    """
+    with SessionLocal() as session:
+        subtask, project = _get_subtask_and_project(session, subtask_id)
+        if subtask.lifecycle_state not in OPEN_LIFECYCLE_STATES:
+            raise HTTPException(status_code=409, detail="未解決のMRではありません")
+        try:
+            if subtask.github_pr_number is not None:
+                close_pr(project.github_repo, subtask.github_pr_number)
+        except GitHubClientError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        subtask.lifecycle_state = "closed"
+        session.commit()
+        return {"id": subtask.id, "lifecycle_state": subtask.lifecycle_state}
+
+
+def _reopen_pr_and_get_state(project: Project, pr_number: int | None) -> str:
+    if pr_number is None:
+        return "draft"
+    reopen_pr(project.github_repo, pr_number)
+    return lifecycle_state_from_pr(get_pr_state(project.github_repo, pr_number))
+
+
+@router.post("/{subtask_id}/reopen")
+def reopen_subtask(subtask_id: int):
+    """クローズ済のMRを再開する
+
+    再開後の状態はPRのDraft有無から決める。
+    """
+    with SessionLocal() as session:
+        subtask, project = _get_subtask_and_project(session, subtask_id)
+        if subtask.lifecycle_state != "closed":
+            raise HTTPException(status_code=409, detail="クローズ済のMRではありません")
+        try:
+            new_state = _reopen_pr_and_get_state(project, subtask.github_pr_number)
+        except GitHubClientError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        subtask.lifecycle_state = new_state
+        session.commit()
+        return {"id": subtask.id, "lifecycle_state": subtask.lifecycle_state}
 
 
 class ExecuteSubtaskRequest(BaseModel):

@@ -61,6 +61,25 @@ def close_issue(repo: str, number: int) -> None:
     _run_gh(["issue", "close", str(number), "--repo", repo])
 
 
+def reopen_issue(repo: str, number: int) -> None:
+    _run_gh(["issue", "reopen", str(number), "--repo", repo])
+
+
+def close_pr(repo: str, number: int) -> None:
+    _run_gh(["pr", "close", str(number), "--repo", repo])
+
+
+def reopen_pr(repo: str, number: int) -> None:
+    _run_gh(["pr", "reopen", str(number), "--repo", repo])
+
+
+def get_pr_state(repo: str, number: int) -> dict:
+    output = _run_gh(
+        ["pr", "view", str(number), "--repo", repo, "--json", "number,isDraft,state,mergedAt"]
+    )
+    return json.loads(output)
+
+
 def edit_pr_title(repo: str, number: int, title: str) -> None:
     _run_gh(["pr", "edit", str(number), "--repo", repo, "--title", title])
 
