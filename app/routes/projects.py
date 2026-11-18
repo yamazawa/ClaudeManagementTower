@@ -2,6 +2,7 @@ from typing import Literal
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import case, func
 
 from core.db import SessionLocal
 from core.github_client import (
@@ -14,11 +15,16 @@ from core.github_client import (
     reopen_issue,
 )
 from core.models import ExecutionJob, Project, Report, Subtask
+from core.repo_catalog import describe_repo
 
 router = APIRouter(prefix="/api/projects")
 
 # Issueクローズを妨げる未解決MRのlifecycle_state
 UNRESOLVED_LIFECYCLE_STATES = ("draft", "in_review")
+# Issue一覧のMR数で解決済とみなすlifecycle_state
+RESOLVED_LIFECYCLE_STATE = "merged"
+# Issue一覧のMR数から除外するlifecycle_state（マージされずクローズ）
+UNCOUNTED_LIFECYCLE_STATE = "closed"
 
 
 def _latest_job_summary(session, subtask_id: int) -> dict | None:
@@ -49,6 +55,7 @@ def get_projects():
                 "name": p.name,
                 "github_repo": p.github_repo,
                 "default_branch": p.default_branch,
+                **describe_repo(p.github_repo, p.name),
             }
             for p in projects
         ]
@@ -60,7 +67,26 @@ def get_issues(project_id: int, state: Literal["open", "closed", "all"] = "open"
         project = session.get(Project, project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="project not found")
-        return list_issues(project.github_repo, state)
+        issues = list_issues(project.github_repo, state)
+        counts = _mr_counts_by_issue(session, project.id)
+        empty = {"resolved": 0, "total": 0}
+        return [{**i, "mr_counts": counts.get(i["number"], empty)} for i in issues]
+
+
+def _mr_counts_by_issue(session, project_id: int) -> dict[int, dict]:
+    """Issueごとの解決済MR数・MR総数
+
+    マージされずクローズされたMRはどちらにも数えない。
+    """
+    is_resolved = case((Subtask.lifecycle_state == RESOLVED_LIFECYCLE_STATE, 1), else_=0)
+    rows = (
+        session.query(Subtask.github_issue_number, func.sum(is_resolved), func.count())
+        .filter_by(project_id=project_id)
+        .filter(Subtask.lifecycle_state != UNCOUNTED_LIFECYCLE_STATE)
+        .group_by(Subtask.github_issue_number)
+        .all()
+    )
+    return {number: {"resolved": resolved, "total": total} for number, resolved, total in rows}
 
 
 @router.post("/{project_id}/issues")
