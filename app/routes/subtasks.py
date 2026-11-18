@@ -22,9 +22,13 @@ from core.github_client import (
 from core.lifecycle import LifecycleState
 from core.models import ExecutionJob, Project, Subtask
 from core.mr_naming import compose_mr_title, next_default_suffix
+from core.pr_merger import PrMergeError, merge_pr_with_update
 from core.pr_sync import lifecycle_state_from_pr
 
 router = APIRouter(prefix="/api/subtasks")
+
+# 実行中とみなすジョブの状態（実行中はマージさせない）
+ACTIVE_JOB_STATUSES = ("queued", "running")
 
 
 class CreateSubtaskRequest(BaseModel):
@@ -194,6 +198,57 @@ def reopen_subtask(subtask_id: int):
         except GitHubClientError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
         subtask.lifecycle_state = new_state
+        session.commit()
+        return {"id": subtask.id, "lifecycle_state": subtask.lifecycle_state}
+
+
+def _has_active_job(session, subtask_id: int) -> bool:
+    return (
+        session.query(ExecutionJob)
+        .filter_by(subtask_id=subtask_id)
+        .filter(ExecutionJob.status.in_(ACTIVE_JOB_STATUSES))
+        .first()
+        is not None
+    )
+
+
+def _ensure_mergeable(session, subtask: Subtask) -> None:
+    if subtask.lifecycle_state != LifecycleState.RESOLVED:
+        raise HTTPException(status_code=409, detail="ResolvedのMRではありません")
+    if subtask.github_pr_number is None:
+        raise HTTPException(status_code=409, detail="PRが作成されていません")
+    if _has_active_job(session, subtask.id):
+        raise HTTPException(status_code=409, detail="実装の実行中はマージできません")
+
+
+def _pr_refs(subtask: Subtask, project: Project) -> dict:
+    return {
+        "number": subtask.github_pr_number,
+        "headRefName": subtask.branch_name,
+        "baseRefName": project.default_branch,
+    }
+
+
+@router.post("/{subtask_id}/merge")
+def merge_subtask(subtask_id: int):
+    """MRをマージする
+
+    Resolvedかつ実装の実行中でない場合のみ受け付ける。
+    競合時はベースブランチを取り込み、Claudeで競合解決してからマージする。
+    """
+    with SessionLocal() as session:
+        subtask, project = _get_subtask_and_project(session, subtask_id)
+        _ensure_mergeable(session, subtask)
+        try:
+            merge_pr_with_update(
+                project.github_repo,
+                project.repo_path,
+                settings.worktree_base_dir,
+                _pr_refs(subtask, project),
+            )
+        except (GitClientError, GitHubClientError, PrMergeError) as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
+        subtask.lifecycle_state = LifecycleState.MERGED
         session.commit()
         return {"id": subtask.id, "lifecycle_state": subtask.lifecycle_state}
 
