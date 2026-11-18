@@ -983,7 +983,18 @@ async function createSubtask(issueNumber, title) {
 async function openCreatedSubtask(issueNumber, subtaskId) {
   await selectIssue(issueNumber);
   selectSubtask(subtaskId);
-  document.getElementById(`instruction-${subtaskId}`)?.focus();
+  focusWithScroll(document.getElementById(`instruction-${subtaskId}`));
+}
+
+/**
+ * 入力欄にフォーカスし、その位置まで画面をスクロールする
+ *
+ * ブラウザ既定のスクロールは最小限で欄が見切れるため、欄を画面中央に寄せる。
+ */
+function focusWithScroll(el) {
+  if (!el) return;
+  el.focus({ preventScroll: true });
+  el.scrollIntoView({ block: "center", behavior: "smooth" });
 }
 
 async function startExecution(subtaskId, instruction, button) {
