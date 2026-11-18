@@ -30,8 +30,8 @@ def _create_branch_and_draft_pr(
     instruction: str,
     slug_suffix: int,
 ) -> tuple[str, dict]:
-    slug = slugify(title) or f"subtask-{slug_suffix}"
-    branch_name = f"issue-{issue_number}-{slug}"
+    slug = slugify(title) or "subtask"
+    branch_name = f"issue-{issue_number}-{slug}-{slug_suffix}"
     worktree_path = f"{settings.worktree_base_dir}/{branch_name}"
 
     create_worktree(project.repo_path, branch_name, project.default_branch, worktree_path)
