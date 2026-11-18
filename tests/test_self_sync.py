@@ -11,6 +11,7 @@ from core.supervisor_control import COMMAND_RESTART_SERVER, COMMAND_RESTART_WORK
 def requested(monkeypatch, tmp_path):
     monkeypatch.setattr(self_sync.settings, "supervisor_control_dir", str(tmp_path))
     monkeypatch.setattr(self_sync, "pull_latest", lambda path, branch: None)
+    monkeypatch.setattr(self_sync, "mark_prs_merged", lambda repo, numbers: None)
     commands = []
     monkeypatch.setattr(self_sync, "request_command", commands.append)
     return commands
@@ -32,6 +33,22 @@ def test_merges_only_non_draft_prs_and_restarts(monkeypatch, requested):
     assert merged == [1]
     assert read_result() == {"status": "done", "merged_pr_numbers": [1], "failed_prs": []}
     assert requested == [COMMAND_RESTART_SERVER, COMMAND_RESTART_WORKERS]
+
+
+def test_marks_only_successfully_merged_prs(monkeypatch, requested):
+    _prs(monkeypatch, [{"number": 1, "isDraft": False}, {"number": 2, "isDraft": False}])
+
+    def merge(repo, path, base, pr):
+        if pr["number"] == 2:
+            raise PrMergeError("競合が解消されていません")
+
+    monkeypatch.setattr(self_sync, "merge_pr_with_update", merge)
+    marked = []
+    monkeypatch.setattr(self_sync, "mark_prs_merged", lambda repo, numbers: marked.extend(numbers))
+
+    run_self_sync("repo")
+
+    assert marked == [1]
 
 
 def test_continues_after_pr_failure(monkeypatch, requested):

@@ -13,6 +13,7 @@ from core.config import settings
 from core.git_client import GitClientError, pull_latest
 from core.github_client import GitHubClientError, list_open_pull_requests
 from core.pr_merger import PrMergeError, merge_pr_with_update
+from core.pr_sync import mark_prs_merged
 from core.supervisor_control import COMMAND_RESTART_SERVER, COMMAND_RESTART_WORKERS, request_command
 
 STATUS_RUNNING = "running"
@@ -71,6 +72,8 @@ def run_self_sync(repo_path: str) -> None:
     try:
         prs = [pr for pr in list_open_pull_requests(settings.self_repo) if not pr["isDraft"]]
         results = [_merge_one(repo_path, pr) for pr in prs]
+        merged_pr_numbers = [r["number"] for r in results if r["error"] is None]
+        mark_prs_merged(settings.self_repo, merged_pr_numbers)
         pull_latest(repo_path, "master")
     except (GitHubClientError, GitClientError) as exc:
         _write_result({"status": STATUS_FAILED, "error": str(exc)})
@@ -79,7 +82,7 @@ def run_self_sync(repo_path: str) -> None:
     _write_result(
         {
             "status": STATUS_DONE,
-            "merged_pr_numbers": [r["number"] for r in results if r["error"] is None],
+            "merged_pr_numbers": merged_pr_numbers,
             "failed_prs": [r for r in results if r["error"] is not None],
         }
     )

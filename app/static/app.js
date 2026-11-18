@@ -20,6 +20,9 @@ const SUBTASK_FILTER_STATES = {
   all: null,
 };
 
+// MR状態の自動更新間隔（サーバー側のPR同期間隔と合わせて10秒以内に反映させる）
+const SUBTASK_POLL_MS = 3000;
+
 const WORKER_STATE_LABELS = {
   idle: "待機中",
   busy: "実行中",
@@ -326,6 +329,7 @@ async function init() {
     }
   }
   pollWorkers();
+  pollSubtaskStates();
 }
 
 async function selectProject(projectId, projectName) {
@@ -444,8 +448,6 @@ async function refreshIssueDetail() {
     <p id="issue-title-status" class="title-status empty"></p>
     <p>
       <a href="${issue.url}" target="_blank" rel="noopener">GitHubで開く</a>
-      <button id="sync-button" type="button">同期</button>
-      <span id="sync-status" class="empty"></span>
     </p>
     <p>${(issue.body || "").replace(/\n/g, "<br>")}</p>
     <form id="subtask-form">
@@ -459,7 +461,6 @@ async function refreshIssueDetail() {
   document
     .getElementById("subtask-form")
     .addEventListener("submit", onSubmitSubtaskForm);
-  document.getElementById("sync-button").addEventListener("click", onClickSync);
   makeTitleEditable(
     document.getElementById("issue-title"),
     document.getElementById("issue-title-status"),
@@ -475,6 +476,14 @@ function selectSubtask(subtaskId) {
   renderSubtaskDetail(subtask);
 }
 
+function renderSubtaskStateLine(s) {
+  const prLink = s.pr_url
+    ? ` <a href="${s.pr_url}" target="_blank" rel="noopener">PR #${s.github_pr_number}</a>`
+    : "";
+  const label = LIFECYCLE_LABELS[s.lifecycle_state] || s.lifecycle_state;
+  return `状態: ${label}${prLink}`;
+}
+
 function renderSubtaskDetail(s) {
   const el = document.getElementById("subtask-detail-body");
   if (!s) {
@@ -482,15 +491,10 @@ function renderSubtaskDetail(s) {
     return;
   }
 
-  const prLink = s.pr_url
-    ? ` <a href="${s.pr_url}" target="_blank" rel="noopener">PR #${s.github_pr_number}</a>`
-    : "";
-  const label = LIFECYCLE_LABELS[s.lifecycle_state] || s.lifecycle_state;
-
   el.innerHTML = `
     <h3><span id="subtask-title">${escapeHtml(s.title)}</span></h3>
     <p id="subtask-title-status" class="title-status empty"></p>
-    <p>状態: ${label}${prLink}</p>
+    <p id="subtask-state-line">${renderSubtaskStateLine(s)}</p>
     <form class="instruction-form" data-subtask-id="${s.id}">
       <label for="instruction-${s.id}">指示内容</label>
       <textarea id="instruction-${s.id}" name="instruction" placeholder="Claudeへの指示内容を入力してください">${escapeHtml(s.instruction)}</textarea>
@@ -531,22 +535,36 @@ function restoreJobState(s) {
   }
 }
 
-async function onClickSync(event) {
-  const button = event.target;
-  button.disabled = true;
-  document.getElementById("sync-status").textContent = "同期中...";
-
-  const result = await fetch(`/api/projects/${currentProjectId}/sync`, {
-    method: "POST",
-  }).then((r) => r.json());
-
-  const keepSelected = currentSelectedSubtaskId;
-  await refreshIssueDetail();
-  document.getElementById("sync-status").textContent =
-    result.updated.length === 0 ? "変更なし" : `${result.updated.length}件更新`;
-  if (keepSelected !== null) {
-    selectSubtask(keepSelected);
+async function pollSubtaskStates() {
+  try {
+    if (!document.hidden) await refreshSubtaskStates();
+  } catch (error) {
+    // サーバー再起動中などで取得に失敗しても自動更新を継続する
   }
+  setTimeout(pollSubtaskStates, SUBTASK_POLL_MS);
+}
+
+/**
+ * 表示中IssueのMR一覧の状態を再取得して反映する
+ *
+ * 変化があった場合のみ、一覧と詳細ペインの状態表示を更新する。
+ * 入力中の指示内容などを消さないよう、詳細ペイン全体は再描画しない。
+ */
+async function refreshSubtaskStates() {
+  const projectId = currentProjectId;
+  const issueNumber = currentIssueNumber;
+  if (projectId === null || issueNumber === null) return;
+  const subtasks = await fetch(
+    `/api/projects/${projectId}/issues/${issueNumber}/subtasks`
+  ).then((r) => r.json());
+  if (projectId !== currentProjectId || issueNumber !== currentIssueNumber) return;
+  if (JSON.stringify(subtasks) === JSON.stringify(currentSubtasks)) return;
+
+  currentSubtasks = subtasks;
+  renderSubtaskList();
+  const selected = currentSubtasks.find((s) => s.id === currentSelectedSubtaskId);
+  const stateLine = document.getElementById("subtask-state-line");
+  if (selected && stateLine) stateLine.innerHTML = renderSubtaskStateLine(selected);
 }
 
 async function onSubmitIssueForm(event) {
@@ -667,6 +685,9 @@ async function showReport(jobId, subtaskId) {
 document.getElementById("issue-create-form").addEventListener("submit", onSubmitIssueForm);
 document.getElementById("issue-filter").addEventListener("change", loadIssues);
 document.getElementById("subtask-filter").addEventListener("change", renderSubtaskList);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) refreshSubtaskStates().catch(() => {});
+});
 bindSystemControls();
 
 init();
