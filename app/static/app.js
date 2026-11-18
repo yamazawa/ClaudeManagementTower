@@ -453,7 +453,7 @@ async function refreshIssueDetail() {
   currentSubtasks = issue.subtasks;
 
   document.getElementById("issue-heading").innerHTML =
-    `<span class="title-number">#${issue.number}</span><span id="issue-title">${escapeHtml(issue.title)}</span>`;
+    `<span class="title-number">Issue #${issue.number}</span><span id="issue-title">${escapeHtml(issue.title)}</span>`;
   document.getElementById("subtask-list-body").innerHTML = `
     <p id="issue-title-status" class="title-status empty"></p>
     <p>
