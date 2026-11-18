@@ -15,10 +15,12 @@ from core.github_client import (
     close_pr,
     create_draft_pr,
     edit_pr_title,
+    get_issue,
     get_pr_state,
     reopen_pr,
 )
 from core.models import ExecutionJob, Project, Subtask
+from core.mr_naming import compose_mr_title, next_default_suffix
 from core.pr_sync import lifecycle_state_from_pr
 
 router = APIRouter(prefix="/api/subtasks")
@@ -30,7 +32,8 @@ OPEN_LIFECYCLE_STATES = ("draft", "in_review")
 class CreateSubtaskRequest(BaseModel):
     project_id: int
     github_issue_number: int
-    title: str
+    # MR固有名（MR名のIssue名より後ろの部分）。空欄なら連番を割り当てる
+    title: str = ""
     instruction: str = ""
 
 
@@ -40,8 +43,9 @@ def _create_branch_and_draft_pr(
     title: str,
     instruction: str,
     slug_suffix: int,
+    slug_source: str | None = None,
 ) -> tuple[str, dict]:
-    slug = slugify(title) or "subtask"
+    slug = slugify(slug_source or title) or "subtask"
     branch_name = f"issue-{issue_number}-{slug}-{slug_suffix}"
     worktree_path = f"{settings.worktree_base_dir}/{branch_name}"
 
@@ -65,22 +69,25 @@ def create_subtask(payload: CreateSubtaskRequest):
         if project is None:
             raise HTTPException(status_code=404, detail="project not found")
 
-        existing_count = (
-            session.query(Subtask)
-            .filter_by(
+        existing_titles = [
+            s.title
+            for s in session.query(Subtask).filter_by(
                 project_id=project.id,
                 github_issue_number=payload.github_issue_number,
             )
-            .count()
-        )
+        ]
 
         try:
+            issue_title = get_issue(project.github_repo, payload.github_issue_number)["title"]
+            suffix = payload.title.strip() or next_default_suffix(issue_title, existing_titles)
+            title = compose_mr_title(issue_title, suffix)
             branch_name, pr = _create_branch_and_draft_pr(
                 project,
                 payload.github_issue_number,
-                payload.title,
+                title,
                 payload.instruction,
-                existing_count + 1,
+                len(existing_titles) + 1,
+                slug_source=suffix,
             )
         except (GitClientError, GitHubClientError) as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -88,7 +95,7 @@ def create_subtask(payload: CreateSubtaskRequest):
         subtask = Subtask(
             project_id=project.id,
             github_issue_number=payload.github_issue_number,
-            title=payload.title,
+            title=title,
             instruction=payload.instruction,
             branch_name=branch_name,
             github_pr_number=pr["number"],
@@ -99,6 +106,7 @@ def create_subtask(payload: CreateSubtaskRequest):
 
         return {
             "id": subtask.id,
+            "title": subtask.title,
             "branch_name": subtask.branch_name,
             "github_pr_number": subtask.github_pr_number,
             "pr_url": pr["url"],
@@ -107,13 +115,18 @@ def create_subtask(payload: CreateSubtaskRequest):
 
 
 class UpdateSubtaskTitleRequest(BaseModel):
+    # MR固有名（MR名のIssue名より後ろの部分）
     title: str
 
 
 @router.patch("/{subtask_id}")
 def update_subtask_title(subtask_id: int, payload: UpdateSubtaskTitleRequest):
-    title = payload.title.strip()
-    if not title:
+    """MR名のMR固有名部分を変更する
+
+    Issue名は最新のものをGitHubから取得して付け直す。
+    """
+    suffix = payload.title.strip()
+    if not suffix:
         raise HTTPException(status_code=400, detail="title is empty")
     with SessionLocal() as session:
         subtask = session.get(Subtask, subtask_id)
@@ -121,11 +134,13 @@ def update_subtask_title(subtask_id: int, payload: UpdateSubtaskTitleRequest):
             raise HTTPException(status_code=404, detail="subtask not found")
         project = session.get(Project, subtask.project_id)
 
-        if subtask.github_pr_number is not None:
-            try:
+        try:
+            issue_title = get_issue(project.github_repo, subtask.github_issue_number)["title"]
+            title = compose_mr_title(issue_title, suffix)
+            if subtask.github_pr_number is not None:
                 edit_pr_title(project.github_repo, subtask.github_pr_number, title)
-            except GitHubClientError as exc:
-                raise HTTPException(status_code=500, detail=str(exc)) from exc
+        except GitHubClientError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
         subtask.title = title
         session.commit()

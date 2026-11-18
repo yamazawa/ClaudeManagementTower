@@ -2,6 +2,7 @@ let currentProjectId = null;
 let currentProjectName = null;
 let currentIssueNumber = null;
 let currentIssueState = null;
+let currentIssueTitle = null;
 let currentSubtasks = [];
 let currentSelectedSubtaskId = null;
 
@@ -27,6 +28,11 @@ const MR_COUNT_EXCLUDED_STATE = "closed";
 
 // MR状態の自動更新間隔（サーバー側のPR同期間隔と合わせて10秒以内に反映させる）
 const SUBTASK_POLL_MS = 3000;
+
+// MR名は「Issue名」+区切り文字+「MR固有名」とする（core/mr_naming.pyと合わせる）
+const MR_NAME_SEPARATOR = "ー";
+const MR_TITLE_WARNING_CLASS = "mr-title-warning";
+const MR_TITLE_WARNING_TEXT = `MR名が命名規則（Issue名${MR_NAME_SEPARATOR}MR名）に沿っていません`;
 
 const WORKER_STATE_LABELS = {
   idle: "待機中",
@@ -89,7 +95,42 @@ function makeTitleEditable(titleEl, statusEl, onSave) {
  * 省略表示されても読めるよう、全文と編集方法を表示する。
  */
 function updateTitleTooltip(titleEl) {
-  titleEl.title = `${titleEl.textContent}\n（クリックしてタイトルを編集）`;
+  const warning = titleEl.classList.contains(MR_TITLE_WARNING_CLASS)
+    ? `\n${MR_TITLE_WARNING_TEXT}`
+    : "";
+  titleEl.title = `${titleEl.textContent}${warning}\n（クリックしてタイトルを編集）`;
+}
+
+/**
+ * MR名からMR固有名を取り出す
+ *
+ * 命名規則に沿っていない場合はnullを返す。
+ */
+function splitMrTitle(mrTitle) {
+  const prefix = `${currentIssueTitle}${MR_NAME_SEPARATOR}`;
+  if (currentIssueTitle === null || !mrTitle.startsWith(prefix)) return null;
+  return mrTitle.slice(prefix.length) || null;
+}
+
+/**
+ * MR名の表示要素
+ *
+ * 命名規則に沿う場合はMR固有名のみ、沿わない場合は全体を警告表示する。
+ */
+function renderMrTitle(s, { id = "", className = "" } = {}) {
+  const suffix = splitMrTitle(s.title);
+  const warning = suffix === null;
+  const classes = [className, warning ? MR_TITLE_WARNING_CLASS : ""].filter(Boolean).join(" ");
+  const idAttr = id ? ` id="${id}"` : "";
+  const tooltip = warning ? `${s.title}\n${MR_TITLE_WARNING_TEXT}` : s.title;
+  return (
+    `<span${idAttr} class="${classes}" title="${escapeAttr(tooltip)}">` +
+    `${escapeHtml(warning ? s.title : suffix)}</span>`
+  );
+}
+
+function escapeAttr(text) {
+  return escapeHtml(text).replace(/"/g, "&quot;");
 }
 
 async function patchTitle(url, title) {
@@ -98,9 +139,9 @@ async function patchTitle(url, title) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title }),
   });
-  if (response.ok) return null;
-  const error = await response.json().catch(() => ({}));
-  return error.detail || response.statusText;
+  const body = await response.json().catch(() => ({}));
+  if (response.ok) return { error: null, body };
+  return { error: body.detail || response.statusText, body };
 }
 
 async function pollWorkers() {
@@ -474,25 +515,40 @@ async function onClickIssueToggle() {
   if (!error) await loadIssues();
 }
 
+/**
+ * Issue名の保存
+ *
+ * サーバー側で紐づくMR名も書き換わるため、MR一覧を再取得する。
+ * MR名の書き換えに失敗したMRがあれば件数を表示する。
+ */
 async function saveIssueTitle(number, title) {
-  const error = await patchTitle(`/api/projects/${currentProjectId}/issues/${number}`, title);
+  const { error, body } = await patchTitle(
+    `/api/projects/${currentProjectId}/issues/${number}`,
+    title
+  );
   if (error) return error;
   const itemTitle = document.querySelector(
     `.issue-item[data-number="${number}"] .issue-item-title`
   );
   if (itemTitle) itemTitle.textContent = title;
+  currentIssueTitle = title;
+  const failedCount = (body.failed_subtasks || []).length;
+  document.getElementById("issue-rename-status").textContent =
+    failedCount > 0 ? `MR名の書き換えに${failedCount}件失敗しました` : "";
+  await refreshSubtaskStates().catch(() => {});
   return null;
 }
 
-async function saveSubtaskTitle(subtaskId, title) {
-  const error = await patchTitle(`/api/subtasks/${subtaskId}`, title);
+/**
+ * MR名の保存
+ *
+ * 編集対象はMR固有名のみ。保存後は命名規則に沿うため警告表示を外す。
+ */
+async function saveSubtaskTitle(subtaskId, suffix) {
+  const { error } = await patchTitle(`/api/subtasks/${subtaskId}`, suffix);
   if (error) return error;
-  const subtask = currentSubtasks.find((s) => s.id === subtaskId);
-  if (subtask) subtask.title = title;
-  const rowTitle = document.querySelector(
-    `.subtask-row[data-subtask-id="${subtaskId}"] .subtask-row-title`
-  );
-  if (rowTitle) rowTitle.textContent = title;
+  document.getElementById("subtask-title")?.classList.remove(MR_TITLE_WARNING_CLASS);
+  await refreshSubtaskStates().catch(() => {});
   return null;
 }
 
@@ -501,7 +557,7 @@ function renderSubtaskRow(s) {
   const prBadge = s.github_pr_number ? `PR #${s.github_pr_number}` : "";
   return `
     <li class="subtask-row" data-subtask-id="${s.id}">
-      <span class="subtask-row-title">${escapeHtml(s.title)}</span>
+      ${renderMrTitle(s, { className: "subtask-row-title" })}
       <span class="subtask-row-meta">${label} ${prBadge}</span>
     </li>
   `;
@@ -541,6 +597,7 @@ async function refreshIssueDetail() {
     `/api/projects/${currentProjectId}/issues/${currentIssueNumber}`
   ).then((r) => r.json());
   currentSubtasks = issue.subtasks;
+  currentIssueTitle = issue.title;
   updateIssueMrCounts(issue.number, issue.subtasks);
 
   document.getElementById("issue-heading").innerHTML =
@@ -548,6 +605,7 @@ async function refreshIssueDetail() {
     `<button type="button" id="issue-toggle-button" class="title-action-button"></button>`;
   document.getElementById("subtask-list-body").innerHTML = `
     <p id="issue-title-status" class="title-status empty"></p>
+    <p id="issue-rename-status" class="title-status empty"></p>
     <p id="issue-close-status" class="title-status empty"></p>
   `;
   currentIssueState = issue.state;
@@ -606,7 +664,7 @@ function renderSubtaskDetail(s) {
   }
 
   heading.innerHTML =
-    `${renderSubtaskNumber(s)}<span id="subtask-title">${escapeHtml(s.title)}</span>` +
+    `${renderSubtaskNumber(s)}${renderMrTitle(s, { id: "subtask-title" })}` +
     `<button type="button" id="subtask-toggle-button" class="title-action-button"></button>`;
   el.innerHTML = `
     <p id="subtask-title-status" class="title-status empty"></p>

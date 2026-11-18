@@ -10,11 +10,13 @@ from core.github_client import (
     close_issue,
     create_issue,
     edit_issue_title,
+    edit_pr_title,
     get_issue,
     list_issues,
     reopen_issue,
 )
 from core.models import ExecutionJob, Project, Report, Subtask
+from core.mr_naming import compose_mr_title, split_mr_title
 from core.repo_catalog import describe_repo
 
 router = APIRouter(prefix="/api/projects")
@@ -108,18 +110,42 @@ class UpdateTitleRequest(BaseModel):
 
 @router.patch("/{project_id}/issues/{number}")
 def update_issue_title(project_id: int, number: int, payload: UpdateTitleRequest):
+    """Issue名を変更し、紐づくMR名のIssue名部分も書き換える
+
+    命名規則に沿っていないMRは書き換えない。
+    MRの書き換え失敗はIssue名変更を取り消さず、失敗一覧として返す。
+    """
     title = payload.title.strip()
     if not title:
         raise HTTPException(status_code=400, detail="title is empty")
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
-        if project is None:
-            raise HTTPException(status_code=404, detail="project not found")
+        project = _get_project_or_404(session, project_id)
         try:
+            old_title = get_issue(project.github_repo, number)["title"]
             edit_issue_title(project.github_repo, number, title)
         except GitHubClientError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
-        return {"number": number, "title": title}
+        failed = _rename_subtasks(session, project, number, old_title, title)
+        return {"number": number, "title": title, "failed_subtasks": failed}
+
+
+def _rename_subtasks(session, project: Project, number: int, old_title: str, new_title: str):
+    failed = []
+    subtasks = session.query(Subtask).filter_by(project_id=project.id, github_issue_number=number)
+    for subtask in subtasks:
+        suffix = split_mr_title(old_title, subtask.title)
+        if suffix is None:
+            continue
+        renamed = compose_mr_title(new_title, suffix)
+        try:
+            if subtask.github_pr_number is not None:
+                edit_pr_title(project.github_repo, subtask.github_pr_number, renamed)
+        except GitHubClientError as exc:
+            failed.append({"id": subtask.id, "error": str(exc)})
+            continue
+        subtask.title = renamed
+        session.commit()
+    return failed
 
 
 def _subtask_summaries(session, project: Project, number: int) -> list[dict]:
