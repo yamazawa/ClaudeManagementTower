@@ -419,15 +419,40 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
   resize: vertical;
 }
 
+/* 実行ボタンと閉じる・再開ボタンを左寄せで横に並べる */
+.instruction-actions {
+  display: flex;
+  gap: 6px;
+}
+
 .instruction-form button {
-  align-self: flex-start;
   font: inherit;
   font-size: 13px;
   padding: 5px 12px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: #fff;
+  color: var(--ink);
   cursor: pointer;
+}
+
+.instruction-form button:hover:not(:disabled) {
+  background: var(--soft);
+}
+
+.instruction-form button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.instruction-form button.primary:hover:not(:disabled) {
+  filter: brightness(0.9);
+}
+
+.instruction-form button:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 /* 見出し右端の閉じる・再開ボタン

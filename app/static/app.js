@@ -717,14 +717,16 @@ function renderSubtaskDetail(s) {
   }
 
   heading.innerHTML =
-    `${renderSubtaskNumber(s)}${renderMrTitle(s, { id: "subtask-title" })}${renderSubtaskState(s)}` +
-    `<button type="button" id="subtask-toggle-button" class="title-action-button"></button>`;
+    `${renderSubtaskNumber(s)}${renderMrTitle(s, { id: "subtask-title" })}${renderSubtaskState(s)}`;
   el.innerHTML = `
     <p id="subtask-title-status" class="title-status empty"></p>
     <p id="subtask-close-status" class="title-status empty"></p>
     <form class="instruction-form" data-subtask-id="${s.id}">
       <textarea id="instruction-${s.id}" name="instruction" aria-label="指示内容" placeholder="Claudeへの指示内容を入力してください">${escapeHtml(s.instruction)}</textarea>
-      <button type="submit">実行する</button>
+      <div class="instruction-actions">
+        <button type="submit" class="primary">実行する</button>
+        <button type="button" id="subtask-toggle-button"></button>
+      </div>
     </form>
     <p class="job-status empty" data-subtask-id="${s.id}"></p>
     <iframe class="report-frame" sandbox="" data-subtask-id="${s.id}" hidden></iframe>
@@ -754,7 +756,9 @@ function restoreJobState(s) {
   statusEl.textContent = `状態: ${job.status}`;
 
   if (job.status === "queued" || job.status === "running") {
-    const button = document.querySelector(`.instruction-form[data-subtask-id="${s.id}"] button`);
+    const button = document.querySelector(
+      `.instruction-form[data-subtask-id="${s.id}"] button[type="submit"]`
+    );
     button.disabled = true;
     pollJob(job.id, s.id, button);
     return;
@@ -953,7 +957,7 @@ async function onSubmitInstructionForm(event) {
   if (!instruction) {
     return;
   }
-  const button = form.querySelector("button");
+  const button = form.querySelector('button[type="submit"]');
   await startExecution(subtaskId, instruction, button);
 }
 
