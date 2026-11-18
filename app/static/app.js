@@ -459,7 +459,6 @@ async function refreshIssueDetail() {
     <p>
       <a href="${issue.url}" target="_blank" rel="noopener">GitHubで開く</a>
     </p>
-    <p>${(issue.body || "").replace(/\n/g, "<br>")}</p>
   `;
   resetSubtaskForm();
   document.getElementById("subtask-panel").hidden = false;
