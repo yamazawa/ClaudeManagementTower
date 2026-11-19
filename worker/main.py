@@ -4,6 +4,7 @@ import threading
 import time
 from collections.abc import Callable
 
+from core.attachments import build_instruction_prompt, list_attachments
 from core.claude_client import run_claude
 from core.config import settings
 from core.db import SessionLocal, init_db
@@ -87,7 +88,8 @@ def _execute_job(job_id: int, subtask: Subtask, project: Project) -> None:
     append_instruction_history(worktree_path, subtask.instruction)
     push_branch(worktree_path, subtask.branch_name)
 
-    session_id, result_text = _run_claude_for_job(job_id, worktree_path, subtask.instruction, resume)
+    prompt = build_instruction_prompt(subtask.instruction, list_attachments(worktree_path))
+    session_id, result_text = _run_claude_for_job(job_id, worktree_path, prompt, resume)
     with SessionLocal() as session:
         db_job = session.get(ExecutionJob, job_id)
         db_job.claude_session_id = session_id
