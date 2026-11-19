@@ -1,5 +1,4 @@
 let currentProjectId = null;
-let currentProjectName = null;
 let currentIssueNumber = null;
 let currentIssueState = null;
 let currentIssueTitle = null;
@@ -262,35 +261,6 @@ async function waitForNewBootId(oldBootId) {
   return false;
 }
 
-function renderBreadcrumb() {
-  const el = document.getElementById("breadcrumb");
-  if (currentProjectId === null) {
-    el.innerHTML = "";
-    return;
-  }
-  el.innerHTML = `
-    <a href="#" id="breadcrumb-projects">リポジトリ一覧</a>
-    <span class="breadcrumb-sep">&rsaquo;</span>
-    <span class="breadcrumb-current">${escapeHtml(currentProjectName)}</span>
-  `;
-  document
-    .getElementById("breadcrumb-projects")
-    .addEventListener("click", (event) => {
-      event.preventDefault();
-      showProjectList();
-    });
-}
-
-function showProjectList() {
-  currentProjectId = null;
-  currentProjectName = null;
-  currentIssueNumber = null;
-  document.getElementById("project-view").hidden = false;
-  document.getElementById("issue-view").hidden = true;
-  clearIssueDetail();
-  renderBreadcrumb();
-}
-
 // 別リポジトリへ切り替えた際に前のIssue表示が残らないよう、Issue未選択の表示に戻す
 function clearIssueDetail() {
   document.getElementById("issue-heading").textContent = "Issue";
@@ -310,6 +280,7 @@ async function init() {
     for (const project of projects) {
       const li = document.createElement("li");
       li.className = "project-item";
+      li.dataset.projectId = project.id;
       li.innerHTML = `<span class="project-name">${escapeHtml(project.display_name)}</span><span class="project-branch">${project.default_branch}</span>`;
       li.addEventListener("click", () => selectProject(project));
       listEl.appendChild(li);
@@ -319,14 +290,28 @@ async function init() {
   pollSubtaskStates();
 }
 
+/**
+ * リポジトリの選択
+ *
+ * 別リポジトリへ切り替えた場合は、前のIssue・MRの表示を消す。
+ */
 async function selectProject(project) {
+  if (project.id !== currentProjectId) {
+    currentIssueNumber = null;
+    clearIssueDetail();
+  }
   currentProjectId = project.id;
-  currentProjectName = project.display_name;
-  document.getElementById("project-view").hidden = true;
-  document.getElementById("issue-view").hidden = false;
-  renderBreadcrumb();
+  highlightSelectedProject();
+  document.getElementById("issue-list-placeholder").hidden = true;
+  document.getElementById("issue-panel").hidden = false;
   renderRepoHeading(project);
   await loadIssues();
+}
+
+function highlightSelectedProject() {
+  document
+    .querySelectorAll(".project-item")
+    .forEach((li) => li.classList.toggle("active", Number(li.dataset.projectId) === currentProjectId));
 }
 
 /**
