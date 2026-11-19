@@ -2,12 +2,15 @@
 
 Claude Agent SDKが通知するRateLimitEventを枠ごとに保存する。
 画面のヘッダーに5時間枠・1週間枠の使用率を表示するために使う。
+使用率は使用率APIの値を優先し、SDK通知の値は補助として使う。
 """
 
+from collections.abc import Callable
 from datetime import datetime, timezone
 
 from sqlalchemy.orm import sessionmaker
 
+from core.claude_usage import get_usage, normalize_window
 from core.db import SessionLocal
 from core.models import RateLimitSnapshot
 
@@ -50,13 +53,30 @@ def _to_dict(snapshot: RateLimitSnapshot | None) -> dict | None:
     }
 
 
-def get_rate_limits(session_factory: sessionmaker = SessionLocal) -> dict:
+def _merge_usage(snapshot: dict | None, usage_window: dict | None) -> dict | None:
+    """SDK通知の状況に使用率APIの値を重ねる
+
+    使用率・リセット時刻は使用率APIを優先し、状態はSDK通知の値を使う。
+    """
+    if usage_window is None:
+        return snapshot
+    return {**(snapshot or {"status": None, "updated_at": None}), **usage_window}
+
+
+def get_rate_limits(
+    session_factory: sessionmaker = SessionLocal,
+    usage_getter: Callable[[], dict | None] = get_usage,
+) -> dict:
     """画面表示する枠の最新状況を返す
 
-    未受信の枠はNoneとする。
+    どちらの取得元にも無い枠はNoneとする。
     """
+    usage = usage_getter() or {}
     with session_factory() as session:
         return {
-            rate_limit_type: _to_dict(session.get(RateLimitSnapshot, rate_limit_type))
+            rate_limit_type: _merge_usage(
+                _to_dict(session.get(RateLimitSnapshot, rate_limit_type)),
+                normalize_window(usage.get(rate_limit_type)),
+            )
             for rate_limit_type in DISPLAY_TYPES
         }
