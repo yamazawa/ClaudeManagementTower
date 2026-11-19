@@ -7,6 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from app.routes import deploy, projects
 from core.db import init_db, make_engine
 from core.deploy import DeployAlreadyRunning
+from core.git_client import GitClientError
 from core.models import Project
 from core.supervisor_control import COMMAND_RESTART_SERVER
 
@@ -93,6 +94,33 @@ def test_deploy_rejected_while_running(repo, monkeypatch):
     monkeypatch.setattr(deploy, "start_deploy", already_running)
 
     assert _status_code(lambda: deploy.deploy_project(1)) == 409
+
+
+def test_pending_false_when_not_defined_or_no_pull(repo, monkeypatch):
+    monkeypatch.setattr(deploy, "has_remote_updates", lambda *args: pytest.fail("not called"))
+    assert deploy.get_deploy_pending(1) == {"pending": False}
+
+    _define(repo, [{"type": "command", "run": "echo"}])
+    assert deploy.get_deploy_pending(1) == {"pending": False}
+
+
+def test_pending_checks_pull_branch(repo, monkeypatch):
+    _define(repo, [{"type": "pull", "branch": "release"}])
+    calls = []
+    monkeypatch.setattr(deploy, "has_remote_updates", lambda *args: calls.append(args) or True)
+
+    assert deploy.get_deploy_pending(1) == {"pending": True}
+    assert calls == [(str(repo), "release")]
+
+
+def test_pending_500_when_git_fails(repo, monkeypatch):
+    _define(repo, [{"type": "pull"}])
+
+    def fail(*args):
+        raise GitClientError("fetch failed")
+
+    monkeypatch.setattr(deploy, "has_remote_updates", fail)
+    assert _status_code(lambda: deploy.get_deploy_pending(1)) == 500
 
 
 def test_get_deploy_result(monkeypatch):

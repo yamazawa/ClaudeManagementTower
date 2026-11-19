@@ -86,6 +86,12 @@ def _validate_step(step) -> None:
         raise DeployError(f"commandの手順にrunが定義されていません: {step}")
 
 
+def pull_branch(steps: list[dict], default_branch: str) -> str | None:
+    """デプロイで取り込むブランチ（pull手順が無ければNone）"""
+    pulls = [s for s in steps if s["type"] == STEP_PULL]
+    return (pulls[0].get("branch") or default_branch) if pulls else None
+
+
 def restart_commands(steps: list[dict]) -> list[str]:
     return [RESTART_STEPS[s["type"]] for s in steps if s["type"] in RESTART_STEPS]
 

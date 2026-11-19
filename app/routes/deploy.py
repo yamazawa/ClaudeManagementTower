@@ -7,10 +7,12 @@ from core.deploy import (
     DeployError,
     DeployNotDefined,
     load_steps,
+    pull_branch,
     read_result,
     restart_commands,
     start_deploy,
 )
+from core.git_client import GitClientError, has_remote_updates
 from core.models import Project
 from core.supervisor_control import is_supervised
 
@@ -50,6 +52,26 @@ def deploy_project(project_id: int) -> dict:
     except DeployAlreadyRunning as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"accepted": True, "restarts": restarts}
+
+
+@router.get("/{project_id}/deploy/pending")
+def get_deploy_pending(project_id: int) -> dict:
+    """デプロイ先のソースに未取り込みの対応があるかを返す
+
+    デプロイ手順のpullで取り込むブランチを、チェックアウト中のHEADと比較する。
+    デプロイ未定義・pull手順なしの場合は未取り込みなしとする。
+    """
+    repo_path, default_branch = _get_project(project_id)
+    try:
+        branch = pull_branch(load_steps(repo_path), default_branch)
+    except DeployError:
+        return {"pending": False}
+    if branch is None:
+        return {"pending": False}
+    try:
+        return {"pending": has_remote_updates(repo_path, branch)}
+    except GitClientError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 @router.get("/{project_id}/deploy")
