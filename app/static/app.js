@@ -273,6 +273,57 @@ async function renderWorkers() {
     `<span class="worker-summary">実行中 ${busyCount} / ${aliveWorkers.length}</span>${items}`;
 }
 
+// ヘッダーに表示するClaudeのレート制限枠（core/rate_limits.pyと合わせる）
+const RATE_LIMIT_WINDOWS = [
+  { type: "five_hour", label: "5h" },
+  { type: "seven_day", label: "1w" },
+];
+// 使用率を強調表示する状態（SDKのRateLimitStatusと合わせる）
+const RATE_LIMIT_STATUS_CLASSES = {
+  allowed_warning: "token-usage-warning",
+  rejected: "token-usage-rejected",
+};
+const RATE_LIMIT_POLL_MS = 10000;
+const RATE_LIMIT_UNKNOWN_TEXT = "--";
+const RATE_LIMIT_TOOLTIP = "Claude実行時に受信したレート制限の使用率（未受信の場合は--）";
+
+async function pollRateLimits() {
+  try {
+    await renderRateLimits();
+  } catch (error) {
+    // サーバー再起動中などで取得に失敗しても監視を継続する
+  }
+  setTimeout(pollRateLimits, RATE_LIMIT_POLL_MS);
+}
+
+async function renderRateLimits() {
+  const limits = await fetch("/api/system/rate-limits").then((r) => r.json());
+  const container = document.getElementById("token-usage");
+  container.title = RATE_LIMIT_TOOLTIP;
+  container.innerHTML = RATE_LIMIT_WINDOWS.map((w) => formatRateLimit(w.label, limits[w.type])).join("");
+}
+
+/**
+ * レート制限枠1つ分の表示HTMLを作る
+ *
+ * 使用率が未受信の場合は--と表示する。
+ * リセット時刻を受信している場合は併記する。
+ */
+function formatRateLimit(label, limit) {
+  const hasUtilization = limit && limit.utilization != null;
+  const percent = hasUtilization ? `${Math.round(limit.utilization * 100)}%` : RATE_LIMIT_UNKNOWN_TEXT;
+  const statusClass = (limit && RATE_LIMIT_STATUS_CLASSES[limit.status]) || "";
+  const reset = limit && limit.resets_at ? `<span class="token-usage-reset">${formatResetTime(limit.resets_at)}</span>` : "";
+  return `<span class="token-usage-item ${statusClass}"><span class="token-usage-label">${label}</span>${percent}${reset}</span>`;
+}
+
+function formatResetTime(unixSeconds) {
+  const date = new Date(unixSeconds * 1000);
+  const hhmm = date.toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" });
+  const sameDay = date.toDateString() === new Date().toDateString();
+  return sameDay ? hhmm : `${date.getMonth() + 1}/${date.getDate()} ${hhmm}`;
+}
+
 const SERVER_RESTART_POLL_MS = 1000;
 const SERVER_RESTART_TIMEOUT_MS = 60000;
 const DEPLOY_POLL_MS = 2000;
@@ -334,6 +385,7 @@ async function init() {
     }
   }
   pollWorkers();
+  pollRateLimits();
   pollSubtaskStates();
 }
 
