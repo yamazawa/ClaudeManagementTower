@@ -692,8 +692,10 @@ function renderSubtaskDetail(s) {
       <div id="subtask-actions" class="subtask-actions" data-subtask-id="${s.id}"></div>
       <textarea id="instruction-${s.id}" name="instruction" aria-label="指示内容" placeholder="Claudeへの指示内容を入力してください（添付ファイルはS1、S2などのIDで指定できます）">${escapeHtml(s.instruction)}</textarea>
       <div class="attachment-area">
-        <button type="button" id="attach-button" class="subtask-action-button">添付</button>
-        <input type="file" id="attach-input" multiple hidden />
+        <button type="button" id="attach-file-button" class="subtask-action-button attach-button">ファイル添付</button>
+        <button type="button" id="attach-image-button" class="subtask-action-button attach-button">画像添付</button>
+        <input type="file" id="attach-file-input" multiple hidden />
+        <input type="file" id="attach-image-input" accept="image/*" hidden />
         <span id="attachment-status" class="empty"></span>
       </div>
       <div id="attachment-list" data-subtask-id="${s.id}"></div>
@@ -717,18 +719,32 @@ function renderSubtaskDetail(s) {
 /**
  * 添付ボタン・添付ファイル一覧の初期化
  *
- * 添付ボタンで規定のファイル選択を開き、選択したファイルを順にアップロードする。
+ * ファイル添付は選択したファイルをそのまま順にアップロードする。
+ * 画像添付は選択した画像をお絵かきダイアログで加工してからアップロードする。
  */
 function setupAttachmentForm(subtaskId) {
-  const button = document.getElementById("attach-button");
-  const input = document.getElementById("attach-input");
+  bindFileChooser("attach-file-button", "attach-file-input", (files) => uploadAttachments(subtaskId, files));
+  bindFileChooser("attach-image-button", "attach-image-input", async ([file]) => {
+    const edited = await openImageEditor(file);
+    if (edited) await uploadAttachments(subtaskId, [edited]);
+  });
+  loadAttachments(subtaskId);
+}
+
+/**
+ * ボタンで規定のファイル選択を開き、選択結果を渡す
+ *
+ * 同じファイルを続けて選べるよう、選択後に入力値をクリアする。
+ */
+function bindFileChooser(buttonId, inputId, onSelect) {
+  const button = document.getElementById(buttonId);
+  const input = document.getElementById(inputId);
   button.addEventListener("click", () => input.click());
   input.addEventListener("change", async () => {
     const files = [...input.files];
     input.value = "";
-    await uploadAttachments(subtaskId, files);
+    if (files.length) await onSelect(files);
   });
-  loadAttachments(subtaskId);
 }
 
 async function loadAttachments(subtaskId) {
@@ -739,8 +755,9 @@ async function loadAttachments(subtaskId) {
 }
 
 /**
- * 添付ファイルの表（ID・ファイル名）を描画する
+ * 添付ファイルの表（ID・ファイル）を描画する
  *
+ * 画像はファイル名の代わりにサムネイルを表示する。
  * 添付ファイルが無い場合は表を表示しない。
  */
 function renderAttachmentList(subtaskId, attachments) {
@@ -751,11 +768,18 @@ function renderAttachmentList(subtaskId, attachments) {
     return;
   }
   const rows = attachments
-    .map((a) => `<tr><td>${escapeHtml(a.id)}</td><td>${escapeHtml(a.filename)}</td></tr>`)
+    .map((a) => `<tr><td>${escapeHtml(a.id)}</td><td>${renderAttachmentCell(subtaskId, a)}</td></tr>`)
     .join("");
   container.innerHTML =
-    `<table class="attachment-table"><thead><tr><th>ID</th><th>ファイル名</th></tr></thead>` +
+    `<table class="attachment-table"><thead><tr><th>ID</th><th>ファイル</th></tr></thead>` +
     `<tbody>${rows}</tbody></table>`;
+}
+
+function renderAttachmentCell(subtaskId, attachment) {
+  if (!attachment.is_image) return escapeHtml(attachment.filename);
+  const url = `/api/subtasks/${subtaskId}/attachments/${encodeURIComponent(attachment.id)}/file`;
+  const name = escapeHtml(attachment.filename);
+  return `<a href="${url}" target="_blank" rel="noopener"><img class="attachment-thumbnail" src="${url}" alt="${name}" title="${name}" loading="lazy" /></a>`;
 }
 
 /**
@@ -873,8 +897,7 @@ function renderSubtaskActions(s) {
   const editable = actions.some((a) => a.action === "execute");
   const textarea = document.getElementById(`instruction-${s.id}`);
   if (textarea) textarea.readOnly = !editable;
-  const attachButton = document.getElementById("attach-button");
-  if (attachButton) attachButton.disabled = !editable || busy;
+  document.querySelectorAll(".attach-button").forEach((b) => (b.disabled = !editable || busy));
 }
 
 function renderSubtaskActionButton(action, disabled) {

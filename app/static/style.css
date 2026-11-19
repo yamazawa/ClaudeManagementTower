@@ -388,6 +388,14 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
   background: var(--soft);
 }
 
+/* 画像添付のサムネイル（縦横比を保って枠内に収める） */
+.attachment-thumbnail {
+  display: block;
+  max-width: 160px;
+  max-height: 120px;
+  border: 1px solid var(--line);
+}
+
 /* 画像添付のお絵かきダイアログ（画像は画面内に収まるよう縮小表示する） */
 .image-editor {
   max-width: 95vw;
