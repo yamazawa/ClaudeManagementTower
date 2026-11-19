@@ -419,13 +419,17 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
   resize: vertical;
 }
 
-/* 実行ボタンと閉じる・再開ボタンを左寄せで横に並べる */
-.instruction-actions {
+.instruction-form textarea:read-only {
+  background: var(--soft);
+}
+
+/* MRの状態に応じた操作ボタン（primaryクラスでプライマリ色にする） */
+.subtask-actions {
   display: flex;
   gap: 6px;
 }
 
-.instruction-form button {
+.subtask-action-button {
   font: inherit;
   font-size: 13px;
   padding: 5px 12px;
@@ -436,21 +440,21 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
   cursor: pointer;
 }
 
-.instruction-form button:hover:not(:disabled) {
+.subtask-action-button:hover:not(:disabled) {
   background: var(--soft);
 }
 
-.instruction-form button.primary {
+.subtask-action-button.primary {
   border-color: var(--accent);
   background: var(--accent);
   color: #fff;
 }
 
-.instruction-form button.primary:hover:not(:disabled) {
+.subtask-action-button.primary:hover:not(:disabled) {
   filter: brightness(0.9);
 }
 
-.instruction-form button:disabled {
+.subtask-action-button:disabled {
   opacity: 0.6;
   cursor: default;
 }

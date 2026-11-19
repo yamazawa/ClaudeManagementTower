@@ -2,20 +2,21 @@ import threading
 
 from core.db import SessionLocal
 from core.github_client import list_pull_request_states
+from core.lifecycle import LifecycleState
 from core.models import Project, Subtask
 
 # マージ済は終端状態のため同期対象から外す
-SYNC_TARGET_STATES = ("draft", "in_review", "closed")
+SYNC_TARGET_STATES = (*LifecycleState.OPEN_STATES, LifecycleState.CANCELED)
 
 
 def lifecycle_state_from_pr(pr: dict) -> str:
     if pr.get("mergedAt"):
-        return "merged"
+        return LifecycleState.MERGED
     if pr.get("state") == "CLOSED":
-        return "closed"
+        return LifecycleState.CANCELED
     if pr.get("isDraft"):
-        return "draft"
-    return "in_review"
+        return LifecycleState.DRAFT
+    return LifecycleState.RESOLVED
 
 
 def _sync_targets(session, project_id: int) -> list[Subtask]:
@@ -69,7 +70,7 @@ def mark_prs_merged(repo: str, pr_numbers: list[int], session_factory=None) -> N
         session.query(Subtask).filter(
             Subtask.project_id.in_(project_ids),
             Subtask.github_pr_number.in_(pr_numbers),
-        ).update({"lifecycle_state": "merged"}, synchronize_session=False)
+        ).update({"lifecycle_state": LifecycleState.MERGED}, synchronize_session=False)
         session.commit()
 
 
