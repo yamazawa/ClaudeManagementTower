@@ -23,6 +23,7 @@ def control(monkeypatch, tmp_path):
     monkeypatch.setattr(deploy.settings, "supervisor_control_dir", str(tmp_path / "control"))
     commands = []
     monkeypatch.setattr(deploy, "request_command", commands.append)
+    monkeypatch.setattr(deploy, "mark_deployed", lambda project_id, repo_path: [])
     return commands
 
 
@@ -106,6 +107,46 @@ def test_failed_step_stops_and_skips_restart(monkeypatch, control):
 
     assert read_result(1) == {"status": "failed", "error": "pull失敗"}
     assert control == []
+
+
+def test_marks_deployed_before_restart(monkeypatch, control):
+    order = []
+    monkeypatch.setattr(deploy, "pull_latest", lambda path, branch: order.append("pull"))
+    monkeypatch.setattr(
+        deploy, "mark_deployed", lambda project_id, repo_path: order.append(("mark", project_id, repo_path))
+    )
+    monkeypatch.setattr(deploy, "request_command", order.append)
+
+    run_deploy(1, "repo", "master", [{"type": "pull"}, {"type": "restart_server"}])
+
+    assert order == ["pull", ("mark", 1, "repo"), COMMAND_RESTART_SERVER]
+
+
+def test_mark_deployed_failure_keeps_deploy_done(monkeypatch, control):
+    def fail(project_id, repo_path):
+        raise RuntimeError("gh失敗")
+
+    monkeypatch.setattr(deploy, "pull_latest", lambda path, branch: None)
+    monkeypatch.setattr(deploy, "mark_deployed", fail)
+
+    run_deploy(1, "repo", "master", [{"type": "pull"}, {"type": "restart_server"}])
+
+    assert read_result(1) == {"status": "done", "restarts": [COMMAND_RESTART_SERVER]}
+    assert control == [COMMAND_RESTART_SERVER]
+
+
+def test_failed_step_skips_mark_deployed(monkeypatch, control):
+    marked = []
+
+    def fail(path, branch):
+        raise GitClientError("pull失敗")
+
+    monkeypatch.setattr(deploy, "pull_latest", fail)
+    monkeypatch.setattr(deploy, "mark_deployed", lambda project_id, repo_path: marked.append(project_id))
+
+    run_deploy(1, "repo", "master", [{"type": "pull"}])
+
+    assert marked == []
 
 
 def test_command_runs_in_repo(tmp_path, control):

@@ -10,6 +10,8 @@ from collections.abc import Callable
 from pathlib import Path
 
 from core.config import settings
+from core.deploy import mark_deployed_safely
+from core.deploy_tracking import mark_deployed_for_repo
 from core.git_client import GitClientError, pull_latest
 from core.github_client import GitHubClientError, list_open_pull_requests
 from core.pr_merger import PrMergeError, merge_pr_with_update
@@ -79,6 +81,7 @@ def run_self_sync(repo_path: str) -> None:
         _write_result({"status": STATUS_FAILED, "error": str(exc)})
         return
 
+    mark_deployed_safely(lambda: mark_deployed_for_repo(settings.self_repo, repo_path))
     _write_result(
         {
             "status": STATUS_DONE,
