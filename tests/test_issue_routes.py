@@ -99,6 +99,12 @@ def test_get_mr_counts_returns_db_counts(session_factory, monkeypatch):
     assert projects.get_mr_counts(1) == {5: {"resolved": 1, "unresolved": 1, "total": 2}}
 
 
+def test_mr_counts_treat_deployed_as_resolved(session_factory):
+    _add_subtasks(session_factory, 5, ["merged", "deployed", "draft"])
+
+    assert projects.get_mr_counts(1)[5] == {"resolved": 2, "unresolved": 1, "total": 3}
+
+
 def test_get_mr_counts_unknown_project(session_factory):
     with pytest.raises(HTTPException) as error:
         projects.get_mr_counts(99)

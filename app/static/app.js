@@ -14,6 +14,7 @@ const LIFECYCLE = {
   draft: "draft",
   resolved: "resolved",
   merged: "merged",
+  deployed: "deployed",
   canceled: "canceled",
 };
 
@@ -21,6 +22,7 @@ const LIFECYCLE_LABELS = {
   [LIFECYCLE.draft]: "Draft",
   [LIFECYCLE.resolved]: "Resolved",
   [LIFECYCLE.merged]: "Merged",
+  [LIFECYCLE.deployed]: "Deployed",
   [LIFECYCLE.canceled]: "Canceled",
 };
 
@@ -30,6 +32,7 @@ const SUBTASK_FILTER_STATES = {
   draft: [LIFECYCLE.draft],
   resolved: [LIFECYCLE.resolved],
   merged: [LIFECYCLE.merged],
+  deployed: [LIFECYCLE.deployed],
   canceled: [LIFECYCLE.canceled],
   all: null,
 };
@@ -46,6 +49,7 @@ const SUBTASK_ACTIONS = {
     { action: "cancel", label: "Cancel" },
   ],
   [LIFECYCLE.merged]: [],
+  [LIFECYCLE.deployed]: [],
   [LIFECYCLE.canceled]: [{ action: "reopen", label: "ReOpen" }],
 };
 
@@ -81,7 +85,7 @@ const pollingJobIds = new Set();
 const JOB_POLL_MS = 3000;
 
 // Issue一覧のMR数で解決済とみなす状態と、数えない状態（マージされずクローズ）
-const MR_COUNT_RESOLVED_STATE = LIFECYCLE.merged;
+const MR_COUNT_RESOLVED_STATES = [LIFECYCLE.merged, LIFECYCLE.deployed];
 const MR_COUNT_EXCLUDED_STATE = LIFECYCLE.canceled;
 
 // MR状態の自動更新間隔（サーバー側のPR同期間隔と合わせて10秒以内に反映させる）
@@ -1207,7 +1211,7 @@ function countMrs(subtasks) {
   const counted = subtasks.filter((s) => s.lifecycle_state !== MR_COUNT_EXCLUDED_STATE);
   const countIn = (states) => counted.filter((s) => states.includes(s.lifecycle_state)).length;
   return {
-    resolved: countIn([MR_COUNT_RESOLVED_STATE]),
+    resolved: countIn(MR_COUNT_RESOLVED_STATES),
     unresolved: countIn(SUBTASK_FILTER_STATES.unresolved),
     total: counted.length,
   };

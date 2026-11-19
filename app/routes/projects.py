@@ -26,7 +26,7 @@ router = APIRouter(prefix="/api/projects")
 # Issueクローズを妨げる未解決MRのlifecycle_state
 UNRESOLVED_LIFECYCLE_STATES = LifecycleState.OPEN_STATES
 # Issue一覧のMR数で解決済とみなすlifecycle_state
-RESOLVED_LIFECYCLE_STATE = LifecycleState.MERGED
+RESOLVED_LIFECYCLE_STATES = LifecycleState.MERGED_STATES
 # Issue一覧のMR数から除外するlifecycle_state（マージされずクローズ）
 UNCOUNTED_LIFECYCLE_STATE = LifecycleState.CANCELED
 EMPTY_MR_COUNTS = {"resolved": 0, "unresolved": 0, "total": 0}
@@ -95,7 +95,7 @@ def _mr_counts_by_issue(session, project_id: int) -> dict[int, dict]:
     マージされずクローズされたMRはいずれにも数えない。
     未解決MR数は一覧の閉じるボタンの活性判定に使う。
     """
-    is_resolved = case((Subtask.lifecycle_state == RESOLVED_LIFECYCLE_STATE, 1), else_=0)
+    is_resolved = case((Subtask.lifecycle_state.in_(RESOLVED_LIFECYCLE_STATES), 1), else_=0)
     is_unresolved = case(
         (Subtask.lifecycle_state.in_(UNRESOLVED_LIFECYCLE_STATES), 1), else_=0
     )
