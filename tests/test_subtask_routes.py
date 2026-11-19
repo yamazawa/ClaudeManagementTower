@@ -67,6 +67,21 @@ def test_create_subtask_with_blank_title_uses_free_number(session_factory, creat
     assert result["title"] == "あいうえおー②"
 
 
+def test_create_subtask_with_issue_title_skips_github_lookup(session_factory, created, monkeypatch):
+    def fail_get_issue(repo, number):
+        raise AssertionError("get_issue should not be called")
+
+    monkeypatch.setattr(subtasks, "get_issue", fail_get_issue)
+
+    result = subtasks.create_subtask(
+        subtasks.CreateSubtaskRequest(
+            project_id=1, github_issue_number=5, title="", issue_title="さしすせそ"
+        )
+    )
+
+    assert result["title"] == "さしすせそー①"
+
+
 def test_create_subtask_adopts_row_imported_by_sync(session_factory, monkeypatch):
     def fake_create(project, issue_number, title, instruction, slug_suffix, slug_source=None):
         # PR作成直後に自動同期が取り込んだ状態を再現する

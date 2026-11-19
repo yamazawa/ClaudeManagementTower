@@ -47,6 +47,18 @@ class CreateSubtaskRequest(BaseModel):
     # MR固有名（MR名のIssue名より後ろの部分）。空欄なら連番を割り当てる
     title: str = ""
     instruction: str = ""
+    # Issue名。Issue作成直後など呼び出し側で既知の場合に指定する。空欄ならGitHubから取得する
+    issue_title: str = ""
+
+
+def _resolve_issue_title(project: Project, payload: CreateSubtaskRequest) -> str:
+    """MR名に使うIssue名
+
+    指定があればGitHubへの問い合わせを省略する。
+    """
+    return payload.issue_title.strip() or get_issue(
+        project.github_repo, payload.github_issue_number
+    )["title"]
 
 
 def _create_branch_and_draft_pr(
@@ -103,7 +115,7 @@ def create_subtask(payload: CreateSubtaskRequest):
         ]
 
         try:
-            issue_title = get_issue(project.github_repo, payload.github_issue_number)["title"]
+            issue_title = _resolve_issue_title(project, payload)
             suffix = payload.title.strip() or next_default_suffix(issue_title, existing_titles)
             title = compose_mr_title(issue_title, suffix)
             branch_name, pr = _create_branch_and_draft_pr(
