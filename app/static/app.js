@@ -88,6 +88,17 @@ const MR_NAME_SEPARATOR = "ー";
 const MR_TITLE_WARNING_CLASS = "mr-title-warning";
 const MR_TITLE_WARNING_TEXT = `MR名が命名規則（Issue名${MR_NAME_SEPARATOR}MR名）に沿っていません`;
 
+// 縦長表示（ペインを縦1列に並べる画面幅）の判定（style.cssのメディアクエリと合わせる）
+const PORTRAIT_MEDIA_QUERY = "(max-width: 680px)";
+
+// 開閉するペインのID
+const SECTION_IDS = {
+  projects: "project-list",
+  repo: "issue-list",
+  issue: "subtask-list",
+  mr: "subtask-detail",
+};
+
 const WORKER_STATE_LABELS = {
   idle: "待機中",
   busy: "実行中",
@@ -104,6 +115,20 @@ function setSectionExpanded(sectionId, expanded) {
   section.querySelector(".expander").setAttribute("aria-expanded", String(expanded));
 }
 
+/**
+ * 縦長表示の場合のみ、ペインを自動で開閉する
+ *
+ * 横長表示では全ペインが並ぶため、利用者の開閉操作のみに従う。
+ */
+function autoSetSectionExpanded(sectionId, expanded) {
+  if (window.matchMedia(PORTRAIT_MEDIA_QUERY).matches) setSectionExpanded(sectionId, expanded);
+}
+
+/**
+ * エキスパンダの初期化
+ *
+ * 縦長表示では、親項目が未選択で表示内容が無いペインを閉じておく。
+ */
 function setupExpanders() {
   document.querySelectorAll("section .expander").forEach((button) => {
     const section = button.closest("section");
@@ -111,6 +136,7 @@ function setupExpanders() {
       setSectionExpanded(section.id, section.classList.contains("collapsed"))
     );
   });
+  [SECTION_IDS.repo, SECTION_IDS.issue, SECTION_IDS.mr].forEach((id) => autoSetSectionExpanded(id, false));
 }
 
 function escapeHtml(text) {
@@ -287,6 +313,7 @@ function clearIssueDetail() {
   document.getElementById("subtask-list-body").innerHTML =
     '<p class="empty">左の一覧からIssueを選択してください。</p>';
   document.getElementById("subtask-panel").hidden = true;
+  autoSetSectionExpanded(SECTION_IDS.issue, false);
   renderSubtaskDetail(null);
 }
 
@@ -314,6 +341,7 @@ async function init() {
  * リポジトリの選択
  *
  * 別リポジトリへ切り替えた場合は、前のIssue・MRの表示を消す。
+ * 縦長表示ではリポジトリ一覧を閉じ、Issue一覧を開く。
  */
 async function selectProject(project) {
   if (project.id !== currentProjectId) {
@@ -322,6 +350,8 @@ async function selectProject(project) {
   }
   currentProjectId = project.id;
   highlightSelectedProject();
+  autoSetSectionExpanded(SECTION_IDS.projects, false);
+  autoSetSectionExpanded(SECTION_IDS.repo, true);
   document.getElementById("issue-list-placeholder").hidden = true;
   document.getElementById("issue-panel").hidden = false;
   renderRepoHeading(project);
@@ -617,9 +647,15 @@ function highlightSelectedSubtaskRow() {
     );
 }
 
+/**
+ * Issueの選択
+ *
+ * 縦長表示ではIssue内容を開き、MR未選択のためMR内容を閉じる。
+ */
 async function selectIssue(number) {
   currentIssueNumber = number;
   currentSelectedSubtaskId = null;
+  autoSetSectionExpanded(SECTION_IDS.issue, true);
   document
     .querySelectorAll(".issue-item")
     .forEach((el) => el.classList.toggle("active", Number(el.dataset.number) === number));
@@ -681,6 +717,7 @@ function resetSubtaskForm() {
 function selectSubtask(subtaskId) {
   currentSelectedSubtaskId = subtaskId;
   highlightSelectedSubtaskRow();
+  autoSetSectionExpanded(SECTION_IDS.mr, true);
   const subtask = currentSubtasks.find((s) => s.id === subtaskId) || null;
   renderSubtaskDetail(subtask);
 }
@@ -701,6 +738,7 @@ function renderSubtaskDetail(s) {
   if (!s) {
     heading.textContent = "MR";
     el.innerHTML = '<p class="empty">左の一覧からMRを選択してください。</p>';
+    autoSetSectionExpanded(SECTION_IDS.mr, false);
     return;
   }
 
@@ -1058,6 +1096,7 @@ async function onSubmitIssueForm(event) {
   }
 
   form.reset();
+  autoSetSectionExpanded(SECTION_IDS.repo, false);
   const issue = await response.json();
   await openCreatedIssue(issue, title);
   await createDefaultSubtask(issue.number, statusEl);
@@ -1148,9 +1187,11 @@ async function createSubtask(issueNumber, title) {
  * 作成したMRを開いて指示内容の入力欄にフォーカスする
  *
  * Issueを選択し直してMR一覧を再取得してから、作成したMRを選択する。
+ * 縦長表示では指示内容の入力欄を見せるため、Issue内容を閉じる。
  */
 async function openCreatedSubtask(issueNumber, subtaskId) {
   await selectIssue(issueNumber);
+  autoSetSectionExpanded(SECTION_IDS.issue, false);
   selectSubtask(subtaskId);
   focusWithScroll(document.getElementById(`instruction-${subtaskId}`));
 }
