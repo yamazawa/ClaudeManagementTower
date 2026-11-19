@@ -33,11 +33,16 @@ class PrMergeError(RuntimeError):
     pass
 
 
-def wait_for_mergeable_state(repo: str, number: int) -> str:
-    """GitHubがmergeableを判定し終える(UNKNOWN以外になる)まで待つ"""
+def wait_for_mergeable_state(repo: str, number: int, stale_state: str | None = None) -> str:
+    """GitHubがmergeableを判定し終える(UNKNOWN以外になる)まで待つ
+
+    push直後はmergeableの再計算が始まるまでに間があり、UNKNOWNを経由せず
+    push前の値(stale_state)を返し続けることがあるため、その値も
+    再計算中とみなして待つ。
+    """
     deadline = time.monotonic() + MERGEABLE_POLL_TIMEOUT_SECONDS
     state = get_pr_mergeable(repo, number)
-    while state == UNKNOWN and time.monotonic() < deadline:
+    while state in (UNKNOWN, stale_state) and time.monotonic() < deadline:
         time.sleep(MERGEABLE_POLL_INTERVAL_SECONDS)
         state = get_pr_mergeable(repo, number)
     return state
@@ -53,7 +58,7 @@ def merge_pr_with_update(repo: str, repo_path: str, worktree_base_dir: str, pr: 
     if state == CONFLICTING:
         worktree_path = str(Path(worktree_base_dir) / f"{MERGE_WORKTREE_PREFIX}{number}")
         update_pr_branch(repo_path, worktree_path, pr)
-        state = wait_for_mergeable_state(repo, number)
+        state = wait_for_mergeable_state(repo, number, stale_state=CONFLICTING)
     if state != MERGEABLE:
         raise PrMergeError(f"PR #{number} がマージ可能になりません（{state}）")
     merge_pull_request(repo, number)

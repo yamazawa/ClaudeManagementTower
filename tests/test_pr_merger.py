@@ -39,11 +39,22 @@ def test_conflicting_pr_is_updated_before_merge(monkeypatch, calls, tmp_path):
 
 
 def test_still_conflicting_after_update_raises(monkeypatch, calls):
-    _states(monkeypatch, ["CONFLICTING", "CONFLICTING"])
+    monkeypatch.setattr(pr_merger, "get_pr_mergeable", lambda repo, number: "CONFLICTING")
+    clock = iter([0, 0, 1000, 1000])
+    monkeypatch.setattr(pr_merger.time, "monotonic", lambda: next(clock))
 
     with pytest.raises(PrMergeError):
         merge_pr_with_update("o/r", "repo", "base", PR)
     assert ("merge", 7) not in calls
+
+
+def test_stale_conflicting_state_right_after_push_is_retried(monkeypatch, calls, tmp_path):
+    # push直後、mergeableの再計算が始まる前は古いCONFLICTINGを返すことがある
+    _states(monkeypatch, ["CONFLICTING", "CONFLICTING", "MERGEABLE"])
+
+    merge_pr_with_update("o/r", "repo", str(tmp_path), PR)
+
+    assert calls == [("update", str(tmp_path / "merge-pr-7")), ("merge", 7)]
 
 
 def _fake_claude(monkeypatch, unmerged_after: list[str], merge_in_progress: bool):
