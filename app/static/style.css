@@ -388,6 +388,11 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
   background: var(--soft);
 }
 
+.attachment-table .attachment-delete-button {
+  font-size: 12px;
+  padding: 2px 8px;
+}
+
 /* 画像添付のサムネイル（縦横比を保って枠内に収める） */
 .attachment-thumbnail {
   display: block;
@@ -421,6 +426,18 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
   margin-right: auto;
   font-size: 12px;
   color: var(--muted);
+}
+
+.image-editor-tools {
+  display: flex;
+  gap: 2px;
+}
+
+/* 選択中の線の種類は枠と文字をアクセント色にする */
+.image-editor-tool[aria-pressed="true"] {
+  border-color: #e01e1e;
+  color: #e01e1e;
+  font-weight: bold;
 }
 
 .image-editor-body {

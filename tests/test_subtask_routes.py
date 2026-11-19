@@ -180,3 +180,26 @@ def test_get_attachment_file_unknown_id_is_not_found(session_factory, tmp_path, 
         subtasks.get_attachment_file(1, "S1")
 
     assert exc.value.status_code == 404
+
+
+def test_remove_attachment_deletes_saved_file(session_factory, tmp_path, monkeypatch):
+    monkeypatch.setattr(subtasks.settings, "worktree_base_dir", str(tmp_path))
+    (tmp_path / "issue-5-x").mkdir()
+    _add_subtask(session_factory)
+    _upload(1, "a.png", b"1")
+    _upload(1, "b.txt", b"2")
+
+    assert subtasks.remove_attachment(1, "S1") == {"id": "S1"}
+
+    assert [a["id"] for a in subtasks.get_attachments(1)] == ["S2"]
+
+
+def test_remove_attachment_unknown_id_is_not_found(session_factory, tmp_path, monkeypatch):
+    monkeypatch.setattr(subtasks.settings, "worktree_base_dir", str(tmp_path))
+    (tmp_path / "issue-5-x").mkdir()
+    _add_subtask(session_factory)
+
+    with pytest.raises(HTTPException) as exc:
+        subtasks.remove_attachment(1, "S1")
+
+    assert exc.value.status_code == 404

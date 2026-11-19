@@ -107,6 +107,23 @@ def save_attachment(worktree_path: str, filename: str, data: bytes) -> dict:
     return _to_entry(directory)
 
 
+def delete_attachment(worktree_path: str, attachment_id: str) -> bool:
+    """IDに対応する添付ファイルを保存先フォルダごと削除する
+
+    IDの形式が不正、または添付ファイルが無い場合はFalseを返す。
+    フォルダ直下のファイルのみ削除し、サブフォルダは辿らない。
+    """
+    if not _ID_PATTERN.match(attachment_id):
+        return False
+    directory = _attachments_root(worktree_path) / attachment_id
+    if not directory.is_dir():
+        return False
+    for file in (f for f in directory.iterdir() if f.is_file()):
+        file.unlink()
+    directory.rmdir()
+    return True
+
+
 def build_instruction_prompt(instruction: str, attachments: list[dict]) -> str:
     """添付ファイルの対応表を実装指示に付け加える
 

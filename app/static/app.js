@@ -758,6 +758,7 @@ async function loadAttachments(subtaskId) {
  * 添付ファイルの表（ID・ファイル）を描画する
  *
  * 画像はファイル名の代わりにサムネイルを表示する。
+ * 削除ボタンは添付ボタンと同じ条件で無効化する。
  * 添付ファイルが無い場合は表を表示しない。
  */
 function renderAttachmentList(subtaskId, attachments) {
@@ -767,12 +768,22 @@ function renderAttachmentList(subtaskId, attachments) {
     container.innerHTML = "";
     return;
   }
-  const rows = attachments
-    .map((a) => `<tr><td>${escapeHtml(a.id)}</td><td>${renderAttachmentCell(subtaskId, a)}</td></tr>`)
-    .join("");
+  const disabled = document.getElementById("attach-file-button")?.disabled ? " disabled" : "";
+  const rows = attachments.map((a) => renderAttachmentRow(subtaskId, a, disabled)).join("");
   container.innerHTML =
-    `<table class="attachment-table"><thead><tr><th>ID</th><th>ファイル</th></tr></thead>` +
+    `<table class="attachment-table"><thead><tr><th>ID</th><th>ファイル</th><th></th></tr></thead>` +
     `<tbody>${rows}</tbody></table>`;
+  container
+    .querySelectorAll(".attachment-delete-button")
+    .forEach((b) => b.addEventListener("click", () => removeAttachment(subtaskId, b.dataset.attachmentId)));
+}
+
+function renderAttachmentRow(subtaskId, attachment, disabled) {
+  const id = escapeHtml(attachment.id);
+  const deleteButton =
+    `<button type="button" class="subtask-action-button attach-button attachment-delete-button"` +
+    ` data-attachment-id="${id}"${disabled}>削除</button>`;
+  return `<tr><td>${id}</td><td>${renderAttachmentCell(subtaskId, attachment)}</td><td>${deleteButton}</td></tr>`;
 }
 
 function renderAttachmentCell(subtaskId, attachment) {
@@ -796,6 +807,22 @@ async function uploadAttachments(subtaskId, files) {
     if (error) errors.push(`${file.name}: ${error}`);
   }
   if (statusEl.isConnected) statusEl.textContent = errors.length ? `失敗しました: ${errors.join(" / ")}` : "";
+  await loadAttachments(subtaskId);
+}
+
+/**
+ * 確認のうえ添付ファイルを削除し、一覧を読み直す
+ *
+ * 失敗した場合は添付ボタン横の状態欄に理由を表示する。
+ */
+async function removeAttachment(subtaskId, attachmentId) {
+  if (!confirm(`添付ファイル ${attachmentId} を削除しますか？`)) return;
+  const response = await fetch(
+    `/api/subtasks/${subtaskId}/attachments/${encodeURIComponent(attachmentId)}`,
+    { method: "DELETE" }
+  ).catch(() => null);
+  const statusEl = document.getElementById("attachment-status");
+  if (statusEl) statusEl.textContent = response?.ok ? "" : `削除に失敗しました: ${attachmentId}`;
   await loadAttachments(subtaskId);
 }
 

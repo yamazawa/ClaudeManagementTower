@@ -4,6 +4,7 @@ from core.attachments import (
     MAX_ATTACHMENT_BYTES,
     AttachmentError,
     build_instruction_prompt,
+    delete_attachment,
     find_attachment_file,
     list_attachments,
     save_attachment,
@@ -89,3 +90,21 @@ def test_find_attachment_file_rejects_unknown_or_invalid_id(tmp_path, attachment
     save_attachment(str(tmp_path), "a.png", b"1")
 
     assert find_attachment_file(str(tmp_path), attachment_id) is None
+
+
+def test_delete_attachment_removes_only_target(tmp_path):
+    save_attachment(str(tmp_path), "a.png", b"1")
+    save_attachment(str(tmp_path), "b.txt", b"2")
+
+    assert delete_attachment(str(tmp_path), "S1") is True
+
+    assert not (tmp_path / ".claude-tower/attachments/S1").exists()
+    assert [a["id"] for a in list_attachments(str(tmp_path))] == ["S2"]
+
+
+@pytest.mark.parametrize("attachment_id", ["S2", "..", "S1/../S1", "X1", ""])
+def test_delete_attachment_rejects_unknown_or_invalid_id(tmp_path, attachment_id):
+    save_attachment(str(tmp_path), "a.png", b"1")
+
+    assert delete_attachment(str(tmp_path), attachment_id) is False
+    assert find_attachment_file(str(tmp_path), "S1") is not None

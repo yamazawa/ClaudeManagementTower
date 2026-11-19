@@ -4,7 +4,13 @@ from fastapi import APIRouter, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from core.attachments import AttachmentError, find_attachment_file, list_attachments, save_attachment
+from core.attachments import (
+    AttachmentError,
+    delete_attachment,
+    find_attachment_file,
+    list_attachments,
+    save_attachment,
+)
 from core.config import settings
 from core.db import SessionLocal
 from core.git_client import (
@@ -305,6 +311,17 @@ async def upload_attachment(subtask_id: int, file: UploadFile):
         return save_attachment(worktree_path, file.filename or "", await file.read())
     except AttachmentError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.delete("/{subtask_id}/attachments/{attachment_id}")
+def remove_attachment(subtask_id: int, attachment_id: str):
+    """実装指示の添付ファイルを削除する
+
+    残りの添付のIDは振り直さない。
+    """
+    if not delete_attachment(_subtask_worktree_path(subtask_id), attachment_id):
+        raise HTTPException(status_code=404, detail="attachment not found")
+    return {"id": attachment_id}
 
 
 class ExecuteSubtaskRequest(BaseModel):
