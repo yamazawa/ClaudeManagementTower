@@ -163,6 +163,40 @@ header h1 {
   color: #7a869e;
 }
 
+/* ヘッダー右上のClaudeトークン使用状況 */
+.token-usage {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  margin-left: auto;
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.token-usage-item {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.token-usage-label {
+  color: #b8c7e3;
+}
+
+.token-usage-reset {
+  color: #7a869e;
+  font-size: 11px;
+}
+
+.token-usage-warning {
+  color: #e38b39;
+}
+
+.token-usage-rejected {
+  color: #ff6b6b;
+}
+
 #issue-panel[hidden],
 #issue-list-placeholder[hidden] {
   display: none;

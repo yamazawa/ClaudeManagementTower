@@ -22,3 +22,22 @@ def test_run_loop_processes_claimed_job_then_exits_when_removed(monkeypatch):
     worker_main.run_loop(1)
 
     assert processed == [5]
+
+
+def test_run_claude_for_job_records_rate_limit_event(monkeypatch):
+    from claude_agent_sdk import RateLimitEvent, RateLimitInfo
+
+    info = RateLimitInfo(status="allowed", rate_limit_type="five_hour", utilization=0.3)
+    recorded = []
+
+    async def fake_run_claude(prompt, worktree, resume=None, on_message=None):
+        on_message(RateLimitEvent(rate_limit_info=info, uuid="u", session_id="s"))
+        on_message(object())
+        return "s", "done"
+
+    monkeypatch.setattr(worker_main, "run_claude", fake_run_claude)
+    monkeypatch.setattr(worker_main, "record_event", lambda *a, **k: None)
+    monkeypatch.setattr(worker_main, "record_rate_limit", recorded.append)
+
+    assert worker_main._run_claude_for_job(1, "wt", "prompt", None) == ("s", "done")
+    assert recorded == [info]

@@ -4,6 +4,8 @@ import threading
 import time
 from collections.abc import Callable
 
+from claude_agent_sdk import RateLimitEvent
+
 from core.attachments import build_instruction_prompt, list_attachments
 from core.claude_client import run_claude
 from core.config import settings
@@ -23,6 +25,7 @@ from core.job_queue import (
     set_worker_state,
 )
 from core.models import ExecutionJob, Project, Subtask
+from core.rate_limits import record_rate_limit
 from core.reports import save_report
 
 
@@ -49,6 +52,8 @@ def _run_claude_for_job(
 ) -> tuple[str | None, str | None]:
     def on_message(message: object) -> None:
         record_event(job_id, event_type=type(message).__name__, content=repr(message)[:4000])
+        if isinstance(message, RateLimitEvent):
+            record_rate_limit(message.rate_limit_info)
 
     return asyncio.run(run_claude(instruction, worktree_path, resume=resume, on_message=on_message))
 

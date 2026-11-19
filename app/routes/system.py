@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 
 from core.config import settings
 from core.job_queue import cleanup_stale_workers, recover_stale_jobs
+from core.rate_limits import get_rate_limits
 from core.self_sync import SelfSyncAlreadyRunning, read_result, start_self_sync
 from core.supervisor_control import (
     COMMAND_RESTART_SERVER,
@@ -59,3 +60,8 @@ def cleanup_workers() -> dict:
         "removed_worker_ids": cleanup_stale_workers(settings.worker_offline_timeout_seconds),
         "recovered_job_ids": recover_stale_jobs(settings.job_stale_timeout_seconds),
     }
+
+
+@router.get("/rate-limits")
+def rate_limits() -> dict:
+    return get_rate_limits()

@@ -90,6 +90,21 @@ class Report(Base):
     created_at: Mapped[datetime] = mapped_column(default=_now)
 
 
+class RateLimitSnapshot(Base):
+    """Claudeのレート制限の最新状況
+
+    レート制限の枠（5時間・7日など）ごとに1行を持ち、受信のたびに上書きする。
+    """
+
+    __tablename__ = "rate_limit_snapshots"
+
+    rate_limit_type: Mapped[str] = mapped_column(primary_key=True)
+    status: Mapped[str]
+    utilization: Mapped[float | None] = mapped_column(default=None)
+    resets_at: Mapped[int | None] = mapped_column(default=None)
+    updated_at: Mapped[datetime] = mapped_column(default=_now, onupdate=_now)
+
+
 class Worker(Base):
     __tablename__ = "workers"
 

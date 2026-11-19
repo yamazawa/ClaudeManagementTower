@@ -81,3 +81,10 @@ def test_get_sync_self_result_404_when_never_run(monkeypatch):
     with pytest.raises(HTTPException) as error:
         system.get_sync_self_result()
     assert error.value.status_code == 404
+
+
+def test_rate_limits_returns_snapshot(monkeypatch):
+    limits = {"five_hour": {"utilization": 0.4}, "seven_day": None}
+    monkeypatch.setattr(system, "get_rate_limits", lambda: limits)
+
+    assert system.rate_limits() == limits
