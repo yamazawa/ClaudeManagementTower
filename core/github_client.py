@@ -4,6 +4,8 @@ import subprocess
 GH_TIMEOUT_SECONDS = 60
 ISSUE_LIST_LIMIT = 200
 PR_STATE_LIST_LIMIT = 200
+# PR状態の同期と、管理塔外で作成されたPRの取り込みに使う項目
+PR_STATE_FIELDS = "number,isDraft,state,mergedAt,title,headRefName,closingIssuesReferences"
 
 
 class GitHubClientError(RuntimeError):
@@ -112,7 +114,7 @@ def list_pull_request_states(repo: str) -> list[dict]:
             "--repo", repo,
             "--state", "all",
             "--limit", str(PR_STATE_LIST_LIMIT),
-            "--json", "number,isDraft,state,mergedAt",
+            "--json", PR_STATE_FIELDS,
         ]
     )
     return json.loads(output)
