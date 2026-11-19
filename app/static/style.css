@@ -258,8 +258,14 @@ h2 {
   cursor: pointer;
 }
 
-.expander:hover {
+.expander:hover:not(:disabled) {
   background: var(--soft);
+}
+
+/* MR自動作成中など、開閉できない間のエキスパンダ */
+.expander:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .expander::before {
