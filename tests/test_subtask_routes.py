@@ -158,3 +158,25 @@ def test_get_attachments_unknown_subtask_is_not_found(session_factory):
         subtasks.get_attachments(999)
 
     assert exc.value.status_code == 404
+
+
+def test_get_attachment_file_returns_saved_file(session_factory, tmp_path, monkeypatch):
+    monkeypatch.setattr(subtasks.settings, "worktree_base_dir", str(tmp_path))
+    (tmp_path / "issue-5-x").mkdir()
+    _add_subtask(session_factory)
+    _upload(1, "a.png", b"1")
+
+    response = subtasks.get_attachment_file(1, "S1")
+
+    assert str(response.path).endswith("a.png")
+
+
+def test_get_attachment_file_unknown_id_is_not_found(session_factory, tmp_path, monkeypatch):
+    monkeypatch.setattr(subtasks.settings, "worktree_base_dir", str(tmp_path))
+    (tmp_path / "issue-5-x").mkdir()
+    _add_subtask(session_factory)
+
+    with pytest.raises(HTTPException) as exc:
+        subtasks.get_attachment_file(1, "S1")
+
+    assert exc.value.status_code == 404

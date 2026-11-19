@@ -4,6 +4,7 @@ from core.attachments import (
     MAX_ATTACHMENT_BYTES,
     AttachmentError,
     build_instruction_prompt,
+    find_attachment_file,
     list_attachments,
     save_attachment,
 )
@@ -13,7 +14,12 @@ def test_save_attachment_assigns_sequential_ids(tmp_path):
     first = save_attachment(str(tmp_path), "a.png", b"1")
     second = save_attachment(str(tmp_path), "b.txt", b"2")
 
-    assert first == {"id": "S1", "filename": "a.png", "path": ".claude-tower/attachments/S1/a.png"}
+    assert first == {
+        "id": "S1",
+        "filename": "a.png",
+        "path": ".claude-tower/attachments/S1/a.png",
+        "is_image": True,
+    }
     assert second["id"] == "S2"
     assert (tmp_path / ".claude-tower/attachments/S2/b.txt").read_bytes() == b"2"
 
@@ -65,3 +71,21 @@ def test_build_instruction_prompt_appends_attachment_table(tmp_path):
 
     assert prompt.startswith("S1の画面を直して\n")
     assert "| S1 | 画面.png | .claude-tower/attachments/S1/画面.png |" in prompt
+
+
+def test_save_attachment_marks_only_images(tmp_path):
+    assert save_attachment(str(tmp_path), "a.JPG", b"1")["is_image"] is True
+    assert save_attachment(str(tmp_path), "b.txt", b"1")["is_image"] is False
+
+
+def test_find_attachment_file_returns_saved_file(tmp_path):
+    save_attachment(str(tmp_path), "a.png", b"1")
+
+    assert find_attachment_file(str(tmp_path), "S1").read_bytes() == b"1"
+
+
+@pytest.mark.parametrize("attachment_id", ["S2", "..", "S1/../S1", "X1"])
+def test_find_attachment_file_rejects_unknown_or_invalid_id(tmp_path, attachment_id):
+    save_attachment(str(tmp_path), "a.png", b"1")
+
+    assert find_attachment_file(str(tmp_path), attachment_id) is None
