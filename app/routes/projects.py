@@ -15,6 +15,7 @@ from core.github_client import (
     list_issues,
     reopen_issue,
 )
+from core.lifecycle import LifecycleState
 from core.models import ExecutionJob, Project, Report, Subtask
 from core.mr_naming import compose_mr_title, split_mr_title
 from core.repo_catalog import describe_repo
@@ -22,11 +23,11 @@ from core.repo_catalog import describe_repo
 router = APIRouter(prefix="/api/projects")
 
 # Issueクローズを妨げる未解決MRのlifecycle_state
-UNRESOLVED_LIFECYCLE_STATES = ("draft", "in_review")
+UNRESOLVED_LIFECYCLE_STATES = LifecycleState.OPEN_STATES
 # Issue一覧のMR数で解決済とみなすlifecycle_state
-RESOLVED_LIFECYCLE_STATE = "merged"
+RESOLVED_LIFECYCLE_STATE = LifecycleState.MERGED
 # Issue一覧のMR数から除外するlifecycle_state（マージされずクローズ）
-UNCOUNTED_LIFECYCLE_STATE = "closed"
+UNCOUNTED_LIFECYCLE_STATE = LifecycleState.CANCELED
 
 
 def _latest_job_summary(session, subtask_id: int) -> dict | None:
@@ -205,7 +206,7 @@ def get_issue_detail(project_id: int, number: int):
 def close_project_issue(project_id: int, number: int):
     """Issueをクローズする
 
-    未解決（Draft・レビュー中）のMRが残っている場合は拒否する。
+    未解決（Draft・Resolved）のMRが残っている場合は拒否する。
     """
     with SessionLocal() as session:
         project = _get_project_or_404(session, project_id)

@@ -415,8 +415,17 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
   resize: vertical;
 }
 
-.instruction-form button {
-  align-self: flex-start;
+.instruction-form textarea:read-only {
+  background: var(--soft);
+}
+
+/* MRの状態に応じた操作ボタン（primaryクラスでプライマリ色にする） */
+.subtask-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.subtask-action-button {
   font: inherit;
   font-size: 13px;
   padding: 5px 12px;
@@ -424,6 +433,25 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
   border-radius: 6px;
   background: #fff;
   cursor: pointer;
+}
+
+.subtask-action-button:hover:not(:disabled) {
+  background: var(--soft);
+}
+
+.subtask-action-button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+}
+
+.subtask-action-button.primary:hover:not(:disabled) {
+  filter: brightness(0.9);
+}
+
+.subtask-action-button:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 /* 見出し右端の閉じる・再開ボタン

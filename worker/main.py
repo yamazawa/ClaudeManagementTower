@@ -10,6 +10,7 @@ from core.db import SessionLocal, init_db
 from core.execution_events import record_event
 from core.git_client import append_instruction_history, push_branch
 from core.github_client import mark_pr_ready
+from core.lifecycle import LifecycleState
 from core.job_queue import (
     claim_next_job,
     cleanup_stale_workers,
@@ -76,7 +77,7 @@ def _finalize_success(job_id: int, subtask: Subtask, project: Project, worktree_
         mark_pr_ready(project.github_repo, subtask.github_pr_number)
         with SessionLocal() as session:
             db_subtask = session.get(Subtask, subtask.id)
-            db_subtask.lifecycle_state = "in_review"
+            db_subtask.lifecycle_state = LifecycleState.RESOLVED
             session.commit()
 
 
