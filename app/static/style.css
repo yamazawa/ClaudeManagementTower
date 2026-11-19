@@ -428,6 +428,18 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
   color: var(--muted);
 }
 
+.image-editor-tools {
+  display: flex;
+  gap: 2px;
+}
+
+/* 選択中の線の種類は枠と文字をアクセント色にする */
+.image-editor-tool[aria-pressed="true"] {
+  border-color: #e01e1e;
+  color: #e01e1e;
+  font-weight: bold;
+}
+
 .image-editor-body {
   display: flex;
   justify-content: center;
