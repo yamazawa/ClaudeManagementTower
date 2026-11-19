@@ -976,26 +976,49 @@ async function onSubmitIssueForm(event) {
   }
 
   form.reset();
-  const { number } = await response.json();
+  const issue = await response.json();
+  await openCreatedIssue(issue, title);
+  await createDefaultSubtask(issue.number, statusEl);
+}
+
+/**
+ * 作成したIssueを一覧に反映して選択する
+ *
+ * MR作成は時間がかかるため、先にIssueを選択して表示する。
+ * GitHubの一覧反映が遅れた場合は、作成したIssueを一覧の先頭に補う。
+ */
+async function openCreatedIssue(issue, title) {
   await loadIssues();
-  await createDefaultSubtask(number, statusEl);
+  const listEl = document.getElementById("issue-list-items");
+  const isListed = listEl.querySelector(`.issue-item[data-number="${issue.number}"]`);
+  const showsOpen = document.getElementById("issue-filter").value !== "closed";
+  if (!isListed && showsOpen) {
+    listEl.querySelector(".empty")?.remove();
+    const item = { ...issue, title, state: "OPEN", mr_counts: countMrs([]) };
+    listEl.prepend(renderIssueItem(item));
+  }
+  await selectIssue(issue.number);
+  listEl
+    .querySelector(`.issue-item[data-number="${issue.number}"]`)
+    ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
 /**
  * Issue作成直後に規定値のMRを作成して開く
  *
  * MR固有名は空欄で作成し、サーバー側で連番を割り当てる。
- * MR作成に失敗してもIssueは作成済のため、Issueを開いて結果を表示する。
+ * MR作成に失敗してもIssueは選択済のため、結果の表示のみ行う。
+ * 作成中に別のIssueへ切り替えた場合は、MRを開かない。
  */
 async function createDefaultSubtask(issueNumber, statusEl) {
   statusEl.textContent = "Issueを作成しました。MRを作成中...";
   const { body, error } = await createSubtask(issueNumber, "");
   if (error) {
     statusEl.textContent = `Issueを作成しましたが、MRの作成に失敗しました: ${error}`;
-    await selectIssue(issueNumber);
     return;
   }
   statusEl.textContent = "IssueとMRを作成しました";
+  if (issueNumber !== currentIssueNumber) return;
   await openCreatedSubtask(issueNumber, body.id);
 }
 
@@ -1047,7 +1070,18 @@ async function createSubtask(issueNumber, title) {
 async function openCreatedSubtask(issueNumber, subtaskId) {
   await selectIssue(issueNumber);
   selectSubtask(subtaskId);
-  document.getElementById(`instruction-${subtaskId}`)?.focus();
+  focusWithScroll(document.getElementById(`instruction-${subtaskId}`));
+}
+
+/**
+ * 入力欄にフォーカスし、その位置まで画面をスクロールする
+ *
+ * ブラウザ既定のスクロールは最小限で欄が見切れるため、欄を画面中央に寄せる。
+ */
+function focusWithScroll(el) {
+  if (!el) return;
+  el.focus({ preventScroll: true });
+  el.scrollIntoView({ block: "center", behavior: "smooth" });
 }
 
 /**
