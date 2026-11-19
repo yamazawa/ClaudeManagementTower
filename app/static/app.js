@@ -1321,11 +1321,17 @@ async function createSubtask(issueNumber, title, issueTitle = "") {
 /**
  * 作成したMRを開いて指示内容の入力欄にフォーカスする
  *
- * Issueを選択し直してMR一覧を再取得してから、作成したMRを選択する。
+ * MR一覧を再取得してから、作成したMRを選択する。
+ * 表示中のIssueの場合は、GitHubへ問い合わせないDB上のMR一覧のみ再取得する。
  * 縦長表示では指示内容の入力欄を見せるため、Issue内容を閉じる。
  */
 async function openCreatedSubtask(issueNumber, subtaskId) {
-  await selectIssue(issueNumber);
+  if (issueNumber === currentIssueNumber) {
+    await refreshSubtaskStates();
+    resetSubtaskForm();
+  } else {
+    await selectIssue(issueNumber);
+  }
   autoSetSectionExpanded(SECTION_IDS.issue, false);
   selectSubtask(subtaskId);
   focusWithScroll(document.getElementById(`instruction-${subtaskId}`));
