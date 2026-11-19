@@ -238,6 +238,12 @@ const SERVER_RESTART_POLL_MS = 1000;
 const SERVER_RESTART_TIMEOUT_MS = 60000;
 const SYNC_SELF_POLL_MS = 3000;
 const SYNC_SELF_TIMEOUT_MS = 30 * 60 * 1000;
+const DEPLOY_POLL_MS = 2000;
+const DEPLOY_TIMEOUT_MS = 30 * 60 * 1000;
+// サーバー再起動を表すデプロイ結果のrestartsの値（core/supervisor_control.pyと合わせる）
+const DEPLOY_RESTART_SERVER = "restart_server";
+const DEPLOY_DEFINED_TOOLTIP = "リポジトリに定義したデプロイ手順を実行します";
+const DEPLOY_UNDEFINED_TOOLTIP = "デプロイが定義されていません（.claude-tower/deploy.json）";
 
 function setSystemStatus(text) {
   document.getElementById("system-status").textContent = text;
@@ -468,11 +474,74 @@ async function selectProject(project) {
  * リポジトリ見出しの表示
  *
  * 「Repo #番号 表示名」とし、番号部分はGitHubのリポジトリページへのリンクにする。
+ * 右端にDeployボタンを置き、デプロイ未定義のリポジトリでは無効化する。
  */
 function renderRepoHeading(project) {
   const label = project.repo_number ? `Repo #${project.repo_number}` : "Repo";
   document.getElementById("repo-heading").innerHTML =
-    `${renderTitleNumber(label, project.repo_url)}<span id="repo-title">${escapeHtml(project.display_name)}</span>`;
+    `${renderTitleNumber(label, project.repo_url)}<span id="repo-title">${escapeHtml(project.display_name)}</span>` +
+    `<button type="button" id="deploy-button" class="title-action-button">Deploy</button>`;
+  document.getElementById("deploy-status").textContent = "";
+  const button = document.getElementById("deploy-button");
+  button.disabled = !project.deploy_defined;
+  button.title = project.deploy_defined ? DEPLOY_DEFINED_TOOLTIP : DEPLOY_UNDEFINED_TOOLTIP;
+  button.addEventListener("click", () => onClickDeploy(project, button));
+}
+
+/**
+ * デプロイの実行
+ *
+ * 結果が出るまでポーリングし、サーバー再起動を含む場合は再起動完了まで待つ。
+ * 実行中にリポジトリを切り替えた場合も、結果は実行したリポジトリの見出しにのみ表示する。
+ */
+async function onClickDeploy(project, button) {
+  if (!confirm(`${project.display_name} をデプロイしますか？`)) return;
+  const setStatus = (text) => {
+    if (currentProjectId === project.id) document.getElementById("deploy-status").textContent = text;
+  };
+  button.disabled = true;
+  setStatus("デプロイ中...");
+  try {
+    setStatus(await runDeploy(project.id, setStatus));
+  } catch (error) {
+    setStatus(`デプロイに失敗しました: ${error.message}`);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function runDeploy(projectId, setStatus) {
+  const oldBootId = await fetchBootId();
+  const response = await fetch(`/api/projects/${projectId}/deploy`, { method: "POST" });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.detail || `HTTP ${response.status}`);
+
+  const result = await waitForDeployResult(projectId);
+  if (result === null) return "デプロイの完了を確認できませんでした";
+  if (result.status === "failed") return `デプロイに失敗しました: ${result.error}`;
+  if (!result.restarts.includes(DEPLOY_RESTART_SERVER)) return "デプロイしました";
+  setStatus("デプロイしました。サーバー再起動中...");
+  const restarted = await waitForNewBootId(oldBootId);
+  return restarted ? "デプロイしました（サーバーを再起動しました）" : "デプロイしました（再起動を確認できませんでした）";
+}
+
+async function fetchDeployResult(projectId) {
+  try {
+    const response = await fetch(`/api/projects/${projectId}/deploy`);
+    return response.ok ? await response.json() : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+async function waitForDeployResult(projectId) {
+  const deadline = Date.now() + DEPLOY_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    await sleep(DEPLOY_POLL_MS);
+    const result = await fetchDeployResult(projectId);
+    if (result && result.status !== "running") return result;
+  }
+  return null;
 }
 
 async function loadIssues() {
