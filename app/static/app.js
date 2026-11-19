@@ -380,6 +380,24 @@ function renderRepoHeading(project) {
   button.disabled = !project.deploy_defined;
   button.title = project.deploy_defined ? DEPLOY_DEFINED_TOOLTIP : DEPLOY_UNDEFINED_TOOLTIP;
   button.addEventListener("click", () => onClickDeploy(project, button));
+  if (project.deploy_defined) refreshDeployPending(project.id, button);
+}
+
+/**
+ * Deployボタンの色の更新
+ *
+ * デプロイ先のソースに未取り込みの対応がある場合はプライマリ色にする。
+ * 取得に失敗した場合は通常の色のままとする。
+ */
+async function refreshDeployPending(projectId, button) {
+  let pending = false;
+  try {
+    const response = await fetch(`/api/projects/${projectId}/deploy/pending`);
+    pending = response.ok && (await response.json()).pending === true;
+  } catch (error) {
+    pending = false;
+  }
+  if (button.isConnected) button.classList.toggle("primary", pending);
 }
 
 /**
@@ -401,6 +419,7 @@ async function onClickDeploy(project, button) {
     setStatus(`デプロイに失敗しました: ${error.message}`);
   } finally {
     button.disabled = false;
+    refreshDeployPending(project.id, button);
   }
 }
 

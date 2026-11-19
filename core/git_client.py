@@ -107,6 +107,16 @@ def pull_latest(repo_path: str, branch: str) -> None:
     _run_git(["pull", "origin", branch], cwd=repo_path)
 
 
+def has_remote_updates(repo_path: str, branch: str) -> bool:
+    """リモートブランチに、チェックアウト中のHEADへ未取り込みのコミットがあるか
+
+    判定前にリモートの最新を取得する。
+    """
+    _run_git(["fetch", "origin", branch], cwd=repo_path)
+    count = _run_git(["rev-list", "--count", f"HEAD..origin/{branch}"], cwd=repo_path)
+    return int(count.strip()) > 0
+
+
 def prepare_detached_worktree(repo_path: str, worktree_path: str, branch: str) -> None:
     """リモートブランチの最新をdetached HEADでworktreeに用意する
 
