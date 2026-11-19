@@ -20,6 +20,8 @@ class Settings(BaseSettings):
     supervisor_poll_interval_seconds: float = 1.0
     pr_sync_interval_seconds: float = 5.0
     self_repo: str = "yamazawa/ClaudeManagementTower"
+    claude_credentials_path: str = ""
+    claude_usage_cache_seconds: float = 60.0
 
 
 settings = Settings()
