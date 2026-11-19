@@ -388,6 +388,11 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
   background: var(--soft);
 }
 
+.attachment-table .attachment-delete-button {
+  font-size: 12px;
+  padding: 2px 8px;
+}
+
 /* 画像添付のサムネイル（縦横比を保って枠内に収める） */
 .attachment-thumbnail {
   display: block;
