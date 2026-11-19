@@ -539,11 +539,10 @@ function renderSubtaskList() {
     subtasks.length === 0
       ? '<p class="empty">該当するMRはありません。</p>'
       : `<ul id="subtask-list-items">${subtasks.map(renderSubtaskRow).join("")}</ul>`;
-  container
-    .querySelectorAll(".subtask-row")
-    .forEach((row) =>
-      row.addEventListener("click", () => selectSubtask(Number(row.dataset.subtaskId)))
-    );
+  container.querySelectorAll(".subtask-row").forEach((row) => {
+    row.addEventListener("click", () => selectSubtask(Number(row.dataset.subtaskId)));
+    row.querySelector(".title-number").addEventListener("click", (e) => e.stopPropagation());
+  });
   highlightSelectedSubtaskRow();
   updateIssueToggleButton();
 }
@@ -651,15 +650,30 @@ async function saveSubtaskTitle(subtaskId, suffix) {
   return null;
 }
 
+/**
+ * MR一覧の1行
+ *
+ * Issue一覧と同様に番号リンク・1行省略のタイトル・状態を並べる。
+ * リンクのクリックではMRを選択しない。
+ */
 function renderSubtaskRow(s) {
-  const label = LIFECYCLE_LABELS[s.lifecycle_state] || s.lifecycle_state;
-  const prBadge = s.github_pr_number ? `PR #${s.github_pr_number}` : "";
   return `
     <li class="subtask-row" data-subtask-id="${s.id}">
+      ${renderSubtaskNumber(s)}
       ${renderMrTitle(s, { className: "subtask-row-title" })}
-      <span class="subtask-row-meta">${label} ${prBadge}</span>
+      ${renderSubtaskState(s)}
     </li>
   `;
+}
+
+/**
+ * MRの状態表示
+ *
+ * 一覧の行と詳細の見出しで共通に使う。
+ */
+function renderSubtaskState(s) {
+  const label = LIFECYCLE_LABELS[s.lifecycle_state] || s.lifecycle_state;
+  return `<span class="subtask-state">${label}</span>`;
 }
 
 function highlightSelectedSubtaskRow() {
@@ -738,11 +752,6 @@ function selectSubtask(subtaskId) {
   renderSubtaskDetail(subtask);
 }
 
-function renderSubtaskStateLine(s) {
-  const label = LIFECYCLE_LABELS[s.lifecycle_state] || s.lifecycle_state;
-  return `状態: ${label}`;
-}
-
 /**
  * MR見出しの番号表示
  *
@@ -762,10 +771,10 @@ function renderSubtaskDetail(s) {
     return;
   }
 
-  heading.innerHTML = `${renderSubtaskNumber(s)}${renderMrTitle(s, { id: "subtask-title" })}`;
+  heading.innerHTML =
+    `${renderSubtaskNumber(s)}${renderMrTitle(s, { id: "subtask-title" })}${renderSubtaskState(s)}`;
   el.innerHTML = `
     <p id="subtask-title-status" class="title-status empty"></p>
-    <p id="subtask-state-line">${renderSubtaskStateLine(s)}</p>
     <div class="instruction-form">
       <textarea id="instruction-${s.id}" name="instruction" aria-label="指示内容" placeholder="Claudeへの指示内容を入力してください">${escapeHtml(s.instruction)}</textarea>
       <div id="subtask-actions" class="subtask-actions" data-subtask-id="${s.id}"></div>
@@ -838,13 +847,13 @@ async function refreshSubtaskStates() {
 /**
  * 選択中MRの状態表示を更新する
  *
- * 状態行・見出しの番号・操作ボタンのみ差し替える。
+ * 見出しの番号・状態と操作ボタンのみ差し替える。
  */
 function refreshSelectedSubtaskState() {
   const selected = currentSubtasks.find((s) => s.id === currentSelectedSubtaskId);
   if (!selected) return;
-  const stateLine = document.getElementById("subtask-state-line");
-  if (stateLine) stateLine.innerHTML = renderSubtaskStateLine(selected);
+  const stateEl = document.querySelector("#subtask-heading .subtask-state");
+  if (stateEl) stateEl.outerHTML = renderSubtaskState(selected);
   const numberEl = document.querySelector("#subtask-heading .title-number");
   if (numberEl) numberEl.outerHTML = renderSubtaskNumber(selected);
   renderSubtaskActions(selected);
