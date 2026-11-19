@@ -1,5 +1,4 @@
 let currentProjectId = null;
-let currentProjectName = null;
 let currentIssueNumber = null;
 let currentIssueState = null;
 let currentIssueTitle = null;
@@ -262,36 +261,6 @@ async function waitForNewBootId(oldBootId) {
   return false;
 }
 
-function renderBreadcrumb() {
-  const el = document.getElementById("breadcrumb");
-  if (currentProjectId === null) {
-    el.innerHTML = "";
-    return;
-  }
-  el.innerHTML = `
-    <a href="#" id="breadcrumb-projects">リポジトリ一覧</a>
-    <span class="breadcrumb-sep">&rsaquo;</span>
-    <span class="breadcrumb-current">${escapeHtml(currentProjectName)}</span>
-  `;
-  document
-    .getElementById("breadcrumb-projects")
-    .addEventListener("click", (event) => {
-      event.preventDefault();
-      showProjectList();
-    });
-}
-
-function showProjectList() {
-  currentProjectId = null;
-  currentProjectName = null;
-  currentIssueNumber = null;
-  highlightSelectedProject();
-  document.getElementById("issue-list-placeholder").hidden = false;
-  document.getElementById("issue-panel").hidden = true;
-  clearIssueDetail();
-  renderBreadcrumb();
-}
-
 // 別リポジトリへ切り替えた際に前のIssue表示が残らないよう、Issue未選択の表示に戻す
 function clearIssueDetail() {
   document.getElementById("issue-heading").textContent = "Issue";
@@ -332,11 +301,9 @@ async function selectProject(project) {
     clearIssueDetail();
   }
   currentProjectId = project.id;
-  currentProjectName = project.display_name;
   highlightSelectedProject();
   document.getElementById("issue-list-placeholder").hidden = true;
   document.getElementById("issue-panel").hidden = false;
-  renderBreadcrumb();
   renderRepoHeading(project);
   await loadIssues();
 }

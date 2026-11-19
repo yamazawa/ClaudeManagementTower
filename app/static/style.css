@@ -38,30 +38,6 @@ header h1 {
   gap: 8px;
 }
 
-#breadcrumb {
-  margin-top: 10px;
-  font-size: 13px;
-  color: #b8c7e3;
-}
-
-#breadcrumb a {
-  color: #fff;
-  text-decoration: none;
-}
-
-#breadcrumb a:hover {
-  text-decoration: underline;
-}
-
-.breadcrumb-sep {
-  margin: 0 6px;
-  color: #7a869e;
-}
-
-.breadcrumb-current {
-  color: #fff;
-}
-
 #project-list-items {
   list-style: none;
   margin: 0;
