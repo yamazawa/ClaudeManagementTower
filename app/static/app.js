@@ -29,6 +29,7 @@ const LIFECYCLE_LABELS = {
 // MR一覧フィルタの値ごとに表示対象のlifecycle_stateを定義する（nullは全件表示）
 const SUBTASK_FILTER_STATES = {
   unresolved: [LIFECYCLE.draft, LIFECYCLE.resolved],
+  review: [LIFECYCLE.resolved],
   draft: [LIFECYCLE.draft],
   resolved: [LIFECYCLE.resolved],
   merged: [LIFECYCLE.merged],
@@ -87,6 +88,13 @@ const JOB_POLL_MS = 3000;
 // Issue一覧のMR数で解決済とみなす状態と、数えない状態（マージされずクローズ）
 const MR_COUNT_RESOLVED_STATES = [LIFECYCLE.merged, LIFECYCLE.deployed];
 const MR_COUNT_EXCLUDED_STATE = LIFECYCLE.canceled;
+// レビュー待ち・デプロイ待ちとみなす状態（app/routes/projects.pyと合わせる）
+const MR_COUNT_REVIEW_STATES = [LIFECYCLE.resolved];
+const MR_COUNT_UNDEPLOYED_STATES = [LIFECYCLE.merged];
+// Reviewボタンで切り替えるIssue一覧・MR一覧のフィルタの値
+const REVIEW_FILTER_VALUE = "review";
+// 作成直後のIssue（未解決・レビュー待ちMR無し）が表示対象となるIssue一覧のフィルタの値
+const ISSUE_FILTERS_SHOWING_NEW_ISSUE = ["open", "all"];
 
 // MR状態の自動更新間隔（サーバー側のPR同期間隔と合わせて10秒以内に反映させる）
 const SUBTASK_POLL_MS = 3000;
@@ -364,8 +372,12 @@ const DEPLOY_POLL_MS = 2000;
 const DEPLOY_TIMEOUT_MS = 30 * 60 * 1000;
 // サーバー再起動を表すデプロイ結果のrestartsの値（core/supervisor_control.pyと合わせる）
 const DEPLOY_RESTART_SERVER = "restart_server";
-const DEPLOY_DEFINED_TOOLTIP = "リポジトリに定義したデプロイ手順を実行します";
+const DEPLOY_DEFINED_TOOLTIP = "リポジトリに定義したデプロイ手順を実行します（数字はデプロイ待ちのMR数）";
 const DEPLOY_UNDEFINED_TOOLTIP = "デプロイが定義されていません（.claude-tower/deploy.json）";
+// リポジトリ見出しのボタン名（件数を併記する）
+const REVIEW_BUTTON_LABEL = "Review";
+const DEPLOY_BUTTON_LABEL = "Deploy";
+const REVIEW_TOOLTIP = "レビュー待ち（Resolved）のMRがあるIssue・MRを表示します";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -454,14 +466,18 @@ function highlightSelectedProject() {
  * リポジトリ見出しの表示
  *
  * 「Repo #番号 表示名」とし、番号部分はGitHubのリポジトリページへのリンクにする。
- * 右端にDeployボタンを置き、デプロイ未定義のリポジトリでは無効化する。
+ * 右端にReview・Deployボタンを置き、レビュー待ち・デプロイ待ちのMR数を併記する。
+ * デプロイ未定義のリポジトリではDeployボタンを無効化する。
  */
 function renderRepoHeading(project) {
   const label = project.repo_number ? `Repo #${project.repo_number}` : "Repo";
   document.getElementById("repo-heading").innerHTML =
     `${renderTitleNumber(label, project.repo_url)}<span id="repo-title">${escapeHtml(project.display_name)}</span>` +
-    `<button type="button" id="deploy-button" class="title-action-button">Deploy</button>`;
+    `<button type="button" id="review-button" class="title-action-button" title="${REVIEW_TOOLTIP}">${REVIEW_BUTTON_LABEL}</button>` +
+    `<button type="button" id="deploy-button" class="title-action-button">${DEPLOY_BUTTON_LABEL}</button>`;
   document.getElementById("deploy-status").textContent = "";
+  document.getElementById("review-button").addEventListener("click", onClickReview);
+  refreshIssueListMrCounts().catch(() => {});
   const button = document.getElementById("deploy-button");
   button.disabled = !project.deploy_defined;
   button.title = project.deploy_defined ? DEPLOY_DEFINED_TOOLTIP : DEPLOY_UNDEFINED_TOOLTIP;
@@ -1195,11 +1211,45 @@ async function refreshIssueListMrCounts() {
   const projectId = currentProjectId;
   if (projectId === null) return;
   const response = await fetch(`/api/projects/${projectId}/mr-counts`);
-  if (!response.ok || projectId !== currentProjectId) return;
+  if (!response.ok) return;
   const counts = await response.json();
+  if (projectId !== currentProjectId) return;
   document
     .querySelectorAll(".issue-item")
     .forEach((li) => updateIssueItemCounts(li, counts[li.dataset.number] || countMrs([])));
+  updateRepoMrTotals(Object.values(counts));
+}
+
+/**
+ * リポジトリ見出しのReview・Deployボタンの件数を更新する
+ *
+ * Reviewはレビュー待ちMRがある場合にプライマリ色にする。
+ * Deployボタンの色は従来どおり未取り込みの対応の有無で決める。
+ */
+function updateRepoMrTotals(issueCounts) {
+  const sum = (key) => issueCounts.reduce((total, c) => total + (c[key] || 0), 0);
+  const review = sum("review");
+  const reviewButton = document.getElementById("review-button");
+  if (reviewButton) {
+    reviewButton.textContent = `${REVIEW_BUTTON_LABEL} ${review}`;
+    reviewButton.classList.toggle("primary", review > 0);
+  }
+  const deployButton = document.getElementById("deploy-button");
+  if (deployButton) deployButton.textContent = `${DEPLOY_BUTTON_LABEL} ${sum("undeployed")}`;
+}
+
+/**
+ * Reviewボタンのクリック
+ *
+ * Issue一覧・MR一覧をともにレビューのフィルタに切り替える。
+ * 縦長表示ではIssue一覧を開く。
+ */
+async function onClickReview() {
+  document.getElementById("issue-filter").value = REVIEW_FILTER_VALUE;
+  document.getElementById("subtask-filter").value = REVIEW_FILTER_VALUE;
+  autoSetSectionExpanded(SECTION_IDS.repo, true);
+  renderSubtaskList();
+  await loadIssues();
 }
 
 /**
@@ -1214,6 +1264,8 @@ function countMrs(subtasks) {
     resolved: countIn(MR_COUNT_RESOLVED_STATES),
     unresolved: countIn(SUBTASK_FILTER_STATES.unresolved),
     total: counted.length,
+    review: countIn(MR_COUNT_REVIEW_STATES),
+    undeployed: countIn(MR_COUNT_UNDEPLOYED_STATES),
   };
 }
 
@@ -1261,7 +1313,7 @@ async function openCreatedIssue(issue) {
   await loadIssues();
   const listEl = document.getElementById("issue-list-items");
   const isListed = listEl.querySelector(`.issue-item[data-number="${issue.number}"]`);
-  const showsOpen = document.getElementById("issue-filter").value !== "closed";
+  const showsOpen = ISSUE_FILTERS_SHOWING_NEW_ISSUE.includes(document.getElementById("issue-filter").value);
   if (!isListed && showsOpen) {
     listEl.querySelector(".empty")?.remove();
     const item = { ...issue, title, state: "OPEN", mr_counts: countMrs([]) };
