@@ -63,6 +63,34 @@ def test_create_subtask_with_blank_title_uses_free_number(session_factory, creat
     assert result["title"] == "あいうえおー②"
 
 
+def test_create_subtask_adopts_row_imported_by_sync(session_factory, monkeypatch):
+    def fake_create(project, issue_number, title, instruction, slug_suffix, slug_source=None):
+        # PR作成直後に自動同期が取り込んだ状態を再現する
+        with session_factory() as session:
+            session.add(
+                Subtask(
+                    project_id=1,
+                    github_issue_number=issue_number,
+                    title="PR title",
+                    instruction="",
+                    branch_name="issue-5-x",
+                    github_pr_number=11,
+                    lifecycle_state="draft",
+                )
+            )
+            session.commit()
+        return "issue-5-x", {"number": 11, "url": "u"}
+
+    monkeypatch.setattr(subtasks, "_create_branch_and_draft_pr", fake_create)
+    monkeypatch.setattr(subtasks, "get_issue", lambda repo, number: {"title": "あいうえお"})
+
+    result = _create("かきくけこ")
+
+    with session_factory() as session:
+        rows = session.query(Subtask).all()
+    assert [(s.id, s.title) for s in rows] == [(result["id"], "あいうえおーかきくけこ")]
+
+
 def _project():
     return Project(id=1, name="p", github_repo="owner/repo", repo_path="x", default_branch="master")
 

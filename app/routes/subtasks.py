@@ -64,6 +64,19 @@ def _create_branch_and_draft_pr(
     return branch_name, pr
 
 
+def _find_or_add_subtask(session, project_id: int, issue_number: int, branch_name: str) -> Subtask:
+    """作成したPRのサブタスク行を返す
+
+    PR作成直後に自動同期が管理塔外のPRとして取り込んでいる場合、その行を使う。
+    """
+    keys = {"project_id": project_id, "github_issue_number": issue_number, "branch_name": branch_name}
+    subtask = session.query(Subtask).filter_by(**keys).first()
+    if subtask is None:
+        subtask = Subtask(**keys)
+        session.add(subtask)
+    return subtask
+
+
 @router.post("")
 def create_subtask(payload: CreateSubtaskRequest):
     with SessionLocal() as session:
@@ -94,16 +107,13 @@ def create_subtask(payload: CreateSubtaskRequest):
         except (GitClientError, GitHubClientError) as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
 
-        subtask = Subtask(
-            project_id=project.id,
-            github_issue_number=payload.github_issue_number,
-            title=title,
-            instruction=payload.instruction,
-            branch_name=branch_name,
-            github_pr_number=pr["number"],
-            lifecycle_state=LifecycleState.DRAFT,
+        subtask = _find_or_add_subtask(
+            session, project.id, payload.github_issue_number, branch_name
         )
-        session.add(subtask)
+        subtask.title = title
+        subtask.instruction = payload.instruction
+        subtask.github_pr_number = pr["number"]
+        subtask.lifecycle_state = LifecycleState.DRAFT
         session.commit()
 
         return {
