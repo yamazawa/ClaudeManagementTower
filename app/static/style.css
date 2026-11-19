@@ -6,6 +6,7 @@
   --accent: #335eea;
   --soft: #edf2ff;
   --warning: #b45309;
+  --expander-size: 24px;
 }
 
 * {
@@ -188,11 +189,70 @@ section {
   padding: 16px 20px;
 }
 
-h2 {
-  font-size: 16px;
+/* ペインの見出し行
+
+見出しの前にエキスパンダを置き、下線は行全体に引く。
+*/
+.section-title-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
   margin: 0 0 12px;
   border-bottom: 1px solid var(--line);
   padding-bottom: 8px;
+}
+
+h2 {
+  flex: 1;
+  min-width: 0;
+  font-size: 16px;
+  margin: 0;
+}
+
+/* 見出し行より下を開閉するボタン
+
+閉じている時は右向き、開いている時は下向きの矢印にする。
+*/
+.expander {
+  flex-shrink: 0;
+  width: var(--expander-size);
+  height: var(--expander-size);
+  padding: 0;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.expander:hover {
+  background: var(--soft);
+}
+
+.expander::before {
+  content: "";
+  display: block;
+  width: 7px;
+  height: 7px;
+  margin: auto;
+  border-right: 2px solid var(--muted);
+  border-bottom: 2px solid var(--muted);
+  transform: translateX(-2px) rotate(-45deg);
+  transition: transform 0.15s;
+}
+
+.expander[aria-expanded="true"]::before {
+  transform: translateY(-2px) rotate(45deg);
+}
+
+/* 閉じたペインは見出し行のみ表示する */
+section.collapsed > :not(.section-title-row) {
+  display: none;
+}
+
+section.collapsed > .section-title-row {
+  margin-bottom: 0;
+  border-bottom: none;
+  padding-bottom: 0;
 }
 
 /* ペイン内の小見出し

@@ -93,6 +93,26 @@ const WORKER_STATE_LABELS = {
   busy: "実行中",
 };
 
+/**
+ * ペインの開閉状態を切り替える
+ *
+ * 閉じたペインは見出し行のみ表示する。
+ */
+function setSectionExpanded(sectionId, expanded) {
+  const section = document.getElementById(sectionId);
+  section.classList.toggle("collapsed", !expanded);
+  section.querySelector(".expander").setAttribute("aria-expanded", String(expanded));
+}
+
+function setupExpanders() {
+  document.querySelectorAll("section .expander").forEach((button) => {
+    const section = button.closest("section");
+    button.addEventListener("click", () =>
+      setSectionExpanded(section.id, section.classList.contains("collapsed"))
+    );
+  });
+}
+
 function escapeHtml(text) {
   const div = document.createElement("div");
   div.textContent = text || "";
@@ -1228,6 +1248,7 @@ async function showReport(jobId, subtaskId) {
   frame.hidden = false;
 }
 
+setupExpanders();
 document.getElementById("issue-create-form").addEventListener("submit", onSubmitIssueForm);
 document.getElementById("issue-filter").addEventListener("change", loadIssues);
 document.getElementById("subtask-filter").addEventListener("change", renderSubtaskList);
