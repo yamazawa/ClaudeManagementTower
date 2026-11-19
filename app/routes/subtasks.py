@@ -1,6 +1,9 @@
-from fastapi import APIRouter, HTTPException
+from pathlib import Path
+
+from fastapi import APIRouter, HTTPException, UploadFile
 from pydantic import BaseModel
 
+from core.attachments import AttachmentError, list_attachments, save_attachment
 from core.config import settings
 from core.db import SessionLocal
 from core.git_client import (
@@ -261,6 +264,34 @@ def merge_subtask(subtask_id: int):
         subtask.lifecycle_state = LifecycleState.MERGED
         session.commit()
         return {"id": subtask.id, "lifecycle_state": subtask.lifecycle_state}
+
+
+def _subtask_worktree_path(subtask_id: int) -> str:
+    with SessionLocal() as session:
+        subtask = session.get(Subtask, subtask_id)
+        if subtask is None:
+            raise HTTPException(status_code=404, detail="subtask not found")
+        return f"{settings.worktree_base_dir}/{subtask.branch_name}"
+
+
+@router.get("/{subtask_id}/attachments")
+def get_attachments(subtask_id: int):
+    return list_attachments(_subtask_worktree_path(subtask_id))
+
+
+@router.post("/{subtask_id}/attachments")
+async def upload_attachment(subtask_id: int, file: UploadFile):
+    """実装指示の添付ファイルを保存する
+
+    IDはS1、S2…の連番で割り当てる。
+    """
+    worktree_path = _subtask_worktree_path(subtask_id)
+    if not Path(worktree_path).is_dir():
+        raise HTTPException(status_code=409, detail="worktreeがありません")
+    try:
+        return save_attachment(worktree_path, file.filename or "", await file.read())
+    except AttachmentError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 class ExecuteSubtaskRequest(BaseModel):
