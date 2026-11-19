@@ -91,6 +91,33 @@ $env:PYTHONIOENCODING = "utf-8"
 python -u -m worker.launcher
 ```
 
+## デプロイ
+
+リポジトリ画面の見出し右端の「Deploy」ボタンで、リポジトリごとに定義した手順を実行する。\
+手順は対象リポジトリの`.claude-tower/deploy.json`に定義する。\
+定義が無いリポジトリではボタンが無効になる。
+
+```json
+{
+  "steps": [
+    { "type": "pull", "branch": "master" },
+    { "type": "command", "run": "コマンド", "timeout_seconds": 600 },
+    { "type": "restart_server" }
+  ]
+}
+```
+
+- `pull`：登録済みのリポジトリパスで`git pull`する。`branch`省略時は登録済みの既定ブランチを使う。
+- `command`：リポジトリパスをカレントにしてシェルでコマンドを実行する。`timeout_seconds`は省略時600秒。
+- `restart_server`：Claude管理塔のサーバーを再起動する。
+- `restart_workers`：Claude管理塔のワーカーを再起動する。
+
+手順は上から順に実行し、失敗した時点で中断する。\
+再起動の手順は、他の手順が全て成功した後にまとめて実行する。\
+再起動の手順は`run_all.py`経由で起動した場合のみ使える。
+
+Claude管理塔リポジトリ自身は、masterの最新を取得してサーバーを再起動する定義にしている。
+
 ## 遠隔アクセス（Cloudflare Tunnel + Access）
 
 外出先から利用する場合、自宅PCのポートを直接公開せず、Cloudflare Tunnel経由で公開する。\
