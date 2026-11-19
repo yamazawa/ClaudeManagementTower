@@ -669,7 +669,9 @@ function highlightSelectedSubtaskRow() {
 /**
  * Issueの選択
  *
- * 縦長表示ではIssue内容を開き、MR未選択のためMR内容を閉じる。
+ * MR一覧に表示中の先頭MRを自動選択する。
+ * 表示中のMRが無い場合は未選択とし、縦長表示ではMR内容を閉じる。
+ * 縦長表示ではIssue内容を開き、未解決MRが1つのみの場合は閉じる。
  */
 async function selectIssue(number) {
   currentIssueNumber = number;
@@ -680,7 +682,19 @@ async function selectIssue(number) {
     .forEach((el) => el.classList.toggle("active", Number(el.dataset.number) === number));
 
   await refreshIssueDetail();
-  renderSubtaskDetail(null);
+  selectFirstSubtask();
+  if (countMrs(currentSubtasks).unresolved === 1) autoSetSectionExpanded(SECTION_IDS.issue, false);
+}
+
+/**
+ * MR一覧に表示中の先頭MRを選択する
+ *
+ * 表示中のMRが無い場合はMR未選択の表示にする。
+ */
+function selectFirstSubtask() {
+  const [first] = filterSubtasks(currentSubtasks);
+  if (first) selectSubtask(first.id);
+  else renderSubtaskDetail(null);
 }
 
 /**
