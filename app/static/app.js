@@ -315,7 +315,7 @@ const RATE_LIMIT_STATUS_CLASSES = {
 };
 const RATE_LIMIT_POLL_MS = 10000;
 const RATE_LIMIT_UNKNOWN_TEXT = "--";
-const RATE_LIMIT_TOOLTIP = "Claude実行時に受信したレート制限の使用率（未受信の場合は--）";
+const RATE_LIMIT_TOOLTIP = "Claudeサブスクリプションの使用率とリセット時刻（取得できない場合は--）";
 
 async function pollRateLimits() {
   try {
