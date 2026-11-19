@@ -15,31 +15,31 @@
   <div id="worker-status" aria-label="ワーカー稼働状況"></div>
 </header>
 
-<main id="project-view" aria-label="リポジトリ一覧">
-  <section>
+<main id="issue-view">
+  <section id="project-list" aria-label="リポジトリ一覧">
     <h2>リポジトリ一覧</h2>
     <ul id="project-list-items"></ul>
   </section>
-</main>
-
-<main id="issue-view" hidden>
   <section id="issue-list" aria-label="Issue一覧">
     <h2 id="repo-heading" class="title-heading">Repo</h2>
     <p id="deploy-status" class="title-status empty" role="status"></p>
-    <h3 class="section-heading section-heading-with-filter">
-      Issue一覧
-      <select id="issue-filter" class="heading-filter" aria-label="Issue一覧の表示フィルタ">
-        <option value="open" selected>未解決</option>
-        <option value="closed">完了</option>
-        <option value="all">全部</option>
-      </select>
-    </h3>
-    <ul id="issue-list-items"></ul>
-    <form id="issue-create-form">
-      <input type="text" name="title" placeholder="タイトル" required />
-      <button type="submit">作成</button>
-      <p id="issue-create-status" class="empty"></p>
-    </form>
+    <p id="issue-list-placeholder" class="empty">左の一覧からリポジトリを選択してください。</p>
+    <div id="issue-panel" hidden>
+      <h3 class="section-heading section-heading-with-filter">
+        Issue一覧
+        <select id="issue-filter" class="heading-filter" aria-label="Issue一覧の表示フィルタ">
+          <option value="open" selected>未解決</option>
+          <option value="closed">完了</option>
+          <option value="all">全部</option>
+        </select>
+      </h3>
+      <ul id="issue-list-items"></ul>
+      <form id="issue-create-form">
+        <input type="text" name="title" placeholder="タイトル" required />
+        <button type="submit">作成</button>
+        <p id="issue-create-status" class="empty"></p>
+      </form>
+    </div>
   </section>
   <section id="subtask-list" aria-label="Issue内容">
     <h2 id="issue-heading" class="title-heading">Issue</h2>

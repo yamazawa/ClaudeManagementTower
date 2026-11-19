@@ -285,8 +285,9 @@ function showProjectList() {
   currentProjectId = null;
   currentProjectName = null;
   currentIssueNumber = null;
-  document.getElementById("project-view").hidden = false;
-  document.getElementById("issue-view").hidden = true;
+  highlightSelectedProject();
+  document.getElementById("issue-list-placeholder").hidden = false;
+  document.getElementById("issue-panel").hidden = true;
   clearIssueDetail();
   renderBreadcrumb();
 }
@@ -310,6 +311,7 @@ async function init() {
     for (const project of projects) {
       const li = document.createElement("li");
       li.className = "project-item";
+      li.dataset.projectId = project.id;
       li.innerHTML = `<span class="project-name">${escapeHtml(project.display_name)}</span><span class="project-branch">${project.default_branch}</span>`;
       li.addEventListener("click", () => selectProject(project));
       listEl.appendChild(li);
@@ -319,14 +321,30 @@ async function init() {
   pollSubtaskStates();
 }
 
+/**
+ * リポジトリの選択
+ *
+ * 別リポジトリへ切り替えた場合は、前のIssue・MRの表示を消す。
+ */
 async function selectProject(project) {
+  if (project.id !== currentProjectId) {
+    currentIssueNumber = null;
+    clearIssueDetail();
+  }
   currentProjectId = project.id;
   currentProjectName = project.display_name;
-  document.getElementById("project-view").hidden = true;
-  document.getElementById("issue-view").hidden = false;
+  highlightSelectedProject();
+  document.getElementById("issue-list-placeholder").hidden = true;
+  document.getElementById("issue-panel").hidden = false;
   renderBreadcrumb();
   renderRepoHeading(project);
   await loadIssues();
+}
+
+function highlightSelectedProject() {
+  document
+    .querySelectorAll(".project-item")
+    .forEach((li) => li.classList.toggle("active", Number(li.dataset.projectId) === currentProjectId));
 }
 
 /**

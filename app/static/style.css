@@ -62,13 +62,6 @@ header h1 {
   color: #fff;
 }
 
-#project-view {
-  display: block;
-  max-width: 1080px;
-  margin: 20px auto;
-  padding: 0 16px;
-}
-
 #project-list-items {
   list-style: none;
   margin: 0;
@@ -77,17 +70,24 @@ header h1 {
 
 .project-item {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
-  padding: 14px 16px;
+  column-gap: 8px;
+  padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 6px;
   margin-bottom: 8px;
   cursor: pointer;
   background: #fff;
 }
 
 .project-item:hover {
+  background: var(--soft);
+}
+
+.project-item.active {
+  border-color: var(--accent);
   background: var(--soft);
 }
 
@@ -186,16 +186,21 @@ header h1 {
   color: #7a869e;
 }
 
-#project-view[hidden],
-#issue-view[hidden] {
+#issue-panel[hidden],
+#issue-list-placeholder[hidden] {
   display: none;
 }
 
+/* メイン画面のペイン配置
+
+リポジトリ一覧・Issue一覧・Issue内容・MR内容を左から順に並べる。
+狭い画面では同じ順で縦に並べる。
+*/
 #issue-view {
   display: grid;
-  grid-template-columns: 24% 28% 48%;
+  grid-template-columns: minmax(0, 15fr) minmax(0, 22fr) minmax(0, 24fr) minmax(0, 39fr);
   gap: 16px;
-  max-width: 1280px;
+  max-width: 1440px;
   margin: 20px auto;
   padding: 0 16px;
 }
