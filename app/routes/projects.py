@@ -28,6 +28,7 @@ UNRESOLVED_LIFECYCLE_STATES = LifecycleState.OPEN_STATES
 RESOLVED_LIFECYCLE_STATE = LifecycleState.MERGED
 # Issue一覧のMR数から除外するlifecycle_state（マージされずクローズ）
 UNCOUNTED_LIFECYCLE_STATE = LifecycleState.CANCELED
+EMPTY_MR_COUNTS = {"resolved": 0, "unresolved": 0, "total": 0}
 
 
 def _latest_job_summary(session, subtask_id: int) -> dict | None:
@@ -72,8 +73,18 @@ def get_issues(project_id: int, state: Literal["open", "closed", "all"] = "open"
             raise HTTPException(status_code=404, detail="project not found")
         issues = list_issues(project.github_repo, state)
         counts = _mr_counts_by_issue(session, project.id)
-        empty = {"resolved": 0, "unresolved": 0, "total": 0}
-        return [{**i, "mr_counts": counts.get(i["number"], empty)} for i in issues]
+        return [{**i, "mr_counts": counts.get(i["number"], EMPTY_MR_COUNTS)} for i in issues]
+
+
+@router.get("/{project_id}/mr-counts")
+def get_mr_counts(project_id: int):
+    """画面の自動更新用にDB上のIssueごとのMR数を返す（GitHubへは問い合わせない）
+
+    MRが無いIssueは含めない。
+    """
+    with SessionLocal() as session:
+        project = _get_project_or_404(session, project_id)
+        return _mr_counts_by_issue(session, project.id)
 
 
 def _mr_counts_by_issue(session, project_id: int) -> dict[int, dict]:
