@@ -350,15 +350,12 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
   background: var(--soft);
 }
 
-.subtask-row-title {
-  font-size: 13.5px;
-}
+/* Issue一覧・MR一覧の行
 
-/* Issue一覧の行
-
-見出しと同様に番号リンク・タイトル・MR数・閉じるボタンを1行に並べる。
+見出しと同様に番号リンク・タイトル・MR数（状態）・閉じるボタンを1行に並べる。
 */
-.issue-item {
+.issue-item,
+.subtask-row {
   align-items: center;
   justify-content: flex-start;
   font-size: 13.5px;
@@ -379,10 +376,17 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
 }
 
 .issue-item-meta,
-.subtask-row-meta {
+.subtask-state {
   color: var(--muted);
   font-size: 12px;
   white-space: nowrap;
+}
+
+/* MRの状態は行・見出しの右端に寄せる */
+.subtask-state {
+  flex-shrink: 0;
+  margin-left: auto;
+  font-weight: normal;
 }
 
 .job-status {
@@ -432,6 +436,7 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
   border: 1px solid var(--line);
   border-radius: 6px;
   background: #fff;
+  color: var(--ink);
   cursor: pointer;
 }
 
@@ -518,7 +523,8 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
 #repo-title,
 #issue-title,
 #subtask-title,
-.issue-item-title {
+.issue-item-title,
+.subtask-row-title {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
