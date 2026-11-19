@@ -1215,8 +1215,7 @@ async function onSubmitIssueForm(event) {
   autoSetSectionExpanded(SECTION_IDS.repo, false);
   const issue = await response.json();
   try {
-    await openCreatedIssue(issue, title);
-    await createDefaultSubtask(issue.number, statusEl);
+    await createDefaultSubtask(issue, statusEl);
   } finally {
     form.querySelector("button").disabled = false;
   }
@@ -1225,10 +1224,11 @@ async function onSubmitIssueForm(event) {
 /**
  * 作成したIssueを一覧に反映して選択する
  *
- * MR作成は時間がかかるため、先にIssueを選択して表示する。
+ * MR作成と並行して行い、先にIssueを選択して表示する。
  * GitHubの一覧反映が遅れた場合は、作成したIssueを一覧の先頭に補う。
  */
-async function openCreatedIssue(issue, title) {
+async function openCreatedIssue(issue) {
+  const { title } = issue;
   await loadIssues();
   const listEl = document.getElementById("issue-list-items");
   const isListed = listEl.querySelector(`.issue-item[data-number="${issue.number}"]`);
@@ -1248,22 +1248,30 @@ async function openCreatedIssue(issue, title) {
  * Issue作成直後に規定値のMRを作成して開く
  *
  * MR固有名は空欄で作成し、サーバー側で連番を割り当てる。
+ * 高速化のため、Issueの表示とMR作成を並行して行い、Issue名はGitHubから再取得させない。
  * MR作成に失敗してもIssueは選択済のため、結果の表示のみ行う。
  * 作成中に別のIssueへ切り替えた場合は、MRを開かない。
  * 作成中はMR内容を開かせず、MRの追加作成もさせない。
  */
-async function createDefaultSubtask(issueNumber, statusEl) {
+async function createDefaultSubtask(issue, statusEl) {
   statusEl.textContent = "Issueを作成しました。MRを作成中...";
   setAutoMrCreating(true);
-  const { body, error } = await createSubtask(issueNumber, "");
-  setAutoMrCreating(false);
-  if (error) {
-    statusEl.textContent = `Issueを作成しましたが、MRの作成に失敗しました: ${error}`;
+  let result;
+  try {
+    [result] = await Promise.all([
+      createSubtask(issue.number, "", issue.title),
+      openCreatedIssue(issue).catch(() => {}),
+    ]);
+  } finally {
+    setAutoMrCreating(false);
+  }
+  if (result.error) {
+    statusEl.textContent = `Issueを作成しましたが、MRの作成に失敗しました: ${result.error}`;
     return;
   }
   statusEl.textContent = "IssueとMRを作成しました";
-  if (issueNumber !== currentIssueNumber) return;
-  await openCreatedSubtask(issueNumber, body.id);
+  if (issue.number !== currentIssueNumber) return;
+  await openCreatedSubtask(issue.number, result.body.id);
 }
 
 async function onSubmitSubtaskForm(event) {
@@ -1291,9 +1299,10 @@ async function onSubmitSubtaskForm(event) {
  * MRの作成
  *
  * MR固有名が空欄の場合はサーバー側で連番を割り当てる。
+ * Issue名が既知の場合は渡し、サーバー側のGitHub問い合わせを省略させる。
  * 成功時は応答本文、失敗時はエラー文言を返す。
  */
-async function createSubtask(issueNumber, title) {
+async function createSubtask(issueNumber, title, issueTitle = "") {
   const response = await fetch("/api/subtasks", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1301,6 +1310,7 @@ async function createSubtask(issueNumber, title) {
       project_id: currentProjectId,
       github_issue_number: issueNumber,
       title,
+      issue_title: issueTitle,
     }),
   }).catch(() => null);
   if (!response) return { error: "サーバーに接続できませんでした" };
