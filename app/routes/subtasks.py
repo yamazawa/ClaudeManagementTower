@@ -1,9 +1,10 @@
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from core.attachments import AttachmentError, list_attachments, save_attachment
+from core.attachments import AttachmentError, find_attachment_file, list_attachments, save_attachment
 from core.config import settings
 from core.db import SessionLocal
 from core.git_client import (
@@ -277,6 +278,18 @@ def _subtask_worktree_path(subtask_id: int) -> str:
 @router.get("/{subtask_id}/attachments")
 def get_attachments(subtask_id: int):
     return list_attachments(_subtask_worktree_path(subtask_id))
+
+
+@router.get("/{subtask_id}/attachments/{attachment_id}/file")
+def get_attachment_file(subtask_id: int, attachment_id: str):
+    """添付ファイルの内容を返す
+
+    画像添付のサムネイル表示に使う。
+    """
+    path = find_attachment_file(_subtask_worktree_path(subtask_id), attachment_id)
+    if path is None:
+        raise HTTPException(status_code=404, detail="attachment not found")
+    return FileResponse(path)
 
 
 @router.post("/{subtask_id}/attachments")

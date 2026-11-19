@@ -11,6 +11,7 @@ from pathlib import Path
 ATTACHMENTS_DIR = ".claude-tower/attachments"
 ATTACHMENT_ID_PREFIX = "S"
 MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp"}
 
 _ID_PATTERN = re.compile(rf"^{ATTACHMENT_ID_PREFIX}(\d+)$")
 _INVALID_FILENAME_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f]')
@@ -44,13 +45,14 @@ def _to_entry(directory: Path) -> dict | None:
         "id": directory.name,
         "filename": files[0].name,
         "path": f"{ATTACHMENTS_DIR}/{directory.name}/{files[0].name}",
+        "is_image": files[0].suffix.lower() in IMAGE_EXTENSIONS,
     }
 
 
 def list_attachments(worktree_path: str) -> list[dict]:
     """添付ファイルの一覧をID順に返す
 
-    各要素はID・ファイル名・worktree内の相対パスを持つ。
+    各要素はID・ファイル名・worktree内の相対パス・画像かどうかを持つ。
     """
     root = _attachments_root(worktree_path)
     if not root.is_dir():
@@ -60,6 +62,20 @@ def list_attachments(worktree_path: str) -> list[dict]:
         key=_id_number,
     )
     return [entry for entry in map(_to_entry, directories) if entry is not None]
+
+
+def find_attachment_file(worktree_path: str, attachment_id: str) -> Path | None:
+    """IDに対応する添付ファイルの実パスを返す
+
+    IDの形式が不正、またはファイルが無い場合はNoneを返す。
+    """
+    if not _ID_PATTERN.match(attachment_id):
+        return None
+    directory = _attachments_root(worktree_path) / attachment_id
+    if not directory.is_dir():
+        return None
+    files = [f for f in directory.iterdir() if f.is_file()]
+    return files[0] if files else None
 
 
 def _ensure_root(worktree_path: str) -> Path:
