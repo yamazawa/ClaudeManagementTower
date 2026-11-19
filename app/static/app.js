@@ -704,8 +704,14 @@ function renderSubtaskDetail(s) {
   el.innerHTML = `
     <p id="subtask-title-status" class="title-status empty"></p>
     <div class="instruction-form">
-      <textarea id="instruction-${s.id}" name="instruction" aria-label="指示内容" placeholder="Claudeへの指示内容を入力してください">${escapeHtml(s.instruction)}</textarea>
       <div id="subtask-actions" class="subtask-actions" data-subtask-id="${s.id}"></div>
+      <textarea id="instruction-${s.id}" name="instruction" aria-label="指示内容" placeholder="Claudeへの指示内容を入力してください（添付ファイルはS1、S2などのIDで指定できます）">${escapeHtml(s.instruction)}</textarea>
+      <div class="attachment-area">
+        <button type="button" id="attach-button" class="subtask-action-button">添付</button>
+        <input type="file" id="attach-input" multiple hidden />
+        <span id="attachment-status" class="empty"></span>
+      </div>
+      <div id="attachment-list" data-subtask-id="${s.id}"></div>
     </div>
     <p id="subtask-action-status" class="title-status empty"></p>
     <p class="job-status empty" data-subtask-id="${s.id}"></p>
@@ -718,8 +724,81 @@ function renderSubtaskDetail(s) {
     document.getElementById("subtask-title-status"),
     (title) => saveSubtaskTitle(s.id, title)
   );
+  setupAttachmentForm(s.id);
 
   restoreJobState(s);
+}
+
+/**
+ * 添付ボタン・添付ファイル一覧の初期化
+ *
+ * 添付ボタンで規定のファイル選択を開き、選択したファイルを順にアップロードする。
+ */
+function setupAttachmentForm(subtaskId) {
+  const button = document.getElementById("attach-button");
+  const input = document.getElementById("attach-input");
+  button.addEventListener("click", () => input.click());
+  input.addEventListener("change", async () => {
+    const files = [...input.files];
+    input.value = "";
+    await uploadAttachments(subtaskId, files);
+  });
+  loadAttachments(subtaskId);
+}
+
+async function loadAttachments(subtaskId) {
+  const attachments = await fetch(`/api/subtasks/${subtaskId}/attachments`)
+    .then((r) => (r.ok ? r.json() : []))
+    .catch(() => []);
+  renderAttachmentList(subtaskId, attachments);
+}
+
+/**
+ * 添付ファイルの表（ID・ファイル名）を描画する
+ *
+ * 添付ファイルが無い場合は表を表示しない。
+ */
+function renderAttachmentList(subtaskId, attachments) {
+  const container = document.getElementById("attachment-list");
+  if (!container || Number(container.dataset.subtaskId) !== subtaskId) return;
+  if (!attachments.length) {
+    container.innerHTML = "";
+    return;
+  }
+  const rows = attachments
+    .map((a) => `<tr><td>${escapeHtml(a.id)}</td><td>${escapeHtml(a.filename)}</td></tr>`)
+    .join("");
+  container.innerHTML =
+    `<table class="attachment-table"><thead><tr><th>ID</th><th>ファイル名</th></tr></thead>` +
+    `<tbody>${rows}</tbody></table>`;
+}
+
+/**
+ * 選択したファイルを1件ずつアップロードする
+ *
+ * IDの採番順を選択順に揃えるため、並列にせず順に送る。
+ */
+async function uploadAttachments(subtaskId, files) {
+  const statusEl = document.getElementById("attachment-status");
+  const errors = [];
+  for (const file of files) {
+    statusEl.textContent = `アップロード中: ${file.name}`;
+    const error = await uploadAttachment(subtaskId, file);
+    if (error) errors.push(`${file.name}: ${error}`);
+  }
+  if (statusEl.isConnected) statusEl.textContent = errors.length ? `失敗しました: ${errors.join(" / ")}` : "";
+  await loadAttachments(subtaskId);
+}
+
+async function uploadAttachment(subtaskId, file) {
+  const form = new FormData();
+  form.append("file", file);
+  const response = await fetch(`/api/subtasks/${subtaskId}/attachments`, { method: "POST", body: form })
+    .catch(() => null);
+  if (!response) return "通信に失敗しました";
+  if (response.ok) return null;
+  const body = await response.json().catch(() => ({}));
+  return body.detail || response.statusText;
 }
 
 function restoreJobState(s) {
@@ -806,8 +885,11 @@ function renderSubtaskActions(s) {
   container
     .querySelectorAll("button")
     .forEach((b) => b.addEventListener("click", () => onClickSubtaskAction(s.id, b.dataset.action)));
+  const editable = actions.some((a) => a.action === "execute");
   const textarea = document.getElementById(`instruction-${s.id}`);
-  if (textarea) textarea.readOnly = !actions.some((a) => a.action === "execute");
+  if (textarea) textarea.readOnly = !editable;
+  const attachButton = document.getElementById("attach-button");
+  if (attachButton) attachButton.disabled = !editable || busy;
 }
 
 function renderSubtaskActionButton(action, disabled) {

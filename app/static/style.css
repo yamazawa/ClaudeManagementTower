@@ -383,6 +383,30 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
   background: var(--soft);
 }
 
+/* 実装指示の添付ファイル */
+.attachment-area {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.attachment-table {
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.attachment-table th,
+.attachment-table td {
+  border: 1px solid var(--line);
+  padding: 3px 10px;
+  text-align: left;
+}
+
+.attachment-table th {
+  background: var(--soft);
+}
+
 /* MRの状態に応じた操作ボタン（primaryクラスでプライマリ色にする） */
 .subtask-actions {
   display: flex;

@@ -4,4 +4,5 @@ sqlalchemy
 pydantic-settings
 claude-agent-sdk
 filelock
+python-multipart
 pytest

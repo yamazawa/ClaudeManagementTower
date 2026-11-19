@@ -1,4 +1,8 @@
+import asyncio
+import io
+
 import pytest
+from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import sessionmaker
 
 from app.routes import subtasks
@@ -105,3 +109,52 @@ def test_branch_name_unique_for_same_title(monkeypatch):
     branch_2, _ = subtasks._create_branch_and_draft_pr(_project(), 53, "MR内容のレイアウト編集", "", 2)
 
     assert branch_1 != branch_2
+
+
+def _add_subtask(session_factory):
+    with session_factory() as session:
+        session.add(
+            Subtask(
+                project_id=1,
+                github_issue_number=5,
+                title="t",
+                instruction="",
+                branch_name="issue-5-x",
+                lifecycle_state="draft",
+            )
+        )
+        session.commit()
+
+
+def _upload(subtask_id, filename, data):
+    file = UploadFile(file=io.BytesIO(data), filename=filename)
+    return asyncio.run(subtasks.upload_attachment(subtask_id, file))
+
+
+def test_upload_attachment_saves_into_worktree(session_factory, tmp_path, monkeypatch):
+    monkeypatch.setattr(subtasks.settings, "worktree_base_dir", str(tmp_path))
+    (tmp_path / "issue-5-x").mkdir()
+    _add_subtask(session_factory)
+
+    first = _upload(1, "a.png", b"1")
+    second = _upload(1, "b.txt", b"2")
+
+    assert [first["id"], second["id"]] == ["S1", "S2"]
+    assert [a["filename"] for a in subtasks.get_attachments(1)] == ["a.png", "b.txt"]
+
+
+def test_upload_attachment_without_worktree_is_conflict(session_factory, tmp_path, monkeypatch):
+    monkeypatch.setattr(subtasks.settings, "worktree_base_dir", str(tmp_path))
+    _add_subtask(session_factory)
+
+    with pytest.raises(HTTPException) as exc:
+        _upload(1, "a.png", b"1")
+
+    assert exc.value.status_code == 409
+
+
+def test_get_attachments_unknown_subtask_is_not_found(session_factory):
+    with pytest.raises(HTTPException) as exc:
+        subtasks.get_attachments(999)
+
+    assert exc.value.status_code == 404
