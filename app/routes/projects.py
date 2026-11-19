@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import case, func
 
 from core.db import SessionLocal
+from core.deploy import is_deploy_defined
 from core.github_client import (
     GitHubClientError,
     close_issue,
@@ -60,6 +61,7 @@ def get_projects():
                 "github_repo": p.github_repo,
                 "default_branch": p.default_branch,
                 **describe_repo(p.github_repo, p.name),
+                "deploy_defined": is_deploy_defined(p.repo_path),
             }
             for p in projects
         ]
