@@ -228,60 +228,14 @@ async function renderWorkers() {
     `<span class="worker-summary">実行中 ${busyCount} / ${aliveWorkers.length}</span>${items}`;
 }
 
-const SYSTEM_BUTTON_IDS = [
-  "start-workers-button",
-  "cleanup-workers-button",
-  "restart-server-button",
-  "sync-self-button",
-];
 const SERVER_RESTART_POLL_MS = 1000;
 const SERVER_RESTART_TIMEOUT_MS = 60000;
-const SYNC_SELF_POLL_MS = 3000;
-const SYNC_SELF_TIMEOUT_MS = 30 * 60 * 1000;
-
-function setSystemStatus(text) {
-  document.getElementById("system-status").textContent = text;
-}
-
-function setSystemButtonsDisabled(disabled) {
-  SYSTEM_BUTTON_IDS.forEach((id) => (document.getElementById(id).disabled = disabled));
-}
-
-async function postSystem(path) {
-  const response = await fetch(`/api/system/${path}`, { method: "POST" });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(body.detail || `HTTP ${response.status}`);
-  }
-  return body;
-}
-
-async function runSystemAction(action) {
-  setSystemButtonsDisabled(true);
-  try {
-    await action();
-  } catch (error) {
-    setSystemStatus(`失敗しました: ${error.message}`);
-  } finally {
-    setSystemButtonsDisabled(false);
-  }
-}
-
-async function onClickStartWorkers() {
-  setSystemStatus("ワーカー起動を依頼中...");
-  await postSystem("start-workers");
-  setSystemStatus("ワーカー起動を依頼しました");
-}
-
-async function onClickCleanupWorkers() {
-  setSystemStatus("掃除中...");
-  const result = await postSystem("cleanup-workers");
-  setSystemStatus(
-    `掃除しました（ワーカー${result.removed_worker_ids.length}件削除・` +
-      `ジョブ${result.recovered_job_ids.length}件を要確認化）`
-  );
-  await renderWorkers();
-}
+const DEPLOY_POLL_MS = 2000;
+const DEPLOY_TIMEOUT_MS = 30 * 60 * 1000;
+// サーバー再起動を表すデプロイ結果のrestartsの値（core/supervisor_control.pyと合わせる）
+const DEPLOY_RESTART_SERVER = "restart_server";
+const DEPLOY_DEFINED_TOOLTIP = "リポジトリに定義したデプロイ手順を実行します";
+const DEPLOY_UNDEFINED_TOOLTIP = "デプロイが定義されていません（.claude-tower/deploy.json）";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -306,95 +260,6 @@ async function waitForNewBootId(oldBootId) {
     }
   }
   return false;
-}
-
-async function onClickRestartServer() {
-  if (!confirm("サーバーを再起動しますか？")) {
-    return;
-  }
-  setSystemStatus("再起動中...");
-  const oldBootId = await fetchBootId();
-  await postSystem("restart-server");
-  const restarted = await waitForNewBootId(oldBootId);
-  setSystemStatus(restarted ? "再起動しました" : "再起動を確認できませんでした");
-}
-
-async function fetchSyncSelfResult() {
-  try {
-    const response = await fetch("/api/system/sync-self");
-    return response.ok ? await response.json() : null;
-  } catch (error) {
-    return null;
-  }
-}
-
-async function waitForSyncSelfResult() {
-  const deadline = Date.now() + SYNC_SELF_TIMEOUT_MS;
-  while (Date.now() < deadline) {
-    await sleep(SYNC_SELF_POLL_MS);
-    const result = await fetchSyncSelfResult();
-    if (result && result.status !== "running") {
-      return result;
-    }
-  }
-  return null;
-}
-
-function describeSyncSelfResult(result) {
-  const toLabels = (numbers) => numbers.map((n) => `#${n}`).join("、");
-  const failedNumbers = result.failed_prs.map((pr) => pr.number);
-  if (result.merged_pr_numbers.length === 0 && failedNumbers.length === 0) {
-    return "マージ対象のPRはありませんでした。";
-  }
-  const texts = [];
-  if (result.merged_pr_numbers.length > 0) {
-    texts.push(`PR ${toLabels(result.merged_pr_numbers)} をマージしました。`);
-  }
-  if (failedNumbers.length > 0) {
-    const reasons = result.failed_prs.map((pr) => `#${pr.number}: ${pr.error}`).join(" / ");
-    texts.push(`PR ${toLabels(failedNumbers)} はマージできませんでした（${reasons}）。`);
-  }
-  return texts.join(" ");
-}
-
-async function onClickSyncSelf() {
-  if (
-    !confirm(
-      "Claude管理塔リポジトリで、Draftが外れている全PRをマージし、" +
-        "最新化してサーバー・ワーカーを再起動します。" +
-        "競合しているPRはClaudeが競合を解消してからマージします。よろしいですか？"
-    )
-  ) {
-    return;
-  }
-  setSystemStatus("マージ・最新化中...（競合解消を含むため時間がかかる場合があります）");
-  const oldBootId = await fetchBootId();
-  await postSystem("sync-self");
-  const result = await waitForSyncSelfResult();
-  if (result === null) {
-    setSystemStatus("マージ・最新化の完了を確認できませんでした");
-    return;
-  }
-  if (result.status === "failed") {
-    setSystemStatus(`マージ・最新化に失敗しました: ${result.error}`);
-    return;
-  }
-  const mergedText = describeSyncSelfResult(result);
-  setSystemStatus(`${mergedText} 再起動中...`);
-  const restarted = await waitForNewBootId(oldBootId);
-  setSystemStatus(`${mergedText} ${restarted ? "再起動しました" : "再起動を確認できませんでした"}`);
-}
-
-function bindSystemControls() {
-  const handlers = {
-    "start-workers-button": onClickStartWorkers,
-    "cleanup-workers-button": onClickCleanupWorkers,
-    "restart-server-button": onClickRestartServer,
-    "sync-self-button": onClickSyncSelf,
-  };
-  Object.entries(handlers).forEach(([id, handler]) =>
-    document.getElementById(id).addEventListener("click", () => runSystemAction(handler))
-  );
 }
 
 function renderBreadcrumb() {
@@ -468,11 +333,74 @@ async function selectProject(project) {
  * リポジトリ見出しの表示
  *
  * 「Repo #番号 表示名」とし、番号部分はGitHubのリポジトリページへのリンクにする。
+ * 右端にDeployボタンを置き、デプロイ未定義のリポジトリでは無効化する。
  */
 function renderRepoHeading(project) {
   const label = project.repo_number ? `Repo #${project.repo_number}` : "Repo";
   document.getElementById("repo-heading").innerHTML =
-    `${renderTitleNumber(label, project.repo_url)}<span id="repo-title">${escapeHtml(project.display_name)}</span>`;
+    `${renderTitleNumber(label, project.repo_url)}<span id="repo-title">${escapeHtml(project.display_name)}</span>` +
+    `<button type="button" id="deploy-button" class="title-action-button">Deploy</button>`;
+  document.getElementById("deploy-status").textContent = "";
+  const button = document.getElementById("deploy-button");
+  button.disabled = !project.deploy_defined;
+  button.title = project.deploy_defined ? DEPLOY_DEFINED_TOOLTIP : DEPLOY_UNDEFINED_TOOLTIP;
+  button.addEventListener("click", () => onClickDeploy(project, button));
+}
+
+/**
+ * デプロイの実行
+ *
+ * 結果が出るまでポーリングし、サーバー再起動を含む場合は再起動完了まで待つ。
+ * 実行中にリポジトリを切り替えた場合も、結果は実行したリポジトリの見出しにのみ表示する。
+ */
+async function onClickDeploy(project, button) {
+  if (!confirm(`${project.display_name} をデプロイしますか？`)) return;
+  const setStatus = (text) => {
+    if (currentProjectId === project.id) document.getElementById("deploy-status").textContent = text;
+  };
+  button.disabled = true;
+  setStatus("デプロイ中...");
+  try {
+    setStatus(await runDeploy(project.id, setStatus));
+  } catch (error) {
+    setStatus(`デプロイに失敗しました: ${error.message}`);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+async function runDeploy(projectId, setStatus) {
+  const oldBootId = await fetchBootId();
+  const response = await fetch(`/api/projects/${projectId}/deploy`, { method: "POST" });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(body.detail || `HTTP ${response.status}`);
+
+  const result = await waitForDeployResult(projectId);
+  if (result === null) return "デプロイの完了を確認できませんでした";
+  if (result.status === "failed") return `デプロイに失敗しました: ${result.error}`;
+  if (!result.restarts.includes(DEPLOY_RESTART_SERVER)) return "デプロイしました";
+  setStatus("デプロイしました。サーバー再起動中...");
+  const restarted = await waitForNewBootId(oldBootId);
+  return restarted ? "デプロイしました（サーバーを再起動しました）" : "デプロイしました（再起動を確認できませんでした）";
+}
+
+async function fetchDeployResult(projectId) {
+  try {
+    const response = await fetch(`/api/projects/${projectId}/deploy`);
+    return response.ok ? await response.json() : null;
+  } catch (error) {
+    return null;
+  }
+}
+
+async function waitForDeployResult(projectId) {
+  const deadline = Date.now() + DEPLOY_TIMEOUT_MS;
+  while (Date.now() < deadline) {
+    await sleep(DEPLOY_POLL_MS);
+    const result = await fetchDeployResult(projectId);
+    if (result && result.status !== "running") return result;
+  }
+  return null;
 }
 
 async function loadIssues() {
@@ -1272,6 +1200,5 @@ document.getElementById("subtask-form").addEventListener("submit", onSubmitSubta
 document.addEventListener("visibilitychange", () => {
   if (!document.hidden) refreshSubtaskStates().catch(() => {});
 });
-bindSystemControls();
 
 init();
