@@ -388,6 +388,46 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
   background: var(--soft);
 }
 
+/* 画像添付のお絵かきダイアログ（画像は画面内に収まるよう縮小表示する） */
+.image-editor {
+  max-width: 95vw;
+  max-height: 95vh;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.image-editor::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.image-editor-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.image-editor-hint {
+  margin-right: auto;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.image-editor-body {
+  display: flex;
+  justify-content: center;
+}
+
+.image-editor-canvas {
+  display: block;
+  max-width: calc(95vw - 26px);
+  max-height: calc(95vh - 80px);
+  touch-action: none;
+  cursor: crosshair;
+}
+
 /* MRの状態に応じた操作ボタン（primaryクラスでプライマリ色にする） */
 .subtask-actions {
   display: flex;

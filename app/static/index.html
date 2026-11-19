@@ -73,6 +73,19 @@
   </section>
 </main>
 
+<dialog id="image-editor" class="image-editor" aria-label="画像添付の編集">
+  <div class="image-editor-toolbar">
+    <span class="image-editor-hint">ドラッグで赤枠、タップで丸数字（①、②…）を描けます</span>
+    <button type="button" id="image-editor-undo" class="subtask-action-button">元に戻す</button>
+    <button type="button" id="image-editor-cancel" class="subtask-action-button">キャンセル</button>
+    <button type="button" id="image-editor-attach" class="subtask-action-button primary">添付</button>
+  </div>
+  <div class="image-editor-body">
+    <canvas id="image-editor-canvas" class="image-editor-canvas"></canvas>
+  </div>
+</dialog>
+
+<script src="/static/image_editor.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>
