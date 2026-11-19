@@ -753,7 +753,8 @@ function highlightSelectedSubtaskRow() {
  *
  * MR一覧に表示中の先頭MRを自動選択する。
  * 表示中のMRが無い場合は未選択とし、縦長表示ではMR内容を閉じる。
- * 縦長表示ではIssue内容を開き、未解決MRが1つのみの場合は閉じる。
+ * 縦長表示ではIssue内容を開き、MR一覧の表示が1件のみの場合は閉じる。
+ * 表示が複数件の場合は、MRを選択し直せるよう開いたままにする。
  */
 async function selectIssue(number) {
   currentIssueNumber = number;
@@ -765,7 +766,7 @@ async function selectIssue(number) {
 
   await refreshIssueDetail();
   selectFirstSubtask();
-  if (countMrs(currentSubtasks).unresolved === 1) autoSetSectionExpanded(SECTION_IDS.issue, false);
+  if (filterSubtasks(currentSubtasks).length === 1) autoSetSectionExpanded(SECTION_IDS.issue, false);
 }
 
 /**
