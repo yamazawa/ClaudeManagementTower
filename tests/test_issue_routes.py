@@ -131,3 +131,24 @@ def test_get_issue_subtasks_unknown_project(session_factory):
     with pytest.raises(HTTPException) as error:
         projects.get_issue_subtasks(99, 5)
     assert error.value.status_code == 404
+
+
+def test_create_issue_strips_title_and_returns_it(session_factory, monkeypatch):
+    calls = []
+
+    def fake(repo, title, body):
+        calls.append(title)
+        return {"number": 7, "url": "https://github.com/owner/repo/issues/7"}
+
+    monkeypatch.setattr(projects, "create_issue", fake)
+
+    result = projects.create_project_issue(1, projects.CreateIssueRequest(title="  題名  "))
+
+    assert calls == ["題名"]
+    assert (result["number"], result["title"]) == (7, "題名")
+
+
+def test_create_issue_with_blank_title_is_bad_request(session_factory):
+    with pytest.raises(HTTPException) as error:
+        projects.create_project_issue(1, projects.CreateIssueRequest(title="  "))
+    assert error.value.status_code == 400

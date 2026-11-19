@@ -119,15 +119,20 @@ def _mr_counts_by_issue(session, project_id: int) -> dict[int, dict]:
 
 @router.post("/{project_id}/issues")
 def create_project_issue(project_id: int, payload: CreateIssueRequest):
-    with SessionLocal() as session:
-        project = session.get(Project, project_id)
-        if project is None:
-            raise HTTPException(status_code=404, detail="project not found")
+    """Issueを作成する
 
+    続けて行うMR作成でIssue名を再取得せずに済むよう、作成したIssue名も返す。
+    """
+    title = payload.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="title is empty")
+    with SessionLocal() as session:
+        project = _get_project_or_404(session, project_id)
         try:
-            return create_issue(project.github_repo, payload.title, payload.body)
+            issue = create_issue(project.github_repo, title, payload.body)
         except GitHubClientError as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
+        return {**issue, "title": title}
 
 
 class UpdateTitleRequest(BaseModel):
