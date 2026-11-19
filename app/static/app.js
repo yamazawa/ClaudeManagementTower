@@ -4,6 +4,10 @@ let currentIssueState = null;
 let currentIssueTitle = null;
 let currentSubtasks = [];
 let currentSelectedSubtaskId = null;
+// Issue作成に続くMR自動作成の実行中か（実行中はMR内容を開かせず、MRを追加作成させない）
+let autoMrCreating = false;
+// MR自動作成の開始前のMR内容の開閉状態（横長表示で終了後に戻すため）
+let mrExpandedBeforeAutoCreate = true;
 
 // MRのlifecycle_state（core/lifecycle.pyと合わせる）
 const LIFECYCLE = {
@@ -108,8 +112,10 @@ const WORKER_STATE_LABELS = {
  * ペインの開閉状態を切り替える
  *
  * 閉じたペインは見出し行のみ表示する。
+ * MR自動作成中はMR内容を開かない。
  */
 function setSectionExpanded(sectionId, expanded) {
+  if (expanded && autoMrCreating && sectionId === SECTION_IDS.mr) return;
   const section = document.getElementById(sectionId);
   section.classList.toggle("collapsed", !expanded);
   section.querySelector(".expander").setAttribute("aria-expanded", String(expanded));
@@ -121,7 +127,33 @@ function setSectionExpanded(sectionId, expanded) {
  * 横長表示では全ペインが並ぶため、利用者の開閉操作のみに従う。
  */
 function autoSetSectionExpanded(sectionId, expanded) {
-  if (window.matchMedia(PORTRAIT_MEDIA_QUERY).matches) setSectionExpanded(sectionId, expanded);
+  if (isPortrait()) setSectionExpanded(sectionId, expanded);
+}
+
+function isPortrait() {
+  return window.matchMedia(PORTRAIT_MEDIA_QUERY).matches;
+}
+
+function isSectionExpanded(sectionId) {
+  return !document.getElementById(sectionId).classList.contains("collapsed");
+}
+
+/**
+ * MR自動作成中のロックの切り替え
+ *
+ * 意図せずMRを2個作らないよう、作成中はMR内容を閉じてエキスパンダとMR作成ボタンを無効化する。
+ * 解除時、横長表示では作成前の開閉状態に戻す。
+ * 縦長表示ではMR選択中の場合のみ開く。
+ */
+function setAutoMrCreating(creating) {
+  if (creating) mrExpandedBeforeAutoCreate = isSectionExpanded(SECTION_IDS.mr);
+  if (creating) setSectionExpanded(SECTION_IDS.mr, false);
+  autoMrCreating = creating;
+  document.querySelector(`#${SECTION_IDS.mr} .expander`).disabled = creating;
+  document.querySelector("#subtask-form button").disabled = creating;
+  if (creating) return;
+  const expanded = isPortrait() ? currentSelectedSubtaskId !== null : mrExpandedBeforeAutoCreate;
+  setSectionExpanded(SECTION_IDS.mr, expanded);
 }
 
 /**
@@ -132,9 +164,7 @@ function autoSetSectionExpanded(sectionId, expanded) {
 function setupExpanders() {
   document.querySelectorAll("section .expander").forEach((button) => {
     const section = button.closest("section");
-    button.addEventListener("click", () =>
-      setSectionExpanded(section.id, section.classList.contains("collapsed"))
-    );
+    button.addEventListener("click", () => setSectionExpanded(section.id, !isSectionExpanded(section.id)));
   });
   [SECTION_IDS.repo, SECTION_IDS.issue, SECTION_IDS.mr].forEach((id) => autoSetSectionExpanded(id, false));
 }
@@ -791,11 +821,12 @@ async function refreshIssueDetail() {
 /* MR作成フォームの初期化
 
 フォームはIssue切り替え後も使い回すため、入力値と状態表示を初期状態に戻す。
+MR自動作成中は作成ボタンを無効のままにする。
 */
 function resetSubtaskForm() {
   const form = document.getElementById("subtask-form");
   form.reset();
-  form.querySelector("button").disabled = false;
+  form.querySelector("button").disabled = autoMrCreating;
   document.getElementById("subtask-form-status").textContent = "";
 }
 
@@ -1172,28 +1203,32 @@ async function onSubmitIssueForm(event) {
     body: JSON.stringify({ title }),
   });
 
-  form.querySelector("button").disabled = false;
-
   if (!response.ok) {
     const error = await response.json();
     statusEl.textContent = `失敗しました: ${error.detail}`;
+    form.querySelector("button").disabled = false;
     return;
   }
 
+  // MR自動作成が終わるまでは次のIssueを作成させない
   form.reset();
   autoSetSectionExpanded(SECTION_IDS.repo, false);
   const issue = await response.json();
-  await openCreatedIssue(issue, title);
-  await createDefaultSubtask(issue.number, statusEl);
+  try {
+    await createDefaultSubtask(issue, statusEl);
+  } finally {
+    form.querySelector("button").disabled = false;
+  }
 }
 
 /**
  * 作成したIssueを一覧に反映して選択する
  *
- * MR作成は時間がかかるため、先にIssueを選択して表示する。
+ * MR作成と並行して行い、先にIssueを選択して表示する。
  * GitHubの一覧反映が遅れた場合は、作成したIssueを一覧の先頭に補う。
  */
-async function openCreatedIssue(issue, title) {
+async function openCreatedIssue(issue) {
+  const { title } = issue;
   await loadIssues();
   const listEl = document.getElementById("issue-list-items");
   const isListed = listEl.querySelector(`.issue-item[data-number="${issue.number}"]`);
@@ -1213,23 +1248,35 @@ async function openCreatedIssue(issue, title) {
  * Issue作成直後に規定値のMRを作成して開く
  *
  * MR固有名は空欄で作成し、サーバー側で連番を割り当てる。
+ * 高速化のため、Issueの表示とMR作成を並行して行い、Issue名はGitHubから再取得させない。
  * MR作成に失敗してもIssueは選択済のため、結果の表示のみ行う。
  * 作成中に別のIssueへ切り替えた場合は、MRを開かない。
+ * 作成中はMR内容を開かせず、MRの追加作成もさせない。
  */
-async function createDefaultSubtask(issueNumber, statusEl) {
+async function createDefaultSubtask(issue, statusEl) {
   statusEl.textContent = "Issueを作成しました。MRを作成中...";
-  const { body, error } = await createSubtask(issueNumber, "");
-  if (error) {
-    statusEl.textContent = `Issueを作成しましたが、MRの作成に失敗しました: ${error}`;
+  setAutoMrCreating(true);
+  let result;
+  try {
+    [result] = await Promise.all([
+      createSubtask(issue.number, "", issue.title),
+      openCreatedIssue(issue).catch(() => {}),
+    ]);
+  } finally {
+    setAutoMrCreating(false);
+  }
+  if (result.error) {
+    statusEl.textContent = `Issueを作成しましたが、MRの作成に失敗しました: ${result.error}`;
     return;
   }
   statusEl.textContent = "IssueとMRを作成しました";
-  if (issueNumber !== currentIssueNumber) return;
-  await openCreatedSubtask(issueNumber, body.id);
+  if (issue.number !== currentIssueNumber) return;
+  await openCreatedSubtask(issue.number, result.body.id);
 }
 
 async function onSubmitSubtaskForm(event) {
   event.preventDefault();
+  if (autoMrCreating) return;
   const form = event.target;
   const statusEl = document.getElementById("subtask-form-status");
   const title = form.title.value;
@@ -1252,9 +1299,10 @@ async function onSubmitSubtaskForm(event) {
  * MRの作成
  *
  * MR固有名が空欄の場合はサーバー側で連番を割り当てる。
+ * Issue名が既知の場合は渡し、サーバー側のGitHub問い合わせを省略させる。
  * 成功時は応答本文、失敗時はエラー文言を返す。
  */
-async function createSubtask(issueNumber, title) {
+async function createSubtask(issueNumber, title, issueTitle = "") {
   const response = await fetch("/api/subtasks", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -1262,8 +1310,10 @@ async function createSubtask(issueNumber, title) {
       project_id: currentProjectId,
       github_issue_number: issueNumber,
       title,
+      issue_title: issueTitle,
     }),
-  });
+  }).catch(() => null);
+  if (!response) return { error: "サーバーに接続できませんでした" };
   const body = await response.json().catch(() => ({}));
   return response.ok ? { body } : { error: body.detail || response.statusText };
 }
@@ -1271,11 +1321,17 @@ async function createSubtask(issueNumber, title) {
 /**
  * 作成したMRを開いて指示内容の入力欄にフォーカスする
  *
- * Issueを選択し直してMR一覧を再取得してから、作成したMRを選択する。
+ * MR一覧を再取得してから、作成したMRを選択する。
+ * 表示中のIssueの場合は、GitHubへ問い合わせないDB上のMR一覧のみ再取得する。
  * 縦長表示では指示内容の入力欄を見せるため、Issue内容を閉じる。
  */
 async function openCreatedSubtask(issueNumber, subtaskId) {
-  await selectIssue(issueNumber);
+  if (issueNumber === currentIssueNumber) {
+    await refreshSubtaskStates();
+    resetSubtaskForm();
+  } else {
+    await selectIssue(issueNumber);
+  }
   autoSetSectionExpanded(SECTION_IDS.issue, false);
   selectSubtask(subtaskId);
   focusWithScroll(document.getElementById(`instruction-${subtaskId}`));
