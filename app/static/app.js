@@ -482,6 +482,26 @@ async function refreshDeployPending(projectId, button) {
   if (button.isConnected) button.classList.toggle("primary", pending);
 }
 
+// 表示中のDeployボタンの色を取得中か（git fetchを伴うため多重に取得しない）
+let deployPendingRefreshing = false;
+
+/**
+ * 表示中のDeployボタンの色の定期更新
+ *
+ * 定期ステータス更新のタイミングで呼び出す。
+ * デプロイ未定義・デプロイ実行中（ボタン無効）の場合は更新しない。
+ */
+async function refreshCurrentDeployPending() {
+  const button = document.getElementById("deploy-button");
+  if (deployPendingRefreshing || currentProjectId === null || !button || button.disabled) return;
+  deployPendingRefreshing = true;
+  try {
+    await refreshDeployPending(currentProjectId, button);
+  } finally {
+    deployPendingRefreshing = false;
+  }
+}
+
 /**
  * デプロイの実行
  *
@@ -1033,7 +1053,11 @@ function restoreJobState(s) {
 
 async function pollSubtaskStates() {
   try {
-    if (!document.hidden) await Promise.all([refreshSubtaskStates(), refreshIssueListMrCounts()]);
+    if (!document.hidden) {
+      // git fetchで時間がかかる場合があるため、MR一覧の更新は待たせない
+      refreshCurrentDeployPending();
+      await Promise.all([refreshSubtaskStates(), refreshIssueListMrCounts()]);
+    }
   } catch (error) {
     // サーバー再起動中などで取得に失敗しても自動更新を継続する
   }
@@ -1437,7 +1461,9 @@ document.getElementById("issue-filter").addEventListener("change", loadIssues);
 document.getElementById("subtask-filter").addEventListener("change", renderSubtaskList);
 document.getElementById("subtask-form").addEventListener("submit", onSubmitSubtaskForm);
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden) refreshSubtaskStates().catch(() => {});
+  if (document.hidden) return;
+  refreshSubtaskStates().catch(() => {});
+  refreshCurrentDeployPending();
 });
 
 init();
