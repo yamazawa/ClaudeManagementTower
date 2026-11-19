@@ -88,6 +88,23 @@ def test_get_issues_includes_mr_counts(session_factory, monkeypatch):
     ]
 
 
+def test_get_mr_counts_returns_db_counts(session_factory, monkeypatch):
+    def fail(repo, state):
+        raise AssertionError("should not call GitHub")
+
+    monkeypatch.setattr(projects, "list_issues", fail)
+    _add_subtasks(session_factory, 5, ["merged", "resolved", "canceled"])
+    _add_subtasks(session_factory, 7, ["canceled"])
+
+    assert projects.get_mr_counts(1) == {5: {"resolved": 1, "unresolved": 1, "total": 2}}
+
+
+def test_get_mr_counts_unknown_project(session_factory):
+    with pytest.raises(HTTPException) as error:
+        projects.get_mr_counts(99)
+    assert error.value.status_code == 404
+
+
 def test_get_issue_subtasks_returns_db_states(session_factory):
     with session_factory() as session:
         session.add(

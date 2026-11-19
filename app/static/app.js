@@ -815,7 +815,7 @@ function restoreJobState(s) {
 
 async function pollSubtaskStates() {
   try {
-    if (!document.hidden) await refreshSubtaskStates();
+    if (!document.hidden) await Promise.all([refreshSubtaskStates(), refreshIssueListMrCounts()]);
   } catch (error) {
     // サーバー再起動中などで取得に失敗しても自動更新を継続する
   }
@@ -935,6 +935,23 @@ async function runSubtaskStateAction(subtask, def) {
 function updateIssueMrCounts(issueNumber, subtasks) {
   const li = document.querySelector(`.issue-item[data-number="${issueNumber}"]`);
   if (li) updateIssueItemCounts(li, countMrs(subtasks));
+}
+
+/**
+ * Issue一覧の全行のMR数を再取得して反映する
+ *
+ * 自動同期で表示中以外のIssueのMR状態が変わっても追従させる。
+ * Issue一覧はGitHubから再取得せず、DB上のMR数のみ取得する。
+ */
+async function refreshIssueListMrCounts() {
+  const projectId = currentProjectId;
+  if (projectId === null) return;
+  const response = await fetch(`/api/projects/${projectId}/mr-counts`);
+  if (!response.ok || projectId !== currentProjectId) return;
+  const counts = await response.json();
+  document
+    .querySelectorAll(".issue-item")
+    .forEach((li) => updateIssueItemCounts(li, counts[li.dataset.number] || countMrs([])));
 }
 
 /**
