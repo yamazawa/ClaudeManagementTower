@@ -16,23 +16,39 @@ const LIFECYCLE = {
   canceled: "canceled",
 };
 
-const LIFECYCLE_LABELS = {
-  [LIFECYCLE.draft]: "Draft",
-  [LIFECYCLE.resolved]: "Resolved",
-  [LIFECYCLE.merged]: "Merged",
-  [LIFECYCLE.deployed]: "Deployed",
-  [LIFECYCLE.canceled]: "Canceled",
+// MRの表示ステータス
+// Resolving・Mergingは保存せず、lifecycle_stateと実行中のジョブから導出する
+const MR_STATUS = {
+  draft: "draft",
+  resolving: "resolving",
+  resolved: "resolved",
+  merging: "merging",
+  merged: "merged",
+  deployed: "deployed",
+  canceled: "canceled",
 };
 
-// MR一覧フィルタの値ごとに表示対象のlifecycle_stateを定義する（nullは全件表示）
+const MR_STATUS_LABELS = {
+  [MR_STATUS.draft]: "Draft",
+  [MR_STATUS.resolving]: "Resolving",
+  [MR_STATUS.resolved]: "Resolved",
+  [MR_STATUS.merging]: "Merging",
+  [MR_STATUS.merged]: "Merged",
+  [MR_STATUS.deployed]: "Deployed",
+  [MR_STATUS.canceled]: "Canceled",
+};
+
+// ステータス表示のツールチップ
+const MR_STATUS_TOOLTIPS = {
+  [MR_STATUS.resolving]: "実装中",
+  [MR_STATUS.merging]: "マージ中",
+};
+
+// MR一覧フィルタの値ごとに表示対象のlifecycle_stateを定義する
+// 未解決はDraft〜Merging、解決済はMerged〜Deployedを表示する
 const SUBTASK_FILTER_STATES = {
   unresolved: [LIFECYCLE.draft, LIFECYCLE.resolved],
-  draft: [LIFECYCLE.draft],
-  resolved: [LIFECYCLE.resolved],
-  merged: [LIFECYCLE.merged],
-  deployed: [LIFECYCLE.deployed],
-  canceled: [LIFECYCLE.canceled],
-  all: null,
+  solved: [LIFECYCLE.merged, LIFECYCLE.deployed],
 };
 
 // MRの状態ごとの操作ボタン（primaryはプライマリ色で表示する）
@@ -108,11 +124,8 @@ const MR_COUNT_EXCLUDED_STATE = LIFECYCLE.canceled;
 // デプロイ待ちはDeployボタンの件数に使い、デプロイすると動作確認できるMergedのMRを数える
 const MR_COUNT_REVIEW_STATES = [LIFECYCLE.resolved];
 const MR_COUNT_UNDEPLOYED_STATES = [LIFECYCLE.merged];
-// Reviewボタンで切り替えるIssue一覧・MR一覧のフィルタの値
-const REVIEW_ISSUE_FILTER_VALUE = "review";
-const REVIEW_SUBTASK_FILTER_VALUE = LIFECYCLE.resolved;
-// 作成直後のIssue（未解決・レビュー待ちMR無し）が表示対象となるIssue一覧のフィルタの値
-const ISSUE_FILTERS_SHOWING_NEW_ISSUE = ["open", "all"];
+// 作成直後のIssue（Open）が表示対象となるIssue一覧のフィルタの値
+const ISSUE_FILTERS_SHOWING_NEW_ISSUE = ["open"];
 
 // MR状態の自動更新間隔（サーバー側のPR同期間隔と合わせて10秒以内に反映させる）
 const SUBTASK_POLL_MS = 3000;
@@ -426,7 +439,7 @@ const DEPLOY_UNDEFINED_TOOLTIP = "デプロイが定義されていません（.
 // リポジトリ見出しのボタン名（件数を併記する）
 const REVIEW_BUTTON_LABEL = "Rev";
 const DEPLOY_BUTTON_LABEL = "Dep";
-const REVIEW_TOOLTIP = "レビュー待ち（Resolved）のMRがあるIssue・MRを表示します";
+const REVIEW_TOOLTIP = "レビュー待ち（Resolved）のMR数（クリック操作は未実装）";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -517,6 +530,7 @@ function highlightSelectedProject() {
  *
  * 「Repo #番号 表示名」とし、番号部分はGitHubのリポジトリページへのリンクにする。
  * 右端にReview・Deployボタンを置き、レビュー待ち・デプロイ待ちのMR数を併記する。
+ * Reviewボタンはクリックしても何もしない。
  * デプロイ未定義のリポジトリではDeployボタンを無効化する。
  */
 function renderRepoHeading(project) {
@@ -526,7 +540,6 @@ function renderRepoHeading(project) {
     `<button type="button" id="review-button" class="title-action-button" title="${REVIEW_TOOLTIP}">${REVIEW_BUTTON_LABEL}</button>` +
     `<button type="button" id="deploy-button" class="title-action-button">${DEPLOY_BUTTON_LABEL}</button>`;
   document.getElementById("deploy-status").textContent = "";
-  document.getElementById("review-button").addEventListener("click", onClickReview);
   refreshIssueListMrCounts().catch(() => {});
   const button = document.getElementById("deploy-button");
   button.disabled = !project.deploy_defined;
@@ -682,7 +695,7 @@ function updateIssueItemCounts(li, counts) {
 
 function filterSubtasks(subtasks) {
   const states = SUBTASK_FILTER_STATES[document.getElementById("subtask-filter").value];
-  return states ? subtasks.filter((s) => states.includes(s.lifecycle_state)) : subtasks;
+  return subtasks.filter((s) => states.includes(s.lifecycle_state));
 }
 
 function renderSubtaskList() {
@@ -821,24 +834,39 @@ function renderSubtaskRow(s) {
 }
 
 /**
- * MRの状態表示
+ * MRの表示ステータス
  *
- * 一覧の行と詳細の見出しで共通に使う。
+ * 未解決のMRで実装ジョブが実行中の場合はResolvingとする。
+ * ResolvedのMRがマージ待ち・マージ中の場合はMergingとする。
  */
+function mrStatus(s) {
+  const isOpen = SUBTASK_FILTER_STATES.unresolved.includes(s.lifecycle_state);
+  if (isOpen && isJobActive(s.latest_job)) return MR_STATUS.resolving;
+  if (s.lifecycle_state === LIFECYCLE.resolved && isMergeActive(s.latest_merge)) return MR_STATUS.merging;
+  return s.lifecycle_state;
+}
+
 /**
  * MRの状態表示
  *
- * マージ待ち・マージ中・マージ失敗の場合は併記する。
- * マージ失敗はResolvedのままの場合のみ表示し、ツールチップに理由を出す。
+ * 一覧の行と詳細の見出しで共通に使う。
+ * Resolving・Mergingはツールチップに意味（マージ待ちの場合はマージ待ち）を出す。
+ * マージ失敗はResolvedのままの場合のみ併記し、ツールチップに理由を出す。
  */
 function renderSubtaskState(s) {
-  const label = LIFECYCLE_LABELS[s.lifecycle_state] || s.lifecycle_state;
+  const status = mrStatus(s);
+  const label = MR_STATUS_LABELS[status] || status;
   const merge = s.latest_merge;
-  const showFailure = merge && merge.status === MERGE_STATUS.failed && s.lifecycle_state === LIFECYCLE.resolved;
-  const mergeLabel = merge && (isMergeActive(merge) || showFailure) ? MERGE_STATUS_LABELS[merge.status] : "";
-  const tooltip = showFailure ? ` title="${escapeAttr(merge.error_message)}"` : "";
-  const suffix = mergeLabel ? `（${mergeLabel}）` : "";
+  const showFailure = status === MR_STATUS.resolved && merge && merge.status === MERGE_STATUS.failed;
+  const suffix = showFailure ? `（${MERGE_STATUS_LABELS[merge.status]}）` : "";
+  const tooltipText = showFailure ? merge.error_message : mrStatusTooltip(status, merge);
+  const tooltip = tooltipText ? ` title="${escapeAttr(tooltipText)}"` : "";
   return `<span class="subtask-state"${tooltip}>${label}${suffix}</span>`;
+}
+
+function mrStatusTooltip(status, merge) {
+  if (status === MR_STATUS.merging) return MERGE_STATUS_LABELS[merge.status];
+  return MR_STATUS_TOOLTIPS[status] || "";
 }
 
 function highlightSelectedSubtaskRow() {
@@ -1299,20 +1327,6 @@ function updateRepoMrTotals(issueCounts) {
   }
   const deployButton = document.getElementById("deploy-button");
   if (deployButton) deployButton.textContent = `${DEPLOY_BUTTON_LABEL} ${sum("undeployed")}`;
-}
-
-/**
- * Reviewボタンのクリック
- *
- * Issue一覧はレビュー、MR一覧はResolvedのフィルタに切り替える。
- * 縦長表示ではIssue一覧を開く。
- */
-async function onClickReview() {
-  document.getElementById("issue-filter").value = REVIEW_ISSUE_FILTER_VALUE;
-  document.getElementById("subtask-filter").value = REVIEW_SUBTASK_FILTER_VALUE;
-  autoSetSectionExpanded(SECTION_IDS.repo, true);
-  renderSubtaskList();
-  await loadIssues();
 }
 
 /**

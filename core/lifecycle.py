@@ -12,6 +12,9 @@ class LifecycleState:
     MERGED : マージ済（デプロイ待ち）
     DEPLOYED : マージ済で、デプロイしたソースに含まれる
     CANCELED : マージせずクローズ済
+
+    画面のResolving（実装中）・Merging（マージ中）は保存しない。
+    DRAFT・RESOLVEDと実行中のジョブから画面側で導出する。
     """
 
     DRAFT = "draft"
