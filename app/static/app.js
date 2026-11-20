@@ -108,8 +108,8 @@ const MR_COUNT_EXCLUDED_STATE = LIFECYCLE.canceled;
 // デプロイ待ちはDeployボタンの件数に使い、デプロイすると動作確認できるMergedのMRを数える
 const MR_COUNT_REVIEW_STATES = [LIFECYCLE.resolved];
 const MR_COUNT_UNDEPLOYED_STATES = [LIFECYCLE.merged];
-// 作成直後のIssue（未解決・レビュー待ちMR無し）が表示対象となるIssue一覧のフィルタの値
-const ISSUE_FILTERS_SHOWING_NEW_ISSUE = ["open", "all"];
+// 作成直後のIssue（Open）が表示対象となるIssue一覧のフィルタの値
+const ISSUE_FILTERS_SHOWING_NEW_ISSUE = ["open"];
 
 // MR状態の自動更新間隔（サーバー側のPR同期間隔と合わせて10秒以内に反映させる）
 const SUBTASK_POLL_MS = 3000;

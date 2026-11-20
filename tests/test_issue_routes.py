@@ -109,22 +109,20 @@ def test_mr_counts_treat_deployed_as_resolved(session_factory):
     }
 
 
-def test_review_filter_returns_issues_with_review_mr_in_any_state(session_factory, monkeypatch):
+def test_get_issues_passes_state_filter_to_github(session_factory, monkeypatch):
     calls = []
 
     def fake(repo, state):
         calls.append(state)
-        return [{"number": 5, "state": "OPEN"}, {"number": 6, "state": "CLOSED"}, {"number": 7, "state": "OPEN"}]
+        return [{"number": 6, "state": "CLOSED"}]
 
     monkeypatch.setattr(projects, "list_issues", fake)
-    _add_subtasks(session_factory, 5, ["resolved", "draft"])
     _add_subtasks(session_factory, 6, ["resolved"])
-    _add_subtasks(session_factory, 7, ["draft", "merged"])
 
-    issues = projects.get_issues(1, "review")
+    issues = projects.get_issues(1, "closed")
 
-    assert calls == ["all"]
-    assert [i["number"] for i in issues] == [5, 6]
+    assert calls == ["closed"]
+    assert [i["number"] for i in issues] == [6]
 
 
 def test_get_mr_counts_unknown_project(session_factory):

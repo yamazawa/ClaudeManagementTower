@@ -34,8 +34,6 @@ UNCOUNTED_LIFECYCLE_STATE = LifecycleState.CANCELED
 REVIEW_LIFECYCLE_STATE = LifecycleState.RESOLVED
 UNDEPLOYED_LIFECYCLE_STATE = LifecycleState.MERGED
 EMPTY_MR_COUNTS = {"resolved": 0, "unresolved": 0, "total": 0, "review": 0, "undeployed": 0}
-# Issue一覧のレビューフィルタ（レビュー待ちMRを含むIssue）の値
-ISSUE_FILTER_REVIEW = "review"
 
 
 def _latest_job_summary(session, subtask_id: int) -> dict | None:
@@ -74,20 +72,18 @@ def get_projects():
 
 
 @router.get("/{project_id}/issues")
-def get_issues(project_id: int, state: Literal["open", "closed", "all", "review"] = "open"):
+def get_issues(project_id: int, state: Literal["open", "closed"] = "open"):
     """Issue一覧
 
-    reviewの場合は、状態に関わらずレビュー待ちMRを含むIssueを返す。
+    IssueのステータスはOpen・Closeの2種類とし、指定したステータスのIssueを返す。
     """
     with SessionLocal() as session:
         project = session.get(Project, project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="project not found")
-        is_review = state == ISSUE_FILTER_REVIEW
-        issues = list_issues(project.github_repo, "all" if is_review else state)
+        issues = list_issues(project.github_repo, state)
         counts = _mr_counts_by_issue(session, project.id)
-        result = [{**i, "mr_counts": counts.get(i["number"], EMPTY_MR_COUNTS)} for i in issues]
-        return [i for i in result if i["mr_counts"]["review"] > 0] if is_review else result
+        return [{**i, "mr_counts": counts.get(i["number"], EMPTY_MR_COUNTS)} for i in issues]
 
 
 @router.get("/{project_id}/mr-counts")
@@ -106,7 +102,7 @@ def _mr_counts_by_issue(session, project_id: int) -> dict[int, dict]:
 
     マージされずクローズされたMRはいずれにも数えない。
     未解決MR数は一覧の閉じるボタンの活性判定に使う。
-    レビュー待ち・デプロイ待ちMR数はリポジトリ見出しの件数表示とレビューフィルタに使う。
+    レビュー待ち・デプロイ待ちMR数はリポジトリ見出しの件数表示に使う。
     """
     rows = (
         session.query(
