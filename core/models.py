@@ -69,6 +69,23 @@ class ExecutionJob(Base):
     heartbeat_at: Mapped[datetime | None] = mapped_column(default=None)
 
 
+class MergeJob(Base):
+    """MRのマージ待ち行列
+
+    マージは1件ずつ順に処理する。
+    """
+
+    __tablename__ = "merge_jobs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    subtask_id: Mapped[int] = mapped_column(ForeignKey("subtasks.id"))
+    status: Mapped[str]
+    queued_at: Mapped[datetime] = mapped_column(default=_now)
+    started_at: Mapped[datetime | None] = mapped_column(default=None)
+    ended_at: Mapped[datetime | None] = mapped_column(default=None)
+    error_message: Mapped[str | None] = mapped_column(default=None)
+
+
 class ExecutionEvent(Base):
     __tablename__ = "execution_events"
 
