@@ -139,10 +139,6 @@ const JOB_POLL_MS = 3000;
 // Issue一覧のMR数で解決済とみなす状態と、数えない状態（マージされずクローズ）
 const MR_COUNT_RESOLVED_STATES = [LIFECYCLE.merged, LIFECYCLE.deployed];
 const MR_COUNT_EXCLUDED_STATE = LIFECYCLE.canceled;
-// レビュー待ち・デプロイ待ちとみなす状態（app/routes/projects.pyと合わせる）
-// デプロイ待ちはDeployボタンの件数に使い、デプロイすると動作確認できるMergedのMRを数える
-const MR_COUNT_REVIEW_STATES = [LIFECYCLE.resolved];
-const MR_COUNT_UNDEPLOYED_STATES = [LIFECYCLE.merged];
 // 作成直後のIssue（Open）が表示対象となるIssue一覧のフィルタの値
 const ISSUE_FILTERS_SHOWING_NEW_ISSUE = ["open"];
 // Issue一覧APIで指定できるIssueの状態（app/routes/projects.pyと合わせる）
@@ -571,12 +567,10 @@ const DEPLOY_POLL_MS = 2000;
 const DEPLOY_TIMEOUT_MS = 30 * 60 * 1000;
 // サーバー再起動を表すデプロイ結果のrestartsの値（core/supervisor_control.pyと合わせる）
 const DEPLOY_RESTART_SERVER = "restart_server";
-const DEPLOY_DEFINED_TOOLTIP = "リポジトリに定義したデプロイ手順を実行します（数字はMergedのMR数。デプロイすると動作確認できます）";
+const DEPLOY_DEFINED_TOOLTIP = "リポジトリに定義したデプロイ手順を実行します（デプロイすると動作確認できます）";
 const DEPLOY_UNDEFINED_TOOLTIP = "デプロイが定義されていません（.claude-tower/deploy.json）";
-// リポジトリ見出しのボタン名（件数を併記する）
-const REVIEW_BUTTON_LABEL = "Rev";
-const DEPLOY_BUTTON_LABEL = "Dep";
-const REVIEW_TOOLTIP = "レビュー待ち（Resolved）のMR数（クリック操作は未実装）";
+// リポジトリ見出しのDeployボタン名
+const DEPLOY_BUTTON_LABEL = "Deploy";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -683,18 +677,15 @@ function highlightSelectedProject() {
  * リポジトリ見出しの表示
  *
  * 「Repo #番号 表示名」とし、番号部分はGitHubのリポジトリページへのリンクにする。
- * 右端にReview・Deployボタンを置き、レビュー待ち・デプロイ待ちのMR数を併記する。
- * Reviewボタンはクリックしても何もしない。
+ * 右端にDeployボタンを置く。
  * デプロイ未定義のリポジトリではDeployボタンを無効化する。
  */
 function renderRepoHeading(project) {
   const label = project.repo_number ? `Repo #${project.repo_number}` : "Repo";
   document.getElementById("repo-heading").innerHTML =
     `${renderTitleNumber(label, project.repo_url)}<span id="repo-title">${escapeHtml(project.display_name)}</span>` +
-    `<button type="button" id="review-button" class="title-action-button" title="${REVIEW_TOOLTIP}">${REVIEW_BUTTON_LABEL}</button>` +
     `<button type="button" id="deploy-button" class="title-action-button">${DEPLOY_BUTTON_LABEL}</button>`;
   document.getElementById("deploy-status").textContent = "";
-  refreshIssueListMrCounts().catch(() => {});
   const button = document.getElementById("deploy-button");
   button.disabled = !project.deploy_defined;
   button.title = project.deploy_defined ? DEPLOY_DEFINED_TOOLTIP : DEPLOY_UNDEFINED_TOOLTIP;
@@ -1495,25 +1486,6 @@ async function refreshIssueListMrCounts() {
   document
     .querySelectorAll(".issue-item")
     .forEach((li) => updateIssueItemCounts(li, counts[li.dataset.number] || countMrs([])));
-  updateRepoMrTotals(Object.values(counts));
-}
-
-/**
- * リポジトリ見出しのReview・Deployボタンの件数を更新する
- *
- * Reviewはレビュー待ちMRがある場合にプライマリ色にする。
- * Deployボタンの色は従来どおり未取り込みの対応の有無で決める。
- */
-function updateRepoMrTotals(issueCounts) {
-  const sum = (key) => issueCounts.reduce((total, c) => total + (c[key] || 0), 0);
-  const review = sum("review");
-  const reviewButton = document.getElementById("review-button");
-  if (reviewButton) {
-    reviewButton.textContent = `${REVIEW_BUTTON_LABEL} ${review}`;
-    reviewButton.classList.toggle("primary", review > 0);
-  }
-  const deployButton = document.getElementById("deploy-button");
-  if (deployButton) deployButton.textContent = `${DEPLOY_BUTTON_LABEL} ${sum("undeployed")}`;
 }
 
 /**
@@ -1528,8 +1500,6 @@ function countMrs(subtasks) {
     resolved: countIn(MR_COUNT_RESOLVED_STATES),
     unresolved: countIn(SUBTASK_FILTER_STATES.unresolved),
     total: counted.length,
-    review: countIn(MR_COUNT_REVIEW_STATES),
-    undeployed: countIn(MR_COUNT_UNDEPLOYED_STATES),
   };
 }
 
