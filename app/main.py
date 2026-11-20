@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routes import deploy, jobs, merges, projects, subtasks, system, workers
+from app.routes import deploy, jobs, merges, mr_statuses, projects, subtasks, system, workers
 from core.config import settings
 from core.db import ensure_default_project, init_db
 from core.merge_queue import start_merge_loop
@@ -34,6 +34,7 @@ app.include_router(subtasks.router)
 app.include_router(jobs.router)
 app.include_router(workers.router)
 app.include_router(merges.router)
+app.include_router(mr_statuses.router)
 app.include_router(system.router)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 

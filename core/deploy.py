@@ -114,6 +114,15 @@ def _write_result(project_id: int, result: dict) -> None:
     path.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
 
 
+def is_deploy_running(project_id: int) -> bool:
+    """デプロイ実行中か
+
+    サーバー再起動で中断した結果ファイルを実行中と誤らないよう、プロセス内の状態で判定する。
+    """
+    with _guard:
+        return project_id in _running_project_ids
+
+
 def start_deploy(
     project_id: int,
     repo_path: str,
