@@ -12,6 +12,7 @@ def requested(monkeypatch, tmp_path):
     monkeypatch.setattr(self_sync.settings, "supervisor_control_dir", str(tmp_path))
     monkeypatch.setattr(self_sync, "pull_latest", lambda path, branch: None)
     monkeypatch.setattr(self_sync, "mark_prs_merged", lambda repo, numbers: None)
+    monkeypatch.setattr(self_sync, "mark_deployed_for_repo", lambda repo, path: [])
     commands = []
     monkeypatch.setattr(self_sync, "request_command", commands.append)
     return commands
@@ -33,6 +34,19 @@ def test_merges_only_non_draft_prs_and_restarts(monkeypatch, requested):
     assert merged == [1]
     assert read_result() == {"status": "done", "merged_pr_numbers": [1], "failed_prs": []}
     assert requested == [COMMAND_RESTART_SERVER, COMMAND_RESTART_WORKERS]
+
+
+def test_marks_deployed_after_pull(monkeypatch, requested):
+    _prs(monkeypatch, [])
+    order = []
+    monkeypatch.setattr(self_sync, "pull_latest", lambda path, branch: order.append("pull"))
+    monkeypatch.setattr(
+        self_sync, "mark_deployed_for_repo", lambda repo, path: order.append(("mark", repo, path))
+    )
+
+    run_self_sync("repo")
+
+    assert order == ["pull", ("mark", self_sync.settings.self_repo, "repo")]
 
 
 def test_marks_only_successfully_merged_prs(monkeypatch, requested):

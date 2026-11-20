@@ -120,6 +120,25 @@ def list_pull_request_states(repo: str) -> list[dict]:
     return json.loads(output)
 
 
+def list_merged_pull_requests(repo: str) -> list[dict]:
+    """マージ済PRの番号とマージコミット"""
+    output = _run_gh(
+        [
+            "pr", "list",
+            "--repo", repo,
+            "--state", "merged",
+            "--limit", str(PR_STATE_LIST_LIMIT),
+            "--json", "number,mergeCommit",
+        ]
+    )
+    return json.loads(output)
+
+
+def get_pr_merge_commit(repo: str, number: int) -> str | None:
+    output = _run_gh(["pr", "view", str(number), "--repo", repo, "--json", "mergeCommit"])
+    return (json.loads(output).get("mergeCommit") or {}).get("oid")
+
+
 def list_open_pull_requests(repo: str) -> list[dict]:
     output = _run_gh(
         [

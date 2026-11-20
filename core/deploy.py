@@ -13,6 +13,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from core.config import settings
+from core.deploy_tracking import mark_deployed
 from core.git_client import GitClientError, pull_latest
 from core.supervisor_control import COMMAND_RESTART_SERVER, COMMAND_RESTART_WORKERS, request_command
 
@@ -152,10 +153,23 @@ def run_deploy(project_id: int, repo_path: str, branch: str, steps: list[dict]) 
         _write_result(project_id, {"status": STATUS_FAILED, "error": str(exc)})
         return
 
+    # サーバー再起動の要求前に、デプロイしたソースに含まれるMRを反映する
+    mark_deployed_safely(lambda: mark_deployed(project_id, repo_path))
     restarts = restart_commands(steps)
     _write_result(project_id, {"status": STATUS_DONE, "restarts": restarts})
     for command in restarts:
         request_command(command)
+
+
+def mark_deployed_safely(mark: Callable[[], list[int]]) -> None:
+    """MRのDeployed反映
+
+    反映に失敗してもデプロイ自体は成功しているため、失敗扱いにしない。
+    """
+    try:
+        mark()
+    except Exception as exc:  # noqa: BLE001
+        print(f"[deploy] MRのDeployed反映に失敗しました: {exc}")
 
 
 def _run_step(repo_path: str, branch: str, step: dict) -> None:

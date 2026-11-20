@@ -83,8 +83,8 @@ def test_get_issues_includes_mr_counts(session_factory, monkeypatch):
     issues = projects.get_issues(1)
 
     assert [i["mr_counts"] for i in issues] == [
-        {"resolved": 2, "unresolved": 2, "total": 4},
-        {"resolved": 0, "unresolved": 0, "total": 0},
+        {"resolved": 2, "unresolved": 2, "total": 4, "review": 1, "undeployed": 2},
+        {"resolved": 0, "unresolved": 0, "total": 0, "review": 0, "undeployed": 0},
     ]
 
 
@@ -96,7 +96,35 @@ def test_get_mr_counts_returns_db_counts(session_factory, monkeypatch):
     _add_subtasks(session_factory, 5, ["merged", "resolved", "canceled"])
     _add_subtasks(session_factory, 7, ["canceled"])
 
-    assert projects.get_mr_counts(1) == {5: {"resolved": 1, "unresolved": 1, "total": 2}}
+    assert projects.get_mr_counts(1) == {
+        5: {"resolved": 1, "unresolved": 1, "total": 2, "review": 1, "undeployed": 1}
+    }
+
+
+def test_mr_counts_treat_deployed_as_resolved(session_factory):
+    _add_subtasks(session_factory, 5, ["merged", "deployed", "draft"])
+
+    assert projects.get_mr_counts(1)[5] == {
+        "resolved": 2, "unresolved": 1, "total": 3, "review": 0, "undeployed": 1
+    }
+
+
+def test_review_filter_returns_issues_with_review_mr_in_any_state(session_factory, monkeypatch):
+    calls = []
+
+    def fake(repo, state):
+        calls.append(state)
+        return [{"number": 5, "state": "OPEN"}, {"number": 6, "state": "CLOSED"}, {"number": 7, "state": "OPEN"}]
+
+    monkeypatch.setattr(projects, "list_issues", fake)
+    _add_subtasks(session_factory, 5, ["resolved", "draft"])
+    _add_subtasks(session_factory, 6, ["resolved"])
+    _add_subtasks(session_factory, 7, ["draft", "merged"])
+
+    issues = projects.get_issues(1, "review")
+
+    assert calls == ["all"]
+    assert [i["number"] for i in issues] == [5, 6]
 
 
 def test_get_mr_counts_unknown_project(session_factory):

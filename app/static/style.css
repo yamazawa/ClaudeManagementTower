@@ -607,6 +607,11 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
   cursor: pointer;
 }
 
+/* 右寄せしたボタンを複数並べる場合は、先頭以外を詰めて並べる */
+.title-action-button + .title-action-button {
+  margin-left: 0;
+}
+
 .title-action-button:hover:not(:disabled) {
   background: var(--soft);
 }

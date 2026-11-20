@@ -117,6 +117,18 @@ def has_remote_updates(repo_path: str, branch: str) -> bool:
     return int(count.strip()) > 0
 
 
+def is_commit_in_head(repo_path: str, commit: str) -> bool:
+    """コミットがチェックアウト中のHEADに含まれるか
+
+    ローカルに存在しないコミットは含まれないとみなす。
+    """
+    try:
+        _run_git(["merge-base", "--is-ancestor", commit, "HEAD"], cwd=repo_path)
+    except GitClientError:
+        return False
+    return True
+
+
 def prepare_detached_worktree(repo_path: str, worktree_path: str, branch: str) -> None:
     """リモートブランチの最新をdetached HEADでworktreeに用意する
 
