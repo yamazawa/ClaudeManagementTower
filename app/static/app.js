@@ -641,6 +641,7 @@ async function init() {
  *
  * 別リポジトリへ切り替えた場合は、前のIssue・MRの表示を消す。
  * 縦長表示ではリポジトリ一覧を閉じ、Issue一覧を開く。
+ * Issue一覧に表示中の先頭Issueを自動選択する。
  */
 async function selectProject(project) {
   if (project.id !== currentProjectId) {
@@ -654,7 +655,22 @@ async function selectProject(project) {
   document.getElementById("issue-list-placeholder").hidden = true;
   document.getElementById("issue-panel").hidden = false;
   renderRepoHeading(project);
-  await loadIssues();
+  await selectFirstIssue(await loadIssues());
+}
+
+/**
+ * Issue一覧に表示中の先頭Issueを選択する
+ *
+ * 選択中のIssueが一覧に表示中の場合は選択し直さない。
+ * 表示中のIssueが無い場合は未選択のままとする。
+ * 縦長表示では、Issue一覧の表示が1件のみの場合は閉じる。
+ */
+async function selectFirstIssue(issues) {
+  if (issues.some((issue) => issue.number === currentIssueNumber)) return;
+  const [first] = issues;
+  if (!first) return;
+  await selectIssue(first.number);
+  if (issues.length === 1) autoSetSectionExpanded(SECTION_IDS.repo, false);
 }
 
 function highlightSelectedProject() {
@@ -781,8 +797,9 @@ async function waitForDeployResult(projectId) {
 }
 
 /**
- * Issue一覧の取得・描画
+ * Issue一覧の読み込み
  *
+ * フィルタに該当するIssueを表示し、表示したIssueを返す。
  * MRステータスフィルタの選択中は、Open・Closeを問わず該当Issueを表示する。
  */
 async function loadIssues() {
@@ -792,11 +809,9 @@ async function loadIssues() {
     : await fetchIssues(document.getElementById("issue-filter").value);
   const listEl = document.getElementById("issue-list-items");
   listEl.innerHTML = "";
-  if (issues.length === 0) {
-    listEl.innerHTML = '<li class="empty">Issueがありません。</li>';
-    return;
-  }
-  issues.forEach((issue) => listEl.appendChild(renderIssueItem(issue)));
+  if (issues.length === 0) listEl.innerHTML = '<li class="empty">Issueがありません。</li>';
+  else issues.forEach((issue) => listEl.appendChild(renderIssueItem(issue)));
+  return issues;
 }
 
 async function fetchIssues(state) {
