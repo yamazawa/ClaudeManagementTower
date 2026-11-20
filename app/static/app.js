@@ -69,11 +69,30 @@ const SUBTASK_STATE_ACTIONS = {
   },
   merge: {
     path: "merge",
-    confirm: "をマージしますか？競合している場合はClaudeが競合を解消してからマージします。",
-    progress: "マージ中...（競合解消を含むため時間がかかる場合があります）",
-    done: "MRをマージしました",
+    confirm: "をマージしますか？マージは1件ずつ順に行い、競合している場合はClaudeが競合を解消してからマージします。",
+    progress: "マージ待ちに登録中...",
+    done: "マージ待ちに登録しました（進捗はヘッダーで確認できます）",
   },
 };
+
+// マージ待ち行列の状態（core/merge_queue.pyと合わせる）
+const MERGE_STATUS = {
+  queued: "queued",
+  running: "running",
+  succeeded: "succeeded",
+  failed: "failed",
+};
+const MERGE_STATUS_LABELS = {
+  [MERGE_STATUS.queued]: "マージ待ち",
+  [MERGE_STATUS.running]: "マージ中",
+  [MERGE_STATUS.succeeded]: "マージ済",
+  [MERGE_STATUS.failed]: "マージ失敗",
+};
+const MERGE_POLL_MS = 3000;
+
+function isMergeActive(merge) {
+  return !!merge && [MERGE_STATUS.queued, MERGE_STATUS.running].includes(merge.status);
+}
 
 // 実行中とみなすジョブの状態（実行中はMRの操作ボタンを無効化する）
 const ACTIVE_JOB_STATUSES = ["queued", "running"];
@@ -316,6 +335,38 @@ async function renderWorkers() {
     `<span class="worker-summary">実行中 ${busyCount} / ${aliveWorkers.length}</span>${items}`;
 }
 
+async function pollMerges() {
+  try {
+    await renderMerges();
+  } catch (error) {
+    // サーバー再起動中などで取得に失敗しても監視を継続する
+    document.getElementById("merge-status").textContent = "マージ状況を取得できません";
+  }
+  setTimeout(pollMerges, MERGE_POLL_MS);
+}
+
+/**
+ * ヘッダーのマージ状況を描画する
+ *
+ * マージ中のMRと、マージ待ちのMRを処理順に表示する。
+ */
+async function renderMerges() {
+  const merges = await fetch("/api/merges").then((r) => r.json());
+  const runningCount = merges.filter((m) => m.status === MERGE_STATUS.running).length;
+  const queuedCount = merges.length - runningCount;
+  const items = merges.map(renderMergePill).join("");
+  document.getElementById("merge-status").innerHTML =
+    `<span class="worker-summary">マージ中 ${runningCount} / 待ち ${queuedCount}</span>${items}`;
+}
+
+function renderMergePill(m) {
+  const label = MERGE_STATUS_LABELS[m.status] || m.status;
+  const pr = m.github_pr_number ? `MR #${m.github_pr_number}` : "MR";
+  const statusClass = m.status === MERGE_STATUS.running ? "merge-running" : "";
+  const text = `${label} ${pr} ${m.title}`;
+  return `<span class="worker-pill merge-pill ${statusClass}" title="${escapeAttr(text)}">${escapeHtml(text)}</span>`;
+}
+
 // ヘッダーに表示するClaudeのレート制限枠（core/rate_limits.pyと合わせる）
 const RATE_LIMIT_WINDOWS = [
   { type: "five_hour", label: "5h" },
@@ -432,6 +483,7 @@ async function init() {
     }
   }
   pollWorkers();
+  pollMerges();
   pollRateLimits();
   pollSubtaskStates();
 }
@@ -776,9 +828,20 @@ function renderSubtaskRow(s) {
  *
  * 一覧の行と詳細の見出しで共通に使う。
  */
+/**
+ * MRの状態表示
+ *
+ * マージ待ち・マージ中・マージ失敗の場合は併記する。
+ * マージ失敗はResolvedのままの場合のみ表示し、ツールチップに理由を出す。
+ */
 function renderSubtaskState(s) {
   const label = LIFECYCLE_LABELS[s.lifecycle_state] || s.lifecycle_state;
-  return `<span class="subtask-state">${label}</span>`;
+  const merge = s.latest_merge;
+  const showFailure = merge && merge.status === MERGE_STATUS.failed && s.lifecycle_state === LIFECYCLE.resolved;
+  const mergeLabel = merge && (isMergeActive(merge) || showFailure) ? MERGE_STATUS_LABELS[merge.status] : "";
+  const tooltip = showFailure ? ` title="${escapeAttr(merge.error_message)}"` : "";
+  const suffix = mergeLabel ? `（${mergeLabel}）` : "";
+  return `<span class="subtask-state"${tooltip}>${label}${suffix}</span>`;
 }
 
 function highlightSelectedSubtaskRow() {
@@ -1136,7 +1199,7 @@ function renderSubtaskActions(s) {
   const container = document.getElementById("subtask-actions");
   if (!container || Number(container.dataset.subtaskId) !== s.id) return;
   const actions = SUBTASK_ACTIONS[s.lifecycle_state] || [];
-  const busy = busySubtaskIds.has(s.id) || isJobActive(s.latest_job);
+  const busy = busySubtaskIds.has(s.id) || isJobActive(s.latest_job) || isMergeActive(s.latest_merge);
   container.innerHTML = actions.map((a) => renderSubtaskActionButton(a, busy)).join("");
   container
     .querySelectorAll("button")
@@ -1184,6 +1247,8 @@ async function runSubtaskStateAction(subtask, def) {
   const { body, error } = await postAction(`/api/subtasks/${subtask.id}/${def.path}`);
   const latest = currentSubtasks.find((s) => s.id === subtask.id);
   if (!error && latest) latest.lifecycle_state = body.lifecycle_state;
+  if (!error && latest && body.latest_merge) latest.latest_merge = body.latest_merge;
+  if (!error && body.latest_merge) renderMerges().catch(() => {});
   busySubtaskIds.delete(subtask.id);
   updateIssueMrCounts(currentIssueNumber, currentSubtasks);
   renderSubtaskList();

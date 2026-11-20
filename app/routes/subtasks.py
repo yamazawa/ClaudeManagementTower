@@ -35,7 +35,7 @@ from core.github_client import (
 from core.lifecycle import LifecycleState
 from core.models import ExecutionJob, Project, Subtask
 from core.mr_naming import compose_mr_title, next_default_suffix
-from core.pr_merger import PrMergeError, merge_pr_with_update
+from core.merge_queue import enqueue_merge, find_active_merge
 from core.pr_sync import lifecycle_state_from_pr
 
 router = APIRouter(prefix="/api/subtasks")
@@ -387,36 +387,25 @@ def _ensure_mergeable(session, subtask: Subtask) -> None:
         raise HTTPException(status_code=409, detail="実装の実行中はマージできません")
 
 
-def _pr_refs(subtask: Subtask, project: Project) -> dict:
-    return {
-        "number": subtask.github_pr_number,
-        "headRefName": subtask.branch_name,
-        "baseRefName": project.default_branch,
-    }
-
-
 @router.post("/{subtask_id}/merge")
 def merge_subtask(subtask_id: int):
-    """MRをマージする
+    """MRをマージ待ち行列に登録する
 
-    Resolvedかつ実装の実行中でない場合のみ受け付ける。
+    Resolvedかつ実装の実行中・マージ待ちでない場合のみ受け付ける。
+    マージは待ち行列から1件ずつ順に行う。
     競合時はベースブランチを取り込み、Claudeで競合解決してからマージする。
     """
     with SessionLocal() as session:
-        subtask, project = _get_subtask_and_project(session, subtask_id)
+        subtask, _ = _get_subtask_and_project(session, subtask_id)
         _ensure_mergeable(session, subtask)
-        try:
-            merge_pr_with_update(
-                project.github_repo,
-                project.repo_path,
-                settings.worktree_base_dir,
-                _pr_refs(subtask, project),
-            )
-        except (GitClientError, GitHubClientError, PrMergeError) as exc:
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
-        subtask.lifecycle_state = LifecycleState.MERGED
-        session.commit()
-        return {"id": subtask.id, "lifecycle_state": subtask.lifecycle_state}
+        if find_active_merge(session, subtask.id) is not None:
+            raise HTTPException(status_code=409, detail="マージ待ちに登録済です")
+        job = enqueue_merge(session, subtask.id)
+        return {
+            "id": subtask.id,
+            "lifecycle_state": subtask.lifecycle_state,
+            "latest_merge": {"id": job.id, "status": job.status, "error_message": None},
+        }
 
 
 def _subtask_worktree_path(subtask_id: int) -> str:
@@ -480,6 +469,9 @@ def execute_subtask(subtask_id: int, payload: ExecuteSubtaskRequest | None = Non
         subtask = session.get(Subtask, subtask_id)
         if subtask is None:
             raise HTTPException(status_code=404, detail="subtask not found")
+
+        if find_active_merge(session, subtask_id) is not None:
+            raise HTTPException(status_code=409, detail="マージ待ちのMRは実装できません")
 
         if payload is not None and payload.instruction:
             subtask.instruction = payload.instruction
