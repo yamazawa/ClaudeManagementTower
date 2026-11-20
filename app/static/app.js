@@ -120,10 +120,6 @@ const JOB_POLL_MS = 3000;
 // Issue一覧のMR数で解決済とみなす状態と、数えない状態（マージされずクローズ）
 const MR_COUNT_RESOLVED_STATES = [LIFECYCLE.merged, LIFECYCLE.deployed];
 const MR_COUNT_EXCLUDED_STATE = LIFECYCLE.canceled;
-// レビュー待ち・デプロイ待ちとみなす状態（app/routes/projects.pyと合わせる）
-// デプロイ待ちはDeployボタンの件数に使い、デプロイすると動作確認できるMergedのMRを数える
-const MR_COUNT_REVIEW_STATES = [LIFECYCLE.resolved];
-const MR_COUNT_UNDEPLOYED_STATES = [LIFECYCLE.merged];
 // 作成直後のIssue（Open）が表示対象となるIssue一覧のフィルタの値
 const ISSUE_FILTERS_SHOWING_NEW_ISSUE = ["open"];
 
@@ -1336,8 +1332,6 @@ function countMrs(subtasks) {
     resolved: countIn(MR_COUNT_RESOLVED_STATES),
     unresolved: countIn(SUBTASK_FILTER_STATES.unresolved),
     total: counted.length,
-    review: countIn(MR_COUNT_REVIEW_STATES),
-    undeployed: countIn(MR_COUNT_UNDEPLOYED_STATES),
   };
 }
 
