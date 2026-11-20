@@ -29,7 +29,6 @@ const LIFECYCLE_LABELS = {
 // MR一覧フィルタの値ごとに表示対象のlifecycle_stateを定義する（nullは全件表示）
 const SUBTASK_FILTER_STATES = {
   unresolved: [LIFECYCLE.draft, LIFECYCLE.resolved],
-  review: [LIFECYCLE.resolved],
   draft: [LIFECYCLE.draft],
   resolved: [LIFECYCLE.resolved],
   merged: [LIFECYCLE.merged],
@@ -93,7 +92,8 @@ const MR_COUNT_EXCLUDED_STATE = LIFECYCLE.canceled;
 const MR_COUNT_REVIEW_STATES = [LIFECYCLE.resolved];
 const MR_COUNT_UNDEPLOYED_STATES = [LIFECYCLE.merged];
 // Reviewボタンで切り替えるIssue一覧・MR一覧のフィルタの値
-const REVIEW_FILTER_VALUE = "review";
+const REVIEW_ISSUE_FILTER_VALUE = "review";
+const REVIEW_SUBTASK_FILTER_VALUE = LIFECYCLE.resolved;
 // 作成直後のIssue（未解決・レビュー待ちMR無し）が表示対象となるIssue一覧のフィルタの値
 const ISSUE_FILTERS_SHOWING_NEW_ISSUE = ["open", "all"];
 
@@ -1242,12 +1242,12 @@ function updateRepoMrTotals(issueCounts) {
 /**
  * Reviewボタンのクリック
  *
- * Issue一覧・MR一覧をともにレビューのフィルタに切り替える。
+ * Issue一覧はレビュー、MR一覧はResolvedのフィルタに切り替える。
  * 縦長表示ではIssue一覧を開く。
  */
 async function onClickReview() {
-  document.getElementById("issue-filter").value = REVIEW_FILTER_VALUE;
-  document.getElementById("subtask-filter").value = REVIEW_FILTER_VALUE;
+  document.getElementById("issue-filter").value = REVIEW_ISSUE_FILTER_VALUE;
+  document.getElementById("subtask-filter").value = REVIEW_SUBTASK_FILTER_VALUE;
   autoSetSectionExpanded(SECTION_IDS.repo, true);
   renderSubtaskList();
   await loadIssues();
