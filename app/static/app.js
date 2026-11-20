@@ -47,6 +47,22 @@ const MR_STATUS_TOOLTIPS = {
   [MR_STATUS.deploying]: "デプロイ中",
 };
 
+// ヘッダーのMRステータスフィルタのボタン（表示順）
+// 遷移中のステータスは矢印で表し、showCountがfalseのボタンは件数を表示しない
+const MR_STATUS_FILTER_BUTTONS = [
+  { status: MR_STATUS.draft, label: "Draft" },
+  { status: MR_STATUS.resolving, label: "→" },
+  { status: MR_STATUS.resolved, label: "Resolved" },
+  { status: MR_STATUS.merging, label: "→" },
+  { status: MR_STATUS.merged, label: "Merged" },
+  { status: MR_STATUS.deploying, label: "→" },
+  { status: MR_STATUS.deployed, label: "Deployed", showCount: false },
+];
+const MR_STATUS_FILTER_CLEAR_LABEL = "クリア";
+const MR_STATUS_FILTER_TOOLTIP = "のMRで絞り込み（数字は全リポジトリのMR数）";
+const MR_STATUS_FILTER_CLEAR_TOOLTIP = "ステータスでの絞り込みを解除";
+const MR_STATUS_POLL_MS = 3000;
+
 // MR一覧フィルタの値ごとに表示対象のlifecycle_stateを定義する
 // 未解決はDraft〜Merging、解決済はMerged〜Deployedを表示する
 const SUBTASK_FILTER_STATES = {
@@ -380,6 +396,82 @@ function renderMergePill(m) {
   return `<span class="worker-pill merge-pill ${statusClass}" title="${escapeAttr(text)}">${escapeHtml(text)}</span>`;
 }
 
+// ヘッダーのMRステータスフィルタで選択中の表示ステータス
+const selectedMrStatuses = new Set();
+// 全リポジトリのMRステータス集計（/api/mr-statusesの応答）
+let mrStatusSummary = { counts: {}, projects: {} };
+
+/**
+ * ヘッダーのMRステータスフィルタの初期化
+ *
+ * ボタンは1度だけ作り、件数と選択状態はupdateMrStatusFilterButtonsで更新する。
+ */
+function setupMrStatusFilter() {
+  const container = document.getElementById("mr-status-filter");
+  container.innerHTML =
+    MR_STATUS_FILTER_BUTTONS.map(renderMrStatusFilterButton).join("") +
+    `<button type="button" id="mr-status-filter-clear" class="mr-status-filter-button"` +
+    ` title="${MR_STATUS_FILTER_CLEAR_TOOLTIP}">${MR_STATUS_FILTER_CLEAR_LABEL}</button>`;
+  container
+    .querySelectorAll("[data-status]")
+    .forEach((b) => b.addEventListener("click", () => toggleMrStatusFilter(b.dataset.status)));
+  document.getElementById("mr-status-filter-clear").addEventListener("click", clearMrStatusFilter);
+  updateMrStatusFilterButtons();
+}
+
+function renderMrStatusFilterButton(def) {
+  const tooltip = `${MR_STATUS_LABELS[def.status]}${MR_STATUS_FILTER_TOOLTIP}`;
+  return (
+    `<button type="button" class="mr-status-filter-button" data-status="${def.status}"` +
+    ` aria-pressed="false" title="${escapeAttr(tooltip)}">${def.label}` +
+    `<span class="mr-status-filter-count"></span></button>`
+  );
+}
+
+/**
+ * MRステータスフィルタのボタンの件数・選択状態を更新する
+ *
+ * 未選択の場合はクリアボタンを無効化する。
+ */
+function updateMrStatusFilterButtons() {
+  MR_STATUS_FILTER_BUTTONS.forEach((def) => {
+    const button = document.querySelector(`#mr-status-filter [data-status="${def.status}"]`);
+    button.setAttribute("aria-pressed", String(selectedMrStatuses.has(def.status)));
+    const count = mrStatusSummary.counts[def.status] ?? 0;
+    button.querySelector(".mr-status-filter-count").textContent = def.showCount === false ? "" : ` ${count}`;
+  });
+  document.getElementById("mr-status-filter-clear").disabled = selectedMrStatuses.size === 0;
+}
+
+function toggleMrStatusFilter(status) {
+  if (selectedMrStatuses.has(status)) selectedMrStatuses.delete(status);
+  else selectedMrStatuses.add(status);
+  onMrStatusFilterChanged();
+}
+
+function clearMrStatusFilter() {
+  selectedMrStatuses.clear();
+  onMrStatusFilterChanged();
+}
+
+function onMrStatusFilterChanged() {
+  updateMrStatusFilterButtons();
+}
+
+async function pollMrStatuses() {
+  try {
+    if (!document.hidden) await refreshMrStatuses();
+  } catch (error) {
+    // サーバー再起動中などで取得に失敗しても監視を継続する
+  }
+  setTimeout(pollMrStatuses, MR_STATUS_POLL_MS);
+}
+
+async function refreshMrStatuses() {
+  mrStatusSummary = await fetch("/api/mr-statuses").then((r) => r.json());
+  updateMrStatusFilterButtons();
+}
+
 // ヘッダーに表示するClaudeのレート制限枠（core/rate_limits.pyと合わせる）
 const RATE_LIMIT_WINDOWS = [
   { type: "five_hour", label: "5h" },
@@ -498,6 +590,7 @@ async function init() {
   pollWorkers();
   pollMerges();
   pollRateLimits();
+  pollMrStatuses();
   pollSubtaskStates();
 }
 
@@ -1630,6 +1723,7 @@ async function showReport(jobId, subtaskId) {
 }
 
 setupExpanders();
+setupMrStatusFilter();
 document.getElementById("issue-create-form").addEventListener("submit", onSubmitIssueForm);
 document.getElementById("issue-filter").addEventListener("change", loadIssues);
 document.getElementById("subtask-filter").addEventListener("change", renderSubtaskList);

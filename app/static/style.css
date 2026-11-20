@@ -148,6 +148,44 @@ header h1 {
   color: #b8c7e3;
 }
 
+/* ヘッダーのMRステータスフィルタ
+
+選択中（aria-pressed）のボタンはアクセント色にする。
+*/
+#mr-status-filter {
+  margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  font-size: 12.5px;
+}
+
+.mr-status-filter-button {
+  font: inherit;
+  padding: 2px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  cursor: pointer;
+}
+
+.mr-status-filter-button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.mr-status-filter-button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  font-weight: bold;
+}
+
+.mr-status-filter-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .worker-pill {
   padding: 2px 9px;
   border-radius: 99px;
