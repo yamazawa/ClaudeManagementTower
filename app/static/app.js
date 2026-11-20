@@ -16,14 +16,15 @@ const LIFECYCLE = {
   canceled: "canceled",
 };
 
-// MRの表示ステータス
-// Resolving・Mergingは保存せず、lifecycle_stateと実行中のジョブから導出する
+// MRの表示ステータス（core/mr_status.pyと合わせる）
+// Resolving・Merging・Deployingは保存せず、lifecycle_stateと実行中の処理から導出する
 const MR_STATUS = {
   draft: "draft",
   resolving: "resolving",
   resolved: "resolved",
   merging: "merging",
   merged: "merged",
+  deploying: "deploying",
   deployed: "deployed",
   canceled: "canceled",
 };
@@ -34,6 +35,7 @@ const MR_STATUS_LABELS = {
   [MR_STATUS.resolved]: "Resolved",
   [MR_STATUS.merging]: "Merging",
   [MR_STATUS.merged]: "Merged",
+  [MR_STATUS.deploying]: "Deploying",
   [MR_STATUS.deployed]: "Deployed",
   [MR_STATUS.canceled]: "Canceled",
 };
@@ -42,6 +44,7 @@ const MR_STATUS_LABELS = {
 const MR_STATUS_TOOLTIPS = {
   [MR_STATUS.resolving]: "実装中",
   [MR_STATUS.merging]: "マージ中",
+  [MR_STATUS.deploying]: "デプロイ中",
 };
 
 // MR一覧フィルタの値ごとに表示対象のlifecycle_stateを定義する
@@ -838,11 +841,13 @@ function renderSubtaskRow(s) {
  *
  * 未解決のMRで実装ジョブが実行中の場合はResolvingとする。
  * ResolvedのMRがマージ待ち・マージ中の場合はMergingとする。
+ * MergedのMRのリポジトリでデプロイ実行中の場合はDeployingとする。
  */
 function mrStatus(s) {
   const isOpen = SUBTASK_FILTER_STATES.unresolved.includes(s.lifecycle_state);
   if (isOpen && isJobActive(s.latest_job)) return MR_STATUS.resolving;
   if (s.lifecycle_state === LIFECYCLE.resolved && isMergeActive(s.latest_merge)) return MR_STATUS.merging;
+  if (s.lifecycle_state === LIFECYCLE.merged && s.deploying) return MR_STATUS.deploying;
   return s.lifecycle_state;
 }
 
