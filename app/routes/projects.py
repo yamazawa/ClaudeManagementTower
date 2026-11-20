@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import case, func
 
 from core.db import SessionLocal
-from core.deploy import is_deploy_defined
+from core.deploy import is_deploy_defined, is_deploy_running
 from core.github_client import (
     GitHubClientError,
     close_issue,
@@ -185,12 +185,17 @@ def _rename_subtasks(session, project: Project, number: int, old_title: str, new
 
 
 def _subtask_summaries(session, project: Project, number: int) -> list[dict]:
+    """IssueのMR一覧
+
+    deployingは画面でDeployingを導出するため、リポジトリのデプロイ実行中かを返す。
+    """
     subtasks = (
         session.query(Subtask)
         .filter_by(project_id=project.id, github_issue_number=number)
         .order_by(Subtask.id)
         .all()
     )
+    deploying = is_deploy_running(project.id)
     return [
         {
             "id": s.id,
@@ -205,6 +210,7 @@ def _subtask_summaries(session, project: Project, number: int) -> list[dict]:
             ),
             "latest_job": _latest_job_summary(session, s.id),
             "latest_merge": latest_merge_summary(session, s.id),
+            "deploying": deploying,
         }
         for s in subtasks
     ]
