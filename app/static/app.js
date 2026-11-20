@@ -145,6 +145,8 @@ const MR_COUNT_REVIEW_STATES = [LIFECYCLE.resolved];
 const MR_COUNT_UNDEPLOYED_STATES = [LIFECYCLE.merged];
 // 作成直後のIssue（Open）が表示対象となるIssue一覧のフィルタの値
 const ISSUE_FILTERS_SHOWING_NEW_ISSUE = ["open"];
+// Issue一覧APIで指定できるIssueの状態（app/routes/projects.pyと合わせる）
+const ISSUE_STATES = ["open", "closed"];
 
 // MR状態の自動更新間隔（サーバー側のPR同期間隔と合わせて10秒以内に反映させる）
 const SUBTASK_POLL_MS = 3000;
@@ -400,6 +402,8 @@ function renderMergePill(m) {
 const selectedMrStatuses = new Set();
 // 全リポジトリのMRステータス集計（/api/mr-statusesの応答）
 let mrStatusSummary = { counts: {}, projects: {} };
+// Issue一覧に表示中の絞り込み結果（変化した場合のみIssue一覧を再取得する）
+let lastMatchedIssueKey = "";
 
 /**
  * ヘッダーのMRステータスフィルタの初期化
@@ -454,8 +458,45 @@ function clearMrStatusFilter() {
   onMrStatusFilterChanged();
 }
 
+function isMrStatusFilterActive() {
+  return selectedMrStatuses.size > 0;
+}
+
+/**
+ * MRステータスフィルタの選択変更をIssue一覧・MR一覧に反映する
+ *
+ * 選択中はIssue一覧・MR一覧の既存フィルタを隠す。
+ */
 function onMrStatusFilterChanged() {
   updateMrStatusFilterButtons();
+  const active = isMrStatusFilterActive();
+  document.getElementById("issue-filter").hidden = active;
+  document.getElementById("subtask-filter").hidden = active;
+  if (currentProjectId !== null) loadIssues().catch(() => {});
+  renderSubtaskList();
+}
+
+/**
+ * 表示中リポジトリで、選択中のステータスのMRを持つIssue番号
+ */
+function matchedIssueNumbers() {
+  const byIssue = mrStatusSummary.projects[currentProjectId] || {};
+  return Object.entries(byIssue)
+    .filter(([, statuses]) => statuses.some((status) => selectedMrStatuses.has(status)))
+    .map(([number]) => Number(number));
+}
+
+function matchedIssueKey() {
+  if (!isMrStatusFilterActive() || currentProjectId === null) return "";
+  return `${currentProjectId}:${matchedIssueNumbers().sort((a, b) => a - b).join(",")}`;
+}
+
+/**
+ * 集計の更新で絞り込み結果が変わった場合に、Issue一覧を再取得する
+ */
+function refreshMatchedIssues() {
+  if (matchedIssueKey() === lastMatchedIssueKey) return;
+  if (isMrStatusFilterActive() && currentProjectId !== null) loadIssues().catch(() => {});
 }
 
 async function pollMrStatuses() {
@@ -470,6 +511,7 @@ async function pollMrStatuses() {
 async function refreshMrStatuses() {
   mrStatusSummary = await fetch("/api/mr-statuses").then((r) => r.json());
   updateMrStatusFilterButtons();
+  refreshMatchedIssues();
 }
 
 // ヘッダーに表示するClaudeのレート制限枠（core/rate_limits.pyと合わせる）
@@ -738,11 +780,16 @@ async function waitForDeployResult(projectId) {
   return null;
 }
 
+/**
+ * Issue一覧の取得・描画
+ *
+ * MRステータスフィルタの選択中は、Open・Closeを問わず該当Issueを表示する。
+ */
 async function loadIssues() {
-  const state = document.getElementById("issue-filter").value;
-  const issues = await fetch(
-    `/api/projects/${currentProjectId}/issues?state=${encodeURIComponent(state)}`
-  ).then((r) => r.json());
+  lastMatchedIssueKey = matchedIssueKey();
+  const issues = isMrStatusFilterActive()
+    ? await fetchIssuesByMrStatus()
+    : await fetchIssues(document.getElementById("issue-filter").value);
   const listEl = document.getElementById("issue-list-items");
   listEl.innerHTML = "";
   if (issues.length === 0) {
@@ -750,6 +797,27 @@ async function loadIssues() {
     return;
   }
   issues.forEach((issue) => listEl.appendChild(renderIssueItem(issue)));
+}
+
+async function fetchIssues(state) {
+  return fetch(
+    `/api/projects/${currentProjectId}/issues?state=${encodeURIComponent(state)}`
+  ).then((r) => r.json());
+}
+
+/**
+ * 選択中のステータスのMRを持つIssueを、Open・Closeの両方から取得する
+ *
+ * 並び順はIssue番号の降順とする。
+ */
+async function fetchIssuesByMrStatus() {
+  const numbers = new Set(matchedIssueNumbers());
+  if (numbers.size === 0) return [];
+  const lists = await Promise.all(ISSUE_STATES.map(fetchIssues));
+  return lists
+    .flat()
+    .filter((issue) => numbers.has(issue.number))
+    .sort((a, b) => b.number - a.number);
 }
 
 /**
@@ -789,7 +857,13 @@ function updateIssueItemCounts(li, counts) {
   applyIssueToggleState(li.querySelector(".issue-item-toggle"), li.dataset.state === "OPEN", counts);
 }
 
+/**
+ * MR一覧の表示対象
+ *
+ * MRステータスフィルタの選択中は、選択中のいずれかのステータスのMRを表示する。
+ */
 function filterSubtasks(subtasks) {
+  if (isMrStatusFilterActive()) return subtasks.filter((s) => selectedMrStatuses.has(mrStatus(s)));
   const states = SUBTASK_FILTER_STATES[document.getElementById("subtask-filter").value];
   return subtasks.filter((s) => states.includes(s.lifecycle_state));
 }
@@ -1561,7 +1635,10 @@ async function openCreatedIssueAndSubtask(issue, subtaskId) {
 function supplementCreatedIssue(issue) {
   const listEl = document.getElementById("issue-list-items");
   const isListed = listEl.querySelector(`.issue-item[data-number="${issue.number}"]`);
-  const showsOpen = ISSUE_FILTERS_SHOWING_NEW_ISSUE.includes(document.getElementById("issue-filter").value);
+  // MRステータスフィルタの選択中は、集計の更新を待って一覧に反映させる
+  const showsOpen =
+    !isMrStatusFilterActive() &&
+    ISSUE_FILTERS_SHOWING_NEW_ISSUE.includes(document.getElementById("issue-filter").value);
   if (!isListed && showsOpen) {
     listEl.querySelector(".empty")?.remove();
     const subtasks = issue.number === currentIssueNumber ? currentSubtasks : [];
