@@ -376,8 +376,8 @@ const DEPLOY_RESTART_SERVER = "restart_server";
 const DEPLOY_DEFINED_TOOLTIP = "リポジトリに定義したデプロイ手順を実行します（数字はMergedのMR数。デプロイすると動作確認できます）";
 const DEPLOY_UNDEFINED_TOOLTIP = "デプロイが定義されていません（.claude-tower/deploy.json）";
 // リポジトリ見出しのボタン名（件数を併記する）
-const REVIEW_BUTTON_LABEL = "Review";
-const DEPLOY_BUTTON_LABEL = "Deploy";
+const REVIEW_BUTTON_LABEL = "Rev";
+const DEPLOY_BUTTON_LABEL = "Dep";
 const REVIEW_TOOLTIP = "レビュー待ち（Resolved）のMRがあるIssue・MRを表示します";
 
 function sleep(ms) {
