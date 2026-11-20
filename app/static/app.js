@@ -108,9 +108,6 @@ const MR_COUNT_EXCLUDED_STATE = LIFECYCLE.canceled;
 // デプロイ待ちはDeployボタンの件数に使い、デプロイすると動作確認できるMergedのMRを数える
 const MR_COUNT_REVIEW_STATES = [LIFECYCLE.resolved];
 const MR_COUNT_UNDEPLOYED_STATES = [LIFECYCLE.merged];
-// Reviewボタンで切り替えるIssue一覧・MR一覧のフィルタの値
-const REVIEW_ISSUE_FILTER_VALUE = "review";
-const REVIEW_SUBTASK_FILTER_VALUE = LIFECYCLE.resolved;
 // 作成直後のIssue（未解決・レビュー待ちMR無し）が表示対象となるIssue一覧のフィルタの値
 const ISSUE_FILTERS_SHOWING_NEW_ISSUE = ["open", "all"];
 
@@ -426,7 +423,7 @@ const DEPLOY_UNDEFINED_TOOLTIP = "デプロイが定義されていません（.
 // リポジトリ見出しのボタン名（件数を併記する）
 const REVIEW_BUTTON_LABEL = "Rev";
 const DEPLOY_BUTTON_LABEL = "Dep";
-const REVIEW_TOOLTIP = "レビュー待ち（Resolved）のMRがあるIssue・MRを表示します";
+const REVIEW_TOOLTIP = "レビュー待ち（Resolved）のMR数（クリック操作は未実装）";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -517,6 +514,7 @@ function highlightSelectedProject() {
  *
  * 「Repo #番号 表示名」とし、番号部分はGitHubのリポジトリページへのリンクにする。
  * 右端にReview・Deployボタンを置き、レビュー待ち・デプロイ待ちのMR数を併記する。
+ * Reviewボタンはクリックしても何もしない。
  * デプロイ未定義のリポジトリではDeployボタンを無効化する。
  */
 function renderRepoHeading(project) {
@@ -526,7 +524,6 @@ function renderRepoHeading(project) {
     `<button type="button" id="review-button" class="title-action-button" title="${REVIEW_TOOLTIP}">${REVIEW_BUTTON_LABEL}</button>` +
     `<button type="button" id="deploy-button" class="title-action-button">${DEPLOY_BUTTON_LABEL}</button>`;
   document.getElementById("deploy-status").textContent = "";
-  document.getElementById("review-button").addEventListener("click", onClickReview);
   refreshIssueListMrCounts().catch(() => {});
   const button = document.getElementById("deploy-button");
   button.disabled = !project.deploy_defined;
@@ -1299,20 +1296,6 @@ function updateRepoMrTotals(issueCounts) {
   }
   const deployButton = document.getElementById("deploy-button");
   if (deployButton) deployButton.textContent = `${DEPLOY_BUTTON_LABEL} ${sum("undeployed")}`;
-}
-
-/**
- * Reviewボタンのクリック
- *
- * Issue一覧はレビュー、MR一覧はResolvedのフィルタに切り替える。
- * 縦長表示ではIssue一覧を開く。
- */
-async function onClickReview() {
-  document.getElementById("issue-filter").value = REVIEW_ISSUE_FILTER_VALUE;
-  document.getElementById("subtask-filter").value = REVIEW_SUBTASK_FILTER_VALUE;
-  autoSetSectionExpanded(SECTION_IDS.repo, true);
-  renderSubtaskList();
-  await loadIssues();
 }
 
 /**
