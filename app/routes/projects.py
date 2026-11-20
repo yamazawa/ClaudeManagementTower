@@ -17,6 +17,7 @@ from core.github_client import (
     reopen_issue,
 )
 from core.lifecycle import LifecycleState
+from core.merge_queue import latest_merge_summary
 from core.models import ExecutionJob, Project, Report, Subtask
 from core.mr_naming import compose_mr_title, split_mr_title
 from core.repo_catalog import describe_repo
@@ -219,6 +220,7 @@ def _subtask_summaries(session, project: Project, number: int) -> list[dict]:
                 else None
             ),
             "latest_job": _latest_job_summary(session, s.id),
+            "latest_merge": latest_merge_summary(session, s.id),
         }
         for s in subtasks
     ]

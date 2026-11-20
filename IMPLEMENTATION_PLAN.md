@@ -42,6 +42,9 @@
 - Webサーバーはリクエスト処理中にClaude Codeを直接起動して待機しない。
 - 「マージして最新化」は別スレッドで実行し、結果を制御ディレクトリの`sync-self-result.json`に残す。画面は結果をポーリングして完了を待つ（Issue #69）。
 - 競合したPRはベースブランチをPRブランチへmergeで取り込み、Claudeが競合を解消してからマージする。rebaseは履歴の書き換えとforce pushが必要になるため採用しない（Issue #69）。
+- MRのマージはDBの`merge_jobs`に待ち行列として登録し、Webサーバー内の単一スレッドで1件ずつ順に処理する。\
+サーバー再起動で中断したマージは失敗扱いとし、自動再開しない。\
+マージ中・マージ待ちのMRはヘッダーに表示する。
 - Claude実行は公式Claude Agent SDK（Python）を使う。内部的にはCLIサブプロセス方式と同じCLIバイナリ・同じエージェントループを使うが、`can_use_tool`コールバックでworktree外操作を確実に拒否できる点を優先してSDKを採用する。
 - `can_use_tool`コールバックは`PermissionResultAllow`/`PermissionResultDeny`を返す（dictを返すとSDK側でエラーになる。Phase 1実機検証済み）。
 - Webサーバー・ワーカープロセスは環境変数`PYTHONIOENCODING=utf-8`を設定して起動する（Windows既定のcp932では、Claude出力やGitHubの日本語データを標準出力に表示する際に文字化け・UnicodeEncodeErrorが発生するため。Phase 1・2で実機確認済み）。
