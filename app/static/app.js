@@ -1276,18 +1276,20 @@ async function onSubmitIssueForm(event) {
   const statusEl = document.getElementById("issue-create-status");
   const title = form.title.value;
 
-  statusEl.textContent = "作成中...";
+  statusEl.textContent = "IssueとMRを作成中...";
   form.querySelector("button").disabled = true;
+  setAutoMrCreating(true);
 
-  const response = await fetch(`/api/projects/${currentProjectId}/issues`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ title }),
+  // 高速化のため、Issue作成とMR作成を並行して行い、MRへのIssue紐付けは後から行う
+  const pendingPromise = postJson("/api/subtasks/pending", {
+    project_id: currentProjectId,
+    issue_title: title,
   });
-
-  if (!response.ok) {
-    const error = await response.json();
-    statusEl.textContent = `失敗しました: ${error.detail}`;
+  const { body: issue, error } = await postJson(`/api/projects/${currentProjectId}/issues`, { title });
+  if (error) {
+    statusEl.textContent = `失敗しました: ${error}`;
+    await discardPendingSubtask(pendingPromise);
+    setAutoMrCreating(false);
     form.querySelector("button").disabled = false;
     return;
   }
@@ -1295,12 +1297,56 @@ async function onSubmitIssueForm(event) {
   // MR自動作成が終わるまでは次のIssueを作成させない
   form.reset();
   autoSetSectionExpanded(SECTION_IDS.repo, false);
-  const issue = await response.json();
   try {
-    await createDefaultSubtask(issue, statusEl);
+    await createDefaultSubtask(issue, pendingPromise, statusEl);
   } finally {
     form.querySelector("button").disabled = false;
   }
+}
+
+/**
+ * JSONをPOSTする
+ *
+ * 成功時は応答本文、失敗時はエラー文言を返す。
+ */
+async function postJson(url, payload) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  }).catch(() => null);
+  if (!response) return { error: "サーバーに接続できませんでした" };
+  const body = await response.json().catch(() => ({}));
+  return response.ok ? { body } : { error: body.detail || response.statusText };
+}
+
+/**
+ * Issue作成に失敗した場合に、並行して作成したMRをクローズする
+ *
+ * MR作成も失敗していた場合は何もしない。
+ */
+async function discardPendingSubtask(pendingPromise) {
+  const { body } = await pendingPromise;
+  if (!body) return;
+  await postJson("/api/subtasks/pending/discard", {
+    project_id: currentProjectId,
+    github_pr_number: body.github_pr_number,
+  });
+}
+
+/**
+ * 並行して作成したMRをIssueに紐付ける
+ *
+ * MR作成に失敗していた場合は、そのエラーを返す。
+ */
+async function linkPendingSubtask(issueNumber, pendingPromise) {
+  const { body, error } = await pendingPromise;
+  if (error) return { error };
+  return postJson("/api/subtasks/pending/link", {
+    project_id: currentProjectId,
+    github_issue_number: issueNumber,
+    ...body,
+  });
 }
 
 /**
@@ -1327,21 +1373,20 @@ async function openCreatedIssue(issue) {
 }
 
 /**
- * Issue作成直後に規定値のMRを作成して開く
+ * Issue作成と並行して作成中の規定値のMRをIssueに紐付けて開く
  *
- * MR固有名は空欄で作成し、サーバー側で連番を割り当てる。
- * 高速化のため、Issueの表示とMR作成を並行して行い、Issue名はGitHubから再取得させない。
+ * MR固有名はサーバー側で連番を割り当てる。
+ * 高速化のため、Issueの表示とMR作成の完了待ちを並行して行う。
  * MR作成に失敗してもIssueは選択済のため、結果の表示のみ行う。
  * 作成中に別のIssueへ切り替えた場合は、MRを開かない。
- * 作成中はMR内容を開かせず、MRの追加作成もさせない。
+ * 作成中はMR内容を開かせず、MRの追加作成もさせない（ロックは呼び出し側で開始する）。
  */
-async function createDefaultSubtask(issue, statusEl) {
+async function createDefaultSubtask(issue, pendingPromise, statusEl) {
   statusEl.textContent = "Issueを作成しました。MRを作成中...";
-  setAutoMrCreating(true);
   let result;
   try {
     [result] = await Promise.all([
-      createSubtask(issue.number, "", issue.title),
+      linkPendingSubtask(issue.number, pendingPromise),
       openCreatedIssue(issue).catch(() => {}),
     ]);
   } finally {
@@ -1385,19 +1430,12 @@ async function onSubmitSubtaskForm(event) {
  * 成功時は応答本文、失敗時はエラー文言を返す。
  */
 async function createSubtask(issueNumber, title, issueTitle = "") {
-  const response = await fetch("/api/subtasks", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      project_id: currentProjectId,
-      github_issue_number: issueNumber,
-      title,
-      issue_title: issueTitle,
-    }),
-  }).catch(() => null);
-  if (!response) return { error: "サーバーに接続できませんでした" };
-  const body = await response.json().catch(() => ({}));
-  return response.ok ? { body } : { error: body.detail || response.statusText };
+  return postJson("/api/subtasks", {
+    project_id: currentProjectId,
+    github_issue_number: issueNumber,
+    title,
+    issue_title: issueTitle,
+  });
 }
 
 /**

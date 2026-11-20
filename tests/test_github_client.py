@@ -7,6 +7,7 @@ from core import github_client
 from core.github_client import (
     GitHubClientError,
     edit_issue_title,
+    edit_pr_body,
     edit_pr_title,
     get_pr_mergeable,
     list_issues,
@@ -41,6 +42,15 @@ def test_edit_pr_title_runs_gh_pr_edit(monkeypatch):
     edit_pr_title("owner/repo", 34, "PRタイトル")
 
     assert calls == [["gh", "pr", "edit", "34", "--repo", "owner/repo", "--title", "PRタイトル"]]
+
+
+def test_edit_pr_body_runs_gh_pr_edit(monkeypatch):
+    calls = []
+    monkeypatch.setattr(github_client.subprocess, "run", _fake_run(calls))
+
+    edit_pr_body("owner/repo", 34, "Related to #5")
+
+    assert calls == [["gh", "pr", "edit", "34", "--repo", "owner/repo", "--body", "Related to #5"]]
 
 
 def test_edit_pr_title_raises_on_gh_failure(monkeypatch):
