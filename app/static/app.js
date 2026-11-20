@@ -89,6 +89,7 @@ const JOB_POLL_MS = 3000;
 const MR_COUNT_RESOLVED_STATES = [LIFECYCLE.merged, LIFECYCLE.deployed];
 const MR_COUNT_EXCLUDED_STATE = LIFECYCLE.canceled;
 // レビュー待ち・デプロイ待ちとみなす状態（app/routes/projects.pyと合わせる）
+// デプロイ待ちはDeployボタンの件数に使い、デプロイすると動作確認できるMergedのMRを数える
 const MR_COUNT_REVIEW_STATES = [LIFECYCLE.resolved];
 const MR_COUNT_UNDEPLOYED_STATES = [LIFECYCLE.merged];
 // Reviewボタンで切り替えるIssue一覧・MR一覧のフィルタの値
@@ -372,7 +373,7 @@ const DEPLOY_POLL_MS = 2000;
 const DEPLOY_TIMEOUT_MS = 30 * 60 * 1000;
 // サーバー再起動を表すデプロイ結果のrestartsの値（core/supervisor_control.pyと合わせる）
 const DEPLOY_RESTART_SERVER = "restart_server";
-const DEPLOY_DEFINED_TOOLTIP = "リポジトリに定義したデプロイ手順を実行します（数字はデプロイ待ちのMR数）";
+const DEPLOY_DEFINED_TOOLTIP = "リポジトリに定義したデプロイ手順を実行します（数字はMergedのMR数。デプロイすると動作確認できます）";
 const DEPLOY_UNDEFINED_TOOLTIP = "デプロイが定義されていません（.claude-tower/deploy.json）";
 // リポジトリ見出しのボタン名（件数を併記する）
 const REVIEW_BUTTON_LABEL = "Review";
