@@ -220,6 +220,22 @@ header h1 {
   margin-left: 0;
 }
 
+/* ステータス名の下に件数を小さく表示する（0件は空文字のため高さを確保しておく） */
+.mr-status-filter-segments .mr-status-filter-button {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.2;
+}
+
+.mr-status-filter-count {
+  font-size: 9px;
+  font-weight: normal;
+  line-height: 1;
+  min-height: 9px;
+  opacity: 0.85;
+}
+
 /* 選択中のアクセント色の枠線を隣のボタンの枠線より前に出す */
 .mr-status-filter-segments .mr-status-filter-button[aria-pressed="true"] {
   position: relative;

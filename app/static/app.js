@@ -433,22 +433,30 @@ function renderMrStatusFilterButton(def) {
   const tooltip = `${MR_STATUS_LABELS[def.status]}${MR_STATUS_FILTER_TOOLTIP}`;
   return (
     `<button type="button" class="mr-status-filter-button" data-status="${def.status}"` +
-    ` aria-pressed="false" title="${escapeAttr(tooltip)}">${def.label}</button>`
+    ` aria-pressed="false" title="${escapeAttr(tooltip)}">` +
+    `<span class="mr-status-filter-label">${def.label}</span>` +
+    `<span class="mr-status-filter-count"></span></button>`
   );
 }
 
+function mrStatusFilterCount(status) {
+  return mrStatusSummary.counts[status] ?? 0;
+}
+
 /**
- * MRステータスフィルタのボタンの選択状態・選択可否を更新する
+ * MRステータスフィルタのボタンの選択状態・選択可否・件数を更新する
  *
- * MRが0件のステータスは無効化する。
+ * MRが0件のステータスは無効化し、件数も表示しない。
  * ただし選択中のボタンは解除できるよう無効化しない。
  */
 function updateMrStatusFilterButtons() {
   MR_STATUS_FILTER_BUTTONS.forEach((def) => {
     const button = document.querySelector(`#mr-status-filter [data-status="${def.status}"]`);
+    const count = mrStatusFilterCount(def.status);
     const selected = selectedMrStatuses.has(def.status);
     button.setAttribute("aria-pressed", String(selected));
-    button.disabled = !selected && (mrStatusSummary.counts[def.status] ?? 0) === 0;
+    button.disabled = !selected && count === 0;
+    button.querySelector(".mr-status-filter-count").textContent = count === 0 ? "" : String(count);
   });
 }
 
