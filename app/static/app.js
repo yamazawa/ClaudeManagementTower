@@ -484,6 +484,7 @@ async function pollMrStatuses() {
 
 async function refreshMrStatuses() {
   mrStatusSummary = await fetch("/api/mr-statuses").then((r) => r.json());
+  updateDeployButton();
   if (moveEmptyMrStatusSelection()) {
     onMrStatusFilterChanged();
     return;
@@ -550,14 +551,12 @@ const DEPLOY_POLL_MS = 2000;
 const DEPLOY_TIMEOUT_MS = 30 * 60 * 1000;
 // サーバー再起動を表すデプロイ結果のrestartsの値（core/supervisor_control.pyと合わせる）
 const DEPLOY_RESTART_SERVER = "restart_server";
-const DEPLOY_DEFINED_TOOLTIP = "リポジトリに定義したデプロイ手順を実行します（デプロイすると動作確認できます）";
-const DEPLOY_UNDEFINED_TOOLTIP = "デプロイが定義されていません（.claude-tower/deploy.json）";
-// リポジトリ一覧の行・リポジトリ見出しのDeployボタン名
-const DEPLOY_BUTTON_LABEL = "Deploy";
-// Deployボタンに付けるクラス（同じリポジトリのボタンを合わせて更新する）
-const DEPLOY_BUTTON_CLASS = "deploy-button";
-// デプロイ実行中のリポジトリID
-const deployingProjectIds = new Set();
+const DEPLOY_BUTTON_TOOLTIP = "MergedのMRがあるリポジトリをデプロイします（デプロイすると動作確認できます）";
+const DEPLOY_BUTTON_NO_MERGED_TOOLTIP = "MergedのMRがあるリポジトリはありません";
+const DEPLOY_DIALOG_UNDEFINED_NOTE = "デプロイ未定義（MRをDeployedにするのみ）";
+const DEPLOY_SKIPPED_TEXT = "デプロイ未定義のためMRをDeployedにしました";
+// ヘッダーのDeployでデプロイ実行中か
+let deployRunning = false;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -660,7 +659,7 @@ function renderProjectItems(listEl) {
 /**
  * リポジトリ一覧の1行
  *
- * 「表示名 MR数 Deployボタン」を並べる。
+ * 「表示名 MR数」を並べる。
  */
 function renderProjectItem(project) {
   const li = document.createElement("li");
@@ -668,9 +667,7 @@ function renderProjectItem(project) {
   li.dataset.projectId = project.id;
   li.innerHTML =
     `<span class="project-name" title="${escapeAttr(project.display_name)}">${escapeHtml(project.display_name)}</span>` +
-    `<span class="project-count"></span>` +
-    `<button type="button" class="title-action-button">${DEPLOY_BUTTON_LABEL}</button>`;
-  bindDeployButton(li.querySelector("button"), project);
+    `<span class="project-count"></span>`;
   li.addEventListener("click", () => selectProject(project));
   return li;
 }
@@ -782,111 +779,108 @@ function selectFirstVisibleProject(items) {
  * リポジトリ見出しの表示
  *
  * 「Repo 表示名」とし、「Repo」部分はGitHubのリポジトリページへのリンクにする。
- * 右端にDeployボタンを置く。
- * デプロイ未定義のリポジトリではDeployボタンを無効化する。
  */
 function renderRepoHeading(project) {
   document.getElementById("repo-heading").innerHTML =
-    `${renderTitleNumber("Repo", project.repo_url)}<span id="repo-title">${escapeHtml(project.display_name)}</span>` +
-    `<button type="button" id="deploy-button" class="title-action-button">${DEPLOY_BUTTON_LABEL}</button>`;
-  document.getElementById("deploy-status").textContent = "";
-  bindDeployButton(document.getElementById("deploy-button"), project);
+    `${renderTitleNumber("Repo", project.repo_url)}<span id="repo-title">${escapeHtml(project.display_name)}</span>`;
 }
 
 /**
- * Deployボタンの初期化
+ * ヘッダーのDeployボタンの選択可否・色・ツールチップを更新する
  *
- * リポジトリ一覧の行と見出しで共通に使う。
- * デプロイ未定義・デプロイ実行中のリポジトリではDeployボタンを無効化する。
- * 一覧の行では、デプロイ状況を見出しに表示するため、リポジトリを選択してからデプロイする。
+ * MergedのMRが無い場合・デプロイ実行中は無効化する。
+ * MergedのMRがある場合はプライマリ色にする。
  */
-function bindDeployButton(button, project) {
-  button.classList.add(DEPLOY_BUTTON_CLASS);
-  button.dataset.projectId = project.id;
-  button.title = project.deploy_defined ? DEPLOY_DEFINED_TOOLTIP : DEPLOY_UNDEFINED_TOOLTIP;
-  updateDeployButtonEnabled(button, project);
-  button.addEventListener("click", (event) => {
-    event.stopPropagation();
-    if (project.id !== currentProjectId) selectProject(project).catch(() => {});
-    onClickDeploy(project);
-  });
-  if (project.deploy_defined) refreshDeployPending(project.id);
-}
-
-function deployButtons(projectId) {
-  return document.querySelectorAll(`.${DEPLOY_BUTTON_CLASS}[data-project-id="${projectId}"]`);
-}
-
-function updateDeployButtonEnabled(button, project) {
-  button.disabled = !project.deploy_defined || deployingProjectIds.has(project.id);
-}
-
-/**
- * Deployボタンの色の更新
- *
- * デプロイ先のソースに未取り込みの対応がある場合はプライマリ色にする。
- * 取得に失敗した場合は通常の色のままとする。
- * リポジトリ一覧の行と見出しのボタンを合わせて更新する。
- */
-async function refreshDeployPending(projectId) {
-  let pending = false;
-  try {
-    const response = await fetch(`/api/projects/${projectId}/deploy/pending`);
-    pending = response.ok && (await response.json()).pending === true;
-  } catch (error) {
-    pending = false;
-  }
-  deployButtons(projectId).forEach((button) => button.classList.toggle("primary", pending));
-}
-
-// 表示中のDeployボタンの色を取得中か（git fetchを伴うため多重に取得しない）
-let deployPendingRefreshing = false;
-
-/**
- * 表示中のDeployボタンの色の定期更新
- *
- * 定期ステータス更新のタイミングで呼び出す。
- * デプロイ未定義・デプロイ実行中（ボタン無効）の場合は更新しない。
- */
-async function refreshCurrentDeployPending() {
+function updateDeployButton() {
   const button = document.getElementById("deploy-button");
-  if (deployPendingRefreshing || currentProjectId === null || !button || button.disabled) return;
-  deployPendingRefreshing = true;
-  try {
-    await refreshDeployPending(currentProjectId);
-  } finally {
-    deployPendingRefreshing = false;
-  }
+  const hasMerged = mergedProjects().length > 0;
+  button.disabled = deployRunning || !hasMerged;
+  button.classList.toggle("primary", hasMerged);
+  button.title = hasMerged ? DEPLOY_BUTTON_TOOLTIP : DEPLOY_BUTTON_NO_MERGED_TOOLTIP;
+}
+
+function countMergedMrs(projectId) {
+  return Object.values(mrStatusSummary.projects[projectId] || {}).reduce(
+    (sum, statusCounts) => sum + (statusCounts[MR_STATUS.merged] || 0),
+    0,
+  );
+}
+
+// MergedのMRがあるリポジトリ
+function mergedProjects() {
+  return allProjects.filter((project) => countMergedMrs(project.id) > 0);
 }
 
 /**
- * デプロイの実行
+ * デプロイ確認ダイアログの表示
  *
- * 結果が出るまでポーリングし、サーバー再起動を含む場合は再起動完了まで待つ。
- * 実行中にリポジトリを切り替えた場合も、結果は実行したリポジトリの見出しにのみ表示する。
- * 実行中は、リポジトリ一覧の行と見出しのDeployボタンを無効化する。
+ * MergedのMRがあるリポジトリを、チェックボックス付き（既定ON）で一覧表示する。
  */
-async function onClickDeploy(project) {
-  if (!confirm(`${project.display_name} をデプロイしますか？`)) return;
-  const setStatus = (text) => {
-    if (currentProjectId === project.id) document.getElementById("deploy-status").textContent = text;
-  };
-  setProjectDeploying(project, true);
-  setStatus("デプロイ中...");
+function openDeployDialog() {
+  const projects = mergedProjects();
+  if (projects.length === 0) return;
+  document.getElementById("deploy-dialog-list").innerHTML = projects.map(renderDeployDialogItem).join("");
+  updateDeployDialogConfirm();
+  document.getElementById("deploy-dialog").showModal();
+}
+
+function renderDeployDialogItem(project) {
+  const note = project.deploy_defined ? "" : `<span class="deploy-dialog-note">${DEPLOY_DIALOG_UNDEFINED_NOTE}</span>`;
+  return (
+    `<li><label><input type="checkbox" value="${project.id}" checked />` +
+    `<span class="deploy-dialog-name">${escapeHtml(project.display_name)}</span>` +
+    `<span class="deploy-dialog-count">Merged ${countMergedMrs(project.id)}</span>${note}</label></li>`
+  );
+}
+
+function selectedDeployProjects() {
+  const ids = [...document.querySelectorAll("#deploy-dialog-list input:checked")].map((input) => Number(input.value));
+  return allProjects.filter((project) => ids.includes(project.id));
+}
+
+// 選択中のリポジトリが無い場合はデプロイできないようにする
+function updateDeployDialogConfirm() {
+  document.getElementById("deploy-dialog-confirm").disabled = selectedDeployProjects().length === 0;
+}
+
+async function onConfirmDeployDialog() {
+  const projects = selectedDeployProjects();
+  document.getElementById("deploy-dialog").close();
+  if (projects.length > 0) await deployProjects(projects);
+}
+
+/**
+ * 選択したリポジトリのデプロイ
+ *
+ * サーバー再起動を含むデプロイで他のデプロイが中断しないよう、1件ずつ順に実行する。
+ * 実行中はヘッダーのDeployボタンを無効化し、完了後に各リポジトリの結果を表示する。
+ */
+async function deployProjects(projects) {
+  const statusEl = document.getElementById("deploy-status");
+  deployRunning = true;
+  updateDeployButton();
+  const results = [];
   try {
-    setStatus(await runDeploy(project.id, setStatus));
-  } catch (error) {
-    setStatus(`デプロイに失敗しました: ${error.message}`);
+    // 順に実行するため、awaitを伴うループで書く
+    for (const project of projects) {
+      results.push(await deployProject(project, (text) => (statusEl.textContent = text)));
+    }
+    statusEl.textContent = results.join(" / ");
   } finally {
-    setProjectDeploying(project, false);
-    refreshDeployPending(project.id);
+    deployRunning = false;
+    await refreshMrStatuses().catch(() => {});
+    updateDeployButton();
   }
 }
 
-function setProjectDeploying(project, deploying) {
-  if (deploying) deployingProjectIds.add(project.id);
-  else deployingProjectIds.delete(project.id);
-  deployButtons(project.id).forEach((button) => updateDeployButtonEnabled(button, project));
+async function deployProject(project, setStatus) {
+  const name = project.display_name;
+  setStatus(`${name}: デプロイ中...`);
+  try {
+    return `${name}: ${await runDeploy(project.id, (text) => setStatus(`${name}: ${text}`))}`;
+  } catch (error) {
+    return `${name}: デプロイに失敗しました: ${error.message}`;
+  }
 }
 
 async function runDeploy(projectId, setStatus) {
@@ -894,6 +888,7 @@ async function runDeploy(projectId, setStatus) {
   const response = await fetch(`/api/projects/${projectId}/deploy`, { method: "POST" });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.detail || `HTTP ${response.status}`);
+  if (body.skipped) return DEPLOY_SKIPPED_TEXT;
 
   const result = await waitForDeployResult(projectId);
   if (result === null) return "デプロイの完了を確認できませんでした";
@@ -1539,8 +1534,6 @@ function restoreJobState(s) {
 async function pollSubtaskStates() {
   try {
     if (!document.hidden) {
-      // git fetchで時間がかかる場合があるため、MR一覧の更新は待たせない
-      refreshCurrentDeployPending();
       await Promise.all([refreshSubtaskStates(), refreshIssueListMrCounts()]);
     }
   } catch (error) {
@@ -1984,6 +1977,11 @@ async function showReport(jobId, subtaskId) {
 
 setupExpanders();
 setupMrStatusFilter();
+updateDeployButton();
+document.getElementById("deploy-button").addEventListener("click", openDeployDialog);
+document.getElementById("deploy-dialog-list").addEventListener("change", updateDeployDialogConfirm);
+document.getElementById("deploy-dialog-cancel").addEventListener("click", () => document.getElementById("deploy-dialog").close());
+document.getElementById("deploy-dialog-confirm").addEventListener("click", onConfirmDeployDialog);
 document.getElementById("issue-create-form").addEventListener("submit", onSubmitIssueForm);
 document.getElementById("issue-filter").addEventListener("change", loadIssues);
 document.getElementById("subtask-filter").addEventListener("change", renderSubtaskList);
@@ -1991,7 +1989,6 @@ document.getElementById("subtask-form").addEventListener("submit", onSubmitSubta
 document.addEventListener("visibilitychange", () => {
   if (document.hidden) return;
   refreshSubtaskStates().catch(() => {});
-  refreshCurrentDeployPending();
 });
 
 init();

@@ -34,6 +34,25 @@ def mark_deployed(project_id: int, repo_path: str, session_factory=None) -> list
         return [s.id for s in deployed]
 
 
+def mark_all_merged_deployed(project_id: int, session_factory=None) -> list[int]:
+    """リポジトリのマージ済MRを全てDeployedにする
+
+    デプロイ未定義のリポジトリで、デプロイ先のソースを判定せずに反映する。
+    更新したサブタスクのIDを返す。
+    """
+    factory = session_factory or SessionLocal
+    with factory() as session:
+        subtasks = (
+            session.query(Subtask)
+            .filter(Subtask.project_id == project_id, Subtask.lifecycle_state == LifecycleState.MERGED)
+            .all()
+        )
+        for subtask in subtasks:
+            subtask.lifecycle_state = LifecycleState.DEPLOYED
+        session.commit()
+        return [s.id for s in subtasks]
+
+
 def mark_deployed_for_repo(github_repo: str, repo_path: str, session_factory=None) -> list[int]:
     """同じGitHubリポジトリを対象とする全リポジトリ登録について、Deployedにする"""
     factory = session_factory or SessionLocal

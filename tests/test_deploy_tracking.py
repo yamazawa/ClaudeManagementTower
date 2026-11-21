@@ -120,6 +120,18 @@ def test_skips_github_when_no_merged_subtask(session_factory, monkeypatch):
     assert deploy_tracking.mark_deployed(1, "repo", session_factory) == []
 
 
+def test_mark_all_merged_without_checking_head(session_factory, monkeypatch):
+    monkeypatch.setattr(deploy_tracking, "list_merged_pull_requests", lambda repo: pytest.fail("not called"))
+    _add_subtask(session_factory, 1, "merged")
+    _add_subtask(session_factory, 2, "resolved")
+    _add_subtask(session_factory, 3, "merged", project_id=2)
+
+    updated = deploy_tracking.mark_all_merged_deployed(1, session_factory)
+
+    assert len(updated) == 1
+    assert _states(session_factory) == {(1, 1): "deployed", (1, 2): "resolved", (2, 3): "merged"}
+
+
 def test_mark_for_repo_targets_only_same_repo(session_factory, github):
     merged, in_head, _ = github
     merged[1] = "c1"
