@@ -193,6 +193,41 @@ function isSectionExpanded(sectionId) {
   return !document.getElementById(sectionId).classList.contains("collapsed");
 }
 
+// 選択項目が無くなったため閉じたペインのID（選択項目ができた場合に開き直す）
+const emptyCollapsedSectionIds = new Set();
+
+/**
+ * 選択項目が無くなったペインを閉じる
+ *
+ * 縦長表示・横長表示を問わず閉じる。
+ */
+function collapseEmptySection(sectionId) {
+  setSectionExpanded(sectionId, false);
+  emptyCollapsedSectionIds.add(sectionId);
+}
+
+/**
+ * 選択項目が無くなったため閉じたペインを、選択項目ができた際に開き直す
+ *
+ * 縦長表示では各選択処理の自動開閉に任せる。
+ */
+function reopenEmptyCollapsedSection(sectionId) {
+  if (!emptyCollapsedSectionIds.delete(sectionId)) return;
+  if (!isPortrait()) setSectionExpanded(sectionId, true);
+}
+
+// 選択の切り替え要求の通番（後発の要求があれば、先発の取得結果で表示を上書きしない）
+let selectionRequestId = 0;
+
+function nextSelectionRequest() {
+  selectionRequestId += 1;
+  return selectionRequestId;
+}
+
+function isLatestSelectionRequest(requestId) {
+  return requestId === selectionRequestId;
+}
+
 /**
  * 表示中のIssueがMR自動作成中か
  *
@@ -220,7 +255,10 @@ function setAutoMrCreatingIssue(issueNumber) {
 function setupExpanders() {
   document.querySelectorAll("section .expander").forEach((button) => {
     const section = button.closest("section");
-    button.addEventListener("click", () => setSectionExpanded(section.id, !isSectionExpanded(section.id)));
+    button.addEventListener("click", () => {
+      emptyCollapsedSectionIds.delete(section.id);
+      setSectionExpanded(section.id, !isSectionExpanded(section.id));
+    });
   });
   [SECTION_IDS.repo, SECTION_IDS.issue, SECTION_IDS.mr].forEach((id) => autoSetSectionExpanded(id, false));
 }
@@ -1384,9 +1422,10 @@ function renderSubtaskDetail(s) {
   if (!s) {
     heading.textContent = "MR";
     el.innerHTML = '<p class="empty">左の一覧からMRを選択してください。</p>';
-    autoSetSectionExpanded(SECTION_IDS.mr, false);
+    collapseEmptySection(SECTION_IDS.mr);
     return;
   }
+  reopenEmptyCollapsedSection(SECTION_IDS.mr);
 
   heading.innerHTML =
     `${renderSubtaskNumber(s)}${renderMrTitle(s, { id: "subtask-title" })}${renderSubtaskState(s)}`;
