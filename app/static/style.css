@@ -10,6 +10,8 @@
   --title-number-font-size: 0.8em;
   --section-heading-font-size: 12.5px;
   --create-row-height: 36px;
+  --list-row-padding-x: 12px;
+  --list-row-border-width: 1px;
 }
 
 * {
@@ -144,10 +146,12 @@ header h1 {
 
 「Issue名ー」の後ろにMR固有名の入力欄を並べる。
 収まらない場合はIssue名の部分のみ末尾を…で省略する。
+先頭文字の左端は一覧の行内の先頭文字に揃える。
 */
 .subtask-form-prefix {
   flex: 0 1 auto;
   min-width: 0;
+  margin-left: calc(var(--list-row-border-width) + var(--list-row-padding-x));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -549,8 +553,8 @@ section.collapsed > .section-title-row {
   justify-content: space-between;
   align-items: baseline;
   gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
+  padding: 10px var(--list-row-padding-x);
+  border: var(--list-row-border-width) solid var(--line);
   border-radius: 6px;
   margin-bottom: 8px;
   cursor: pointer;
