@@ -1086,6 +1086,36 @@ function renderSubtaskList() {
   });
   highlightSelectedSubtaskRow();
   updateIssueToggleButton();
+  ensureSubtaskSelection(subtasks);
+}
+
+/**
+ * 選択中のMRがMR一覧から外れた場合に、先頭のMRを選択し直す
+ *
+ * 選択中のMRが表示中の場合は選択し直さない。
+ * 表示するMRが無い場合は、MR内容の表示を消してペインを閉じる。
+ */
+function ensureSubtaskSelection(visibleSubtasks) {
+  if (visibleSubtasks.some((s) => s.id === currentSelectedSubtaskId)) return;
+  const [first] = visibleSubtasks;
+  if (first) selectSubtask(first.id);
+  else clearSubtaskSelection();
+}
+
+/**
+ * MRの選択を外し、MR未選択の表示に戻す
+ *
+ * 未選択のまま一覧を描画し直した場合は、ペインの開閉を変えない。
+ */
+function clearSubtaskSelection() {
+  if (currentSelectedSubtaskId === null && !isSubtaskDetailShown()) return;
+  currentSelectedSubtaskId = null;
+  highlightSelectedSubtaskRow();
+  renderSubtaskDetail(null);
+}
+
+function isSubtaskDetailShown() {
+  return document.getElementById("subtask-actions") !== null;
 }
 
 /**
@@ -2039,8 +2069,10 @@ async function onJobFinished(job, jobId, subtaskId) {
     return;
   }
   if (currentSelectedSubtaskId !== subtaskId) return;
-  // refreshIssueDetailが詳細ペインの選択状態を消すため、再描画してから選択し直す
+  // 詳細ペインの表示を作り直すため、Issue内容を再描画してから選択し直す
   await refreshIssueDetail();
+  // 再描画でMR一覧から外れて別のMRを選択し直した場合は、そちらの表示を優先する
+  if (currentSelectedSubtaskId !== subtaskId) return;
   selectSubtask(subtaskId);
   await showReport(jobId, subtaskId);
 }
