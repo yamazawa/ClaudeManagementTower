@@ -189,14 +189,15 @@ header h1 {
   cursor: default;
 }
 
-/* ステータスのボタンは四角にして隙間なく並べる（境界線は重ねて1本にする） */
+/* ステータスのボタンは四角にして隙間なく1行に並べる（境界線は重ねて1本にする） */
 .mr-status-filter-segments {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 
 .mr-status-filter-segments .mr-status-filter-button {
-  padding: 2px 7px;
+  padding: 2px 6px;
   border-radius: 0;
   margin-left: -1px;
 }
