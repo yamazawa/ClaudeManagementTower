@@ -25,7 +25,14 @@ body {
   font: 15px/1.7 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
+/* ヘッダー
+
+スクロールしても常に画面上端に表示する。
+*/
 header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
   background: #18243c;
   color: #fff;
   padding: 16px 24px;
@@ -490,10 +497,16 @@ section.collapsed > .section-title-row {
 
 ペインの見出しの直下に置くため、上の余白と区切り線は付けない。
 */
-.section-heading-top {
+.section-heading-top,
+.create-block[hidden] + .section-heading {
   margin-top: 0;
   padding-top: 0;
   border-top: none;
+}
+
+/* MRステータスフィルタの選択中に隠す作成フォーム */
+.create-block[hidden] {
+  display: none;
 }
 
 /* 一覧の状態フィルタ
