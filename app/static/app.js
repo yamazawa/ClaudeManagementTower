@@ -100,7 +100,7 @@ const SUBTASK_STATE_ACTIONS = {
     path: "merge",
     confirm: "をマージしますか？マージは1件ずつ順に行い、競合している場合はClaudeが競合を解消してからマージします。",
     progress: "マージ待ちに登録中...",
-    done: "マージ待ちに登録しました（進捗はヘッダーで確認できます）",
+    done: "マージ待ちに登録しました（進捗はMRのステータスで確認できます）",
   },
 };
 
@@ -117,7 +117,6 @@ const MERGE_STATUS_LABELS = {
   [MERGE_STATUS.succeeded]: "マージ済",
   [MERGE_STATUS.failed]: "マージ失敗",
 };
-const MERGE_POLL_MS = 3000;
 
 function isMergeActive(merge) {
   return !!merge && [MERGE_STATUS.queued, MERGE_STATUS.running].includes(merge.status);
@@ -157,11 +156,6 @@ const SECTION_IDS = {
   repo: "issue-list",
   issue: "subtask-list",
   mr: "subtask-detail",
-};
-
-const WORKER_STATE_LABELS = {
-  idle: "待機中",
-  busy: "実行中",
 };
 
 /**
@@ -327,67 +321,6 @@ async function patchTitle(url, title) {
   const body = await response.json().catch(() => ({}));
   if (response.ok) return { error: null, body };
   return { error: body.detail || response.statusText, body };
-}
-
-async function pollWorkers() {
-  try {
-    await renderWorkers();
-  } catch (error) {
-    // サーバー再起動中などで取得に失敗しても監視を継続する
-    document.getElementById("worker-status").textContent = "ワーカー状況を取得できません";
-  }
-  setTimeout(pollWorkers, 3000);
-}
-
-async function renderWorkers() {
-  const workers = await fetch("/api/workers").then((r) => r.json());
-  const aliveWorkers = workers.filter((w) => !w.is_stale);
-  const busyCount = aliveWorkers.filter((w) => w.state === "busy").length;
-
-  const items = workers
-    .map((w) => {
-      if (w.is_stale) {
-        return `<span class="worker-pill worker-offline">オフライン</span>`;
-      }
-      const label = WORKER_STATE_LABELS[w.state] || w.state;
-      const job = w.current_job_id ? `job #${w.current_job_id}` : "";
-      return `<span class="worker-pill worker-${w.state}">${label} ${job}</span>`;
-    })
-    .join("");
-  document.getElementById("worker-status").innerHTML =
-    `<span class="worker-summary">実行中 ${busyCount} / ${aliveWorkers.length}</span>${items}`;
-}
-
-async function pollMerges() {
-  try {
-    await renderMerges();
-  } catch (error) {
-    // サーバー再起動中などで取得に失敗しても監視を継続する
-    document.getElementById("merge-status").textContent = "マージ状況を取得できません";
-  }
-  setTimeout(pollMerges, MERGE_POLL_MS);
-}
-
-/**
- * ヘッダーのマージ状況を描画する
- *
- * マージ中のMRと、マージ待ちのMRを処理順に表示する。
- */
-async function renderMerges() {
-  const merges = await fetch("/api/merges").then((r) => r.json());
-  const runningCount = merges.filter((m) => m.status === MERGE_STATUS.running).length;
-  const queuedCount = merges.length - runningCount;
-  const items = merges.map(renderMergePill).join("");
-  document.getElementById("merge-status").innerHTML =
-    `<span class="worker-summary">マージ中 ${runningCount} / 待ち ${queuedCount}</span>${items}`;
-}
-
-function renderMergePill(m) {
-  const label = MERGE_STATUS_LABELS[m.status] || m.status;
-  const pr = m.github_pr_number ? `MR #${m.github_pr_number}` : "MR";
-  const statusClass = m.status === MERGE_STATUS.running ? "merge-running" : "";
-  const text = `${label} ${pr} ${m.title}`;
-  return `<span class="worker-pill merge-pill ${statusClass}" title="${escapeAttr(text)}">${escapeHtml(text)}</span>`;
 }
 
 // ヘッダーのMRステータスフィルタで選択中の表示ステータス
@@ -656,8 +589,6 @@ async function init() {
   if (allProjects.length === 0) listEl.innerHTML = `<li class="empty">${PROJECT_LIST_NO_PROJECT_TEXT}</li>`;
   else renderProjectItems(listEl);
   pollOpenIssues();
-  pollWorkers();
-  pollMerges();
   pollRateLimits();
   pollMrStatuses();
   pollSubtaskStates();
@@ -1665,7 +1596,7 @@ async function runSubtaskStateAction(subtask, def) {
   const latest = currentSubtasks.find((s) => s.id === subtask.id);
   if (!error && latest) latest.lifecycle_state = body.lifecycle_state;
   if (!error && latest && body.latest_merge) latest.latest_merge = body.latest_merge;
-  if (!error && body.latest_merge) renderMerges().catch(() => {});
+  if (!error && body.latest_merge) refreshMrStatuses().catch(() => {});
   busySubtaskIds.delete(subtask.id);
   updateIssueMrCounts(currentIssueNumber, currentSubtasks);
   renderSubtaskList();
