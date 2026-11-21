@@ -940,9 +940,10 @@ function renderSubtaskList() {
     subtasks.length === 0
       ? '<p class="empty">該当するMRはありません。</p>'
       : `<ul id="subtask-list-items">${subtasks.map(renderSubtaskRow).join("")}</ul>`;
-  container
-    .querySelectorAll(".subtask-row")
-    .forEach((row) => row.addEventListener("click", () => selectSubtask(Number(row.dataset.subtaskId))));
+  container.querySelectorAll(".subtask-row").forEach((row) => {
+    row.addEventListener("click", () => selectSubtask(Number(row.dataset.subtaskId)));
+    row.querySelector(".title-number").addEventListener("click", (e) => e.stopPropagation());
+  });
   highlightSelectedSubtaskRow();
   updateIssueToggleButton();
   updateIssueHeadingCount();
@@ -1053,12 +1054,13 @@ async function saveSubtaskTitle(subtaskId, suffix) {
 /**
  * MR一覧の1行
  *
- * Issue一覧と同様に1行省略のタイトル・状態を並べる。
- * 番号リンクは、MR内容の2行目に表示する。
+ * Issue一覧と同様に番号リンク・1行省略のタイトル・状態を並べる。
+ * リンクのクリックではMRを選択しない。
  */
 function renderSubtaskRow(s) {
   return `
     <li class="subtask-row" data-subtask-id="${s.id}">
+      ${renderSubtaskNumber(s)}
       ${renderMrTitle(s, { className: "subtask-row-title" })}
       ${renderSubtaskState(s)}
     </li>
@@ -1226,9 +1228,9 @@ function renderSubtaskDetail(s) {
     return;
   }
 
-  heading.innerHTML = `${renderMrTitle(s, { id: "subtask-title" })}${renderSubtaskState(s)}`;
+  heading.innerHTML =
+    `${renderSubtaskNumber(s)}${renderMrTitle(s, { id: "subtask-title" })}${renderSubtaskState(s)}`;
   el.innerHTML = `
-    <div id="subtask-sub-row" class="title-sub-row">${renderSubtaskNumber(s)}</div>
     <p id="subtask-title-status" class="title-status empty"></p>
     <div class="instruction-form">
       <div id="subtask-actions" class="subtask-actions" data-subtask-id="${s.id}"></div>
@@ -1436,14 +1438,14 @@ async function refreshSubtaskStates() {
 /**
  * 選択中MRの状態表示を更新する
  *
- * 見出しの状態・2行目の番号と操作ボタンのみ差し替える。
+ * 見出しの番号・状態と操作ボタンのみ差し替える。
  */
 function refreshSelectedSubtaskState() {
   const selected = currentSubtasks.find((s) => s.id === currentSelectedSubtaskId);
   if (!selected) return;
   const stateEl = document.querySelector("#subtask-heading .subtask-state");
   if (stateEl) stateEl.outerHTML = renderSubtaskState(selected);
-  const numberEl = document.querySelector("#subtask-sub-row .title-number");
+  const numberEl = document.querySelector("#subtask-heading .title-number");
   if (numberEl) numberEl.outerHTML = renderSubtaskNumber(selected);
   renderSubtaskActions(selected);
 }
