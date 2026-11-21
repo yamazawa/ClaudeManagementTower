@@ -9,6 +9,7 @@
   --expander-size: 24px;
   --title-number-font-size: 0.8em;
   --section-heading-font-size: 12.5px;
+  --create-row-height: 36px;
 }
 
 * {
@@ -96,6 +97,7 @@ header h1 {
 
 タイトル入力欄の右に作成ボタンを右詰めで配置する。
 入力欄が残りの幅を埋め、状態表示は次の行に出す。
+入力欄と作成ボタンは同じ高さに固定する。
 */
 #issue-create-form,
 #subtask-form {
@@ -108,9 +110,11 @@ header h1 {
 #issue-create-form input,
 #subtask-form input {
   flex: 1 1 0;
+  height: var(--create-row-height);
   min-width: 0;
   font: inherit;
-  padding: 8px 10px;
+  line-height: normal;
+  padding: 0 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
 }
@@ -118,9 +122,11 @@ header h1 {
 #issue-create-form button,
 #subtask-form button {
   flex: 0 0 auto;
+  height: var(--create-row-height);
   font: inherit;
   font-size: 14px;
-  padding: 5px 12px;
+  line-height: normal;
+  padding: 0 12px;
   border: 1px solid var(--accent);
   border-radius: 6px;
   background: var(--accent);
