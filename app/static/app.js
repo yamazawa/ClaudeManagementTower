@@ -405,7 +405,6 @@ const openIssueNumbersByProject = new Map();
 const OPEN_ISSUES_POLL_MS = 60000;
 // リポジトリ一覧のMR数で解決済とみなす表示ステータス（それ以外は未解決とする）
 const MR_STATUS_RESOLVED = [MR_STATUS.merged, MR_STATUS.deploying, MR_STATUS.deployed];
-const REPO_LABEL_PREFIX = "Repo";
 const PROJECT_COUNT_TOOLTIP = "OpenなIssueの未解決MR数 / 解決済MR数";
 const PROJECT_COUNT_FILTERED_TOOLTIP = "OpenなIssueで、選択中のステータスのMR数";
 const PROJECT_LIST_NO_PROJECT_TEXT = "リポジトリが登録されていません。";
@@ -718,15 +717,13 @@ function renderProjectItems(listEl) {
 /**
  * リポジトリ一覧の1行
  *
- * 「Repo番号 表示名 MR数 Deployボタン」を並べる。
+ * 「表示名 MR数 Deployボタン」を並べる。
  */
 function renderProjectItem(project) {
   const li = document.createElement("li");
   li.className = "project-item";
   li.dataset.projectId = project.id;
-  const label = project.repo_number ? `${REPO_LABEL_PREFIX}${project.repo_number}` : REPO_LABEL_PREFIX;
   li.innerHTML =
-    `<span class="project-number">${label}</span>` +
     `<span class="project-name" title="${escapeAttr(project.display_name)}">${escapeHtml(project.display_name)}</span>` +
     `<span class="project-count"></span>` +
     `<button type="button" class="title-action-button">${DEPLOY_BUTTON_LABEL}</button>`;

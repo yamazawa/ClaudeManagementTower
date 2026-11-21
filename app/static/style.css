@@ -67,12 +67,6 @@ header h1 {
   background: var(--soft);
 }
 
-.project-number {
-  color: var(--muted);
-  font-size: 12.5px;
-  white-space: nowrap;
-}
-
 .project-name {
   flex: 1;
   min-width: 0;

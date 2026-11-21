@@ -35,8 +35,7 @@ def _capture_list_issues(monkeypatch):
 def test_get_projects_includes_repo_display_info(session_factory):
     [project] = projects.get_projects()
 
-    assert (project["repo_number"], project["display_name"], project["repo_url"]) == (
-        None,
+    assert (project["display_name"], project["repo_url"]) == (
         "p",
         "https://github.com/owner/repo",
     )
