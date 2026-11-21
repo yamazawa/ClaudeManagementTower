@@ -1309,11 +1309,13 @@ function selectFirstSubtask() {
 /**
  * 見出しの番号表示
  *
+ * 種別と番号を2行に分けて表示する。
  * URLがある場合はGitHubを開くリンクにする。
  */
 function renderTitleNumber(label, url) {
-  if (!url) return `<span class="title-number">${label}</span>`;
-  return `<a class="title-number" href="${url}" target="_blank" rel="noopener" title="GitHubで開く">${label}</a>`;
+  const content = label.split(" ").map((part) => `<span>${part}</span>`).join("");
+  if (!url) return `<span class="title-number">${content}</span>`;
+  return `<a class="title-number" href="${url}" target="_blank" rel="noopener" title="GitHubで開く">${content}</a>`;
 }
 
 async function refreshIssueDetail() {
