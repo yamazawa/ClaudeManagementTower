@@ -274,7 +274,7 @@ function makeTitleEditable(titleEl, statusEl, onSave) {
  * 省略表示されても読めるよう、全文と編集方法を表示する。
  */
 function updateTitleTooltip(titleEl) {
-  const warning = titleEl.classList.contains(MR_TITLE_WARNING_CLASS)
+  const warning = titleEl.closest(`.${MR_TITLE_WARNING_CLASS}`)
     ? `\n${MR_TITLE_WARNING_TEXT}`
     : "";
   titleEl.title = `${titleEl.textContent}${warning}\n（クリックしてタイトルを編集）`;
@@ -294,18 +294,30 @@ function splitMrTitle(mrTitle) {
 /**
  * MR名の表示要素
  *
- * 命名規則に沿う場合はMR固有名のみ、沿わない場合は全体を警告表示する。
+ * 命名規則に沿う場合はIssue名・区切り文字・MR固有名に分けて表示する。
+ * 収まらない場合はIssue名の部分のみ省略し、MR固有名は常に表示する。
+ * 沿わない場合は全体を警告表示する。
  */
 function renderMrTitle(s, { id = "", className = "" } = {}) {
   const suffix = splitMrTitle(s.title);
   const warning = suffix === null;
-  const classes = [className, warning ? MR_TITLE_WARNING_CLASS : ""].filter(Boolean).join(" ");
+  const classes = ["mr-title", className, warning ? MR_TITLE_WARNING_CLASS : ""].filter(Boolean).join(" ");
   const idAttr = id ? ` id="${id}"` : "";
   const tooltip = warning ? `${s.title}\n${MR_TITLE_WARNING_TEXT}` : s.title;
+  const content = warning ? renderMrTitlePart("whole", s.title) : renderMrTitleParts(suffix);
+  return `<span${idAttr} class="${classes}" title="${escapeAttr(tooltip)}">${content}</span>`;
+}
+
+function renderMrTitleParts(suffix) {
   return (
-    `<span${idAttr} class="${classes}" title="${escapeAttr(tooltip)}">` +
-    `${escapeHtml(warning ? s.title : suffix)}</span>`
+    renderMrTitlePart("issue", currentIssueTitle) +
+    renderMrTitlePart("separator", MR_NAME_SEPARATOR) +
+    renderMrTitlePart("suffix", suffix)
   );
+}
+
+function renderMrTitlePart(part, text) {
+  return `<span class="mr-title-${part}">${escapeHtml(text)}</span>`;
 }
 
 function escapeAttr(text) {
@@ -1129,14 +1141,27 @@ async function saveIssueTitle(number, title) {
 /**
  * MR名の保存
  *
- * 編集対象はMR固有名のみ。保存後は命名規則に沿うため警告表示を外す。
+ * 編集対象はMR固有名のみ。保存後は命名規則に沿うため見出しを描画し直す。
  */
 async function saveSubtaskTitle(subtaskId, suffix) {
   const { error } = await patchTitle(`/api/subtasks/${subtaskId}`, suffix);
   if (error) return error;
-  document.getElementById("subtask-title")?.classList.remove(MR_TITLE_WARNING_CLASS);
   await refreshSubtaskStates().catch(() => {});
+  refreshSelectedSubtaskTitle();
   return null;
+}
+
+/**
+ * 選択中MRの見出しタイトルを描画し直す
+ *
+ * 編集中（テキストボックス表示中）は描画し直さない。
+ */
+function refreshSelectedSubtaskTitle() {
+  const titleEl = document.getElementById("subtask-title");
+  const selected = currentSubtasks.find((s) => s.id === currentSelectedSubtaskId);
+  if (!titleEl || !selected || titleEl.querySelector(".title-input")) return;
+  titleEl.outerHTML = renderMrTitle(selected, { id: "subtask-title" });
+  setupSubtaskTitleEditing(selected.id);
 }
 
 /**
@@ -1333,14 +1358,25 @@ function renderSubtaskDetail(s) {
   `;
 
   renderSubtaskActions(s);
-  makeTitleEditable(
-    document.getElementById("subtask-title"),
-    document.getElementById("subtask-title-status"),
-    (title) => saveSubtaskTitle(s.id, title)
-  );
+  setupSubtaskTitleEditing(s.id);
   setupAttachmentForm(s.id);
 
   restoreJobState(s);
+}
+
+/**
+ * MR見出しのタイトル編集の初期化
+ *
+ * 命名規則に沿わない場合は全体をクリックしてMR固有名を編集する。
+ */
+function setupSubtaskTitleEditing(subtaskId) {
+  const titleEl = document.getElementById("subtask-title");
+  const suffixEl = titleEl.querySelector(".mr-title-suffix, .mr-title-whole");
+  makeTitleEditable(
+    suffixEl,
+    document.getElementById("subtask-title-status"),
+    (title) => saveSubtaskTitle(subtaskId, title)
+  );
 }
 
 /**
