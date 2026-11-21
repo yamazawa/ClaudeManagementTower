@@ -1496,10 +1496,13 @@ function resetSubtaskForm() {
 
 /**
  * MR作成フォームの「Issue名ー」表示を更新する
+ *
+ * 省略表示時も区切り文字が残るよう、Issue名と区切り文字を別要素に設定する。
  */
 function updateSubtaskFormPrefix() {
   const prefixEl = document.getElementById("subtask-form-prefix");
-  prefixEl.textContent = `${currentIssueTitle}${MR_NAME_SEPARATOR}`;
+  document.getElementById("subtask-form-prefix-title").textContent = currentIssueTitle;
+  document.getElementById("subtask-form-prefix-separator").textContent = MR_NAME_SEPARATOR;
   prefixEl.title = currentIssueTitle;
 }
 

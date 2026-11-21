@@ -151,7 +151,7 @@ header h1 {
 /* MR作成フォーム
 
 「Issue名ー」の後ろにMR固有名の入力欄を並べる。
-収まらない場合はIssue名の部分のみ末尾を…で省略する。
+収まらない場合はIssue名の部分のみ末尾を…で省略し、区切り文字「ー」は常に表示する。
 先頭文字の左端は一覧の行内の先頭文字に揃える。
 Issue名・入力欄・作成ボタンは折り返さず1行に並べる。
 */
@@ -163,11 +163,16 @@ Issue名・入力欄・作成ボタンは折り返さず1行に並べる。
 }
 
 .subtask-form-prefix {
+  display: flex;
   min-width: 0;
   margin-left: calc(var(--list-row-border-width) + var(--list-row-padding-x));
+  white-space: nowrap;
+}
+
+.subtask-form-prefix-title {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 #issue-create-status {
