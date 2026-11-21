@@ -137,9 +137,6 @@ const JOB_POLL_MS = 3000;
 // Issue一覧のMR数で解決済とみなす状態と、数えない状態（マージされずクローズ）
 const MR_COUNT_RESOLVED_STATES = [LIFECYCLE.merged, LIFECYCLE.deployed];
 const MR_COUNT_EXCLUDED_STATE = LIFECYCLE.canceled;
-// Issue一覧の行・見出しのMR数のツールチップ（通常時・MRステータスフィルタ選択中）
-const ISSUE_COUNT_TOOLTIP = "解決済MR数 / MR総数";
-const ISSUE_COUNT_FILTERED_TOOLTIP = "選択中のステータスのMR数";
 // 作成直後のIssue（Open）が表示対象となるIssue一覧のフィルタの値
 const ISSUE_FILTERS_SHOWING_NEW_ISSUE = ["open"];
 // Issue一覧APIで指定できるIssueの状態（app/routes/projects.pyと合わせる）
@@ -488,7 +485,6 @@ function onMrStatusFilterChanged() {
   const active = isMrStatusFilterActive();
   document.getElementById("issue-filter").hidden = active;
   document.getElementById("subtask-filter").hidden = active;
-  refreshIssueCounts();
   const reselected = refreshProjectCounts();
   if (currentProjectId !== null && !reselected) loadIssues().catch(() => {});
   renderSubtaskList();
@@ -529,7 +525,6 @@ async function pollMrStatuses() {
 async function refreshMrStatuses() {
   mrStatusSummary = await fetch("/api/mr-statuses").then((r) => r.json());
   updateMrStatusFilterButtons();
-  refreshIssueCounts();
   refreshProjectCounts();
   refreshMatchedIssues();
 }
@@ -1033,8 +1028,8 @@ async function fetchUnlistedIssue(number) {
 /**
  * Issue一覧の1行
  *
- * 1行省略のタイトルとMR数を並べる。
- * 番号リンク・閉じるボタンは、Issue内容の2行目に表示する。
+ * 見出しと同様に番号リンク・1行省略のタイトル・閉じるボタンを並べる。
+ * リンクとボタンのクリックではIssueを選択しない。
  */
 function renderIssueItem(issue) {
   const li = document.createElement("li");
@@ -1043,64 +1038,28 @@ function renderIssueItem(issue) {
   li.dataset.number = issue.number;
   li.dataset.state = issue.state;
   li.innerHTML = `
+    ${renderTitleNumber(`Issue #${issue.number}`, issue.url)}
     <span class="issue-item-title" title="${escapeAttr(issue.title)}">${escapeHtml(issue.title)}</span>
-    <span class="issue-item-meta"></span>
+    <span class="issue-item-meta" title="解決済MR数 / MR総数"></span>
+    <button type="button" class="title-action-button issue-item-toggle"></button>
   `;
   updateIssueItemCounts(li, issue.mr_counts);
   li.addEventListener("click", () => selectIssue(issue.number));
+  li.querySelector(".title-number").addEventListener("click", (e) => e.stopPropagation());
+  const button = li.querySelector(".issue-item-toggle");
+  button.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleIssue(issue.number, li.dataset.state === "OPEN", button);
+  });
   return li;
 }
 
 /**
- * Issue一覧の行のMR数を更新する
- *
- * MRステータスフィルタの切り替えで再表示できるよう、MR数を行に保持する。
+ * Issue一覧の行のMR数と閉じるボタンを更新する
  */
 function updateIssueItemCounts(li, counts) {
-  li.dataset.resolvedCount = counts.resolved;
-  li.dataset.totalCount = counts.total;
-  renderIssueItemCount(li);
-}
-
-function renderIssueItemCount(li) {
-  const counts = { resolved: Number(li.dataset.resolvedCount), total: Number(li.dataset.totalCount) };
-  applyIssueCount(li.querySelector(".issue-item-meta"), Number(li.dataset.number), counts);
-}
-
-/**
- * IssueのMR数表示
- *
- * 通常は「解決済MR数/MR総数」とする。
- * MRステータスフィルタの選択中は、選択中のステータスのMR数とする。
- * 一覧の行と見出しで共通に使う。
- */
-function applyIssueCount(el, issueNumber, counts) {
-  const filtered = isMrStatusFilterActive();
-  el.textContent = filtered ? String(countSelectedStatusMrs(issueNumber)) : `${counts.resolved}/${counts.total}`;
-  el.title = filtered ? ISSUE_COUNT_FILTERED_TOOLTIP : ISSUE_COUNT_TOOLTIP;
-}
-
-/**
- * 表示中リポジトリのIssueで、選択中のステータスのMR数を数える
- */
-function countSelectedStatusMrs(issueNumber) {
-  const statusCounts = (mrStatusSummary.projects[currentProjectId] || {})[issueNumber] || {};
-  return [...selectedMrStatuses].reduce((sum, status) => sum + (statusCounts[status] || 0), 0);
-}
-
-function updateIssueHeadingCount() {
-  const el = document.getElementById("issue-heading-count");
-  if (el) applyIssueCount(el, currentIssueNumber, countMrs(currentSubtasks));
-}
-
-/**
- * Issue一覧の行と見出しのMR数を再表示する
- *
- * MRステータスフィルタの切り替え・集計の更新時に呼ぶ。
- */
-function refreshIssueCounts() {
-  document.querySelectorAll(".issue-item").forEach(renderIssueItemCount);
-  updateIssueHeadingCount();
+  li.querySelector(".issue-item-meta").textContent = `${counts.resolved}/${counts.total}`;
+  applyIssueToggleState(li.querySelector(".issue-item-toggle"), li.dataset.state === "OPEN", counts);
 }
 
 /**
@@ -1122,12 +1081,12 @@ function renderSubtaskList() {
     subtasks.length === 0
       ? '<p class="empty">該当するMRはありません。</p>'
       : `<ul id="subtask-list-items">${subtasks.map(renderSubtaskRow).join("")}</ul>`;
-  container
-    .querySelectorAll(".subtask-row")
-    .forEach((row) => row.addEventListener("click", () => selectSubtask(Number(row.dataset.subtaskId))));
+  container.querySelectorAll(".subtask-row").forEach((row) => {
+    row.addEventListener("click", () => selectSubtask(Number(row.dataset.subtaskId)));
+    row.querySelector(".title-number").addEventListener("click", (e) => e.stopPropagation());
+  });
   highlightSelectedSubtaskRow();
   updateIssueToggleButton();
-  updateIssueHeadingCount();
 }
 
 /**
@@ -1147,6 +1106,7 @@ async function postAction(url) {
  * クローズ済の場合は再開ボタンにする。
  * マージ済MRが1個以上で未解決MRが無い場合はプライマリ色にする。
  * 未解決MRが残る場合はクローズできないため無効化する。
+ * 見出しと一覧の行で共通に使う。
  */
 function applyIssueToggleState(button, isOpen, counts) {
   const hasUnresolved = counts.unresolved > 0;
@@ -1170,8 +1130,8 @@ function onClickIssueToggle() {
 /**
  * Issueを閉じる・再開する
  *
- * Issue内容の2行目のボタンから呼ぶ。
- * 表示中Issueの場合はIssue内容に結果を表示し、それ以外は失敗時のみ通知する。
+ * 見出し・一覧のどちらのボタンからも呼ぶ。
+ * 表示中Issueの場合は見出しに結果を表示し、それ以外は失敗時のみ通知する。
  * 成否に関わらず一覧を再取得してボタンの状態を戻す。
  */
 async function toggleIssue(number, isOpen, button) {
@@ -1235,12 +1195,13 @@ async function saveSubtaskTitle(subtaskId, suffix) {
 /**
  * MR一覧の1行
  *
- * Issue一覧と同様に1行省略のタイトル・状態を並べる。
- * 番号リンクは、MR内容の2行目に表示する。
+ * Issue一覧と同様に番号リンク・1行省略のタイトル・状態を並べる。
+ * リンクのクリックではMRを選択しない。
  */
 function renderSubtaskRow(s) {
   return `
     <li class="subtask-row" data-subtask-id="${s.id}">
+      ${renderSubtaskNumber(s)}
       ${renderMrTitle(s, { className: "subtask-row-title" })}
       ${renderSubtaskState(s)}
     </li>
@@ -1344,13 +1305,9 @@ async function refreshIssueDetail() {
   updateIssueMrCounts(issue.number, issue.subtasks);
 
   document.getElementById("issue-heading").innerHTML =
-    `<span id="issue-title">${escapeHtml(issue.title)}</span>` +
-    `<span id="issue-heading-count" class="issue-item-meta"></span>`;
+    `${renderTitleNumber(`Issue #${issue.number}`, issue.url)}<span id="issue-title">${escapeHtml(issue.title)}</span>` +
+    `<button type="button" id="issue-toggle-button" class="title-action-button"></button>`;
   document.getElementById("subtask-list-body").innerHTML = `
-    <div class="title-sub-row">
-      ${renderTitleNumber(`Issue #${issue.number}`, issue.url)}
-      <button type="button" id="issue-toggle-button" class="title-action-button"></button>
-    </div>
     <p id="issue-title-status" class="title-status empty"></p>
     <p id="issue-rename-status" class="title-status empty"></p>
     <p id="issue-close-status" class="title-status empty"></p>
@@ -1408,9 +1365,9 @@ function renderSubtaskDetail(s) {
     return;
   }
 
-  heading.innerHTML = `${renderMrTitle(s, { id: "subtask-title" })}${renderSubtaskState(s)}`;
+  heading.innerHTML =
+    `${renderSubtaskNumber(s)}${renderMrTitle(s, { id: "subtask-title" })}${renderSubtaskState(s)}`;
   el.innerHTML = `
-    <div id="subtask-sub-row" class="title-sub-row">${renderSubtaskNumber(s)}</div>
     <p id="subtask-title-status" class="title-status empty"></p>
     <div class="instruction-form">
       <div id="subtask-actions" class="subtask-actions" data-subtask-id="${s.id}"></div>
@@ -1618,14 +1575,14 @@ async function refreshSubtaskStates() {
 /**
  * 選択中MRの状態表示を更新する
  *
- * 見出しの状態・2行目の番号と操作ボタンのみ差し替える。
+ * 見出しの番号・状態と操作ボタンのみ差し替える。
  */
 function refreshSelectedSubtaskState() {
   const selected = currentSubtasks.find((s) => s.id === currentSelectedSubtaskId);
   if (!selected) return;
   const stateEl = document.querySelector("#subtask-heading .subtask-state");
   if (stateEl) stateEl.outerHTML = renderSubtaskState(selected);
-  const numberEl = document.querySelector("#subtask-sub-row .title-number");
+  const numberEl = document.querySelector("#subtask-heading .title-number");
   if (numberEl) numberEl.outerHTML = renderSubtaskNumber(selected);
   renderSubtaskActions(selected);
 }
