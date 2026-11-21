@@ -34,12 +34,14 @@
     </div>
     <p id="issue-list-placeholder" class="empty">左の一覧からリポジトリを選択してください。</p>
     <div id="issue-panel" hidden>
-      <h3 class="section-heading section-heading-top">Issue作成</h3>
-      <form id="issue-create-form">
-        <input type="text" name="title" placeholder="タイトル" required />
-        <button type="submit">Create</button>
-        <p id="issue-create-status" class="empty"></p>
-      </form>
+      <div id="issue-create-block" class="create-block">
+        <h3 class="section-heading section-heading-top">Issue作成</h3>
+        <form id="issue-create-form">
+          <input type="text" name="title" placeholder="タイトル" required />
+          <button type="submit">Create</button>
+          <p id="issue-create-status" class="empty"></p>
+        </form>
+      </div>
       <h3 class="section-heading section-heading-with-filter">
         Issue一覧
         <select id="issue-filter" class="heading-filter" aria-label="Issue一覧の表示フィルタ">
@@ -59,13 +61,15 @@
       <p class="empty">左の一覧からIssueを選択してください。</p>
     </div>
     <div id="subtask-panel" hidden>
-      <h3 class="section-heading section-heading-top">MR作成</h3>
-      <form id="subtask-form">
-        <span id="subtask-form-prefix" class="subtask-form-prefix"></span>
-        <input type="text" name="title" placeholder="MR名（空欄なら連番）" />
-        <button type="submit">Create</button>
-        <p id="subtask-form-status" class="empty"></p>
-      </form>
+      <div id="subtask-create-block" class="create-block">
+        <h3 class="section-heading section-heading-top">MR作成</h3>
+        <form id="subtask-form">
+          <span id="subtask-form-prefix" class="subtask-form-prefix"></span>
+          <input type="text" name="title" placeholder="MR名（空欄なら連番）" />
+          <button type="submit">Create</button>
+          <p id="subtask-form-status" class="empty"></p>
+        </form>
+      </div>
       <h3 class="section-heading section-heading-with-filter">
         MR一覧
         <select id="subtask-filter" class="heading-filter" aria-label="MR一覧の表示フィルタ">
