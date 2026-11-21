@@ -147,6 +147,13 @@ const MR_NAME_SEPARATOR = "ー";
 const MR_TITLE_WARNING_CLASS = "mr-title-warning";
 const MR_TITLE_WARNING_TEXT = `MR名が命名規則（Issue名${MR_NAME_SEPARATOR}MR名）に沿っていません`;
 
+// 連番の丸数字は①〜⑳・㉑〜㉟・㊱〜㊿の3ブロック（core/mr_naming.pyと合わせる）
+const CIRCLED_NUMBER_RANGES = [
+  { first: 1, last: 20, base: 0x2460 },
+  { first: 21, last: 35, base: 0x3251 },
+  { first: 36, last: 50, base: 0x32b1 },
+];
+
 // 縦長表示（ペインを縦1列に並べる画面幅）の判定（style.cssのメディアクエリと合わせる）
 const PORTRAIT_MEDIA_QUERY = "(max-width: 680px)";
 
@@ -1126,7 +1133,6 @@ async function saveIssueTitle(number, title) {
   if (error) return error;
   updateIssueTitleDisplay(number, title);
   if (number !== currentIssueNumber) return null;
-  currentIssueTitle = title;
   const failedCount = (body.failed_subtasks || []).length;
   const renameStatus = document.getElementById("issue-rename-status");
   if (renameStatus)
@@ -1151,6 +1157,8 @@ function updateIssueTitleDisplay(number, title) {
   if (number !== currentIssueNumber || !headingTitle) return;
   headingTitle.textContent = title;
   updateTitleTooltip(headingTitle);
+  currentIssueTitle = title;
+  updateSubtaskFormPrefix();
 }
 
 /**
@@ -1320,8 +1328,42 @@ MR自動作成中は作成ボタンを無効のままにする。
 function resetSubtaskForm() {
   const form = document.getElementById("subtask-form");
   form.reset();
+  form.title.value = nextDefaultMrSuffix();
   form.querySelector("button").disabled = isCurrentIssueAutoMrCreating();
   document.getElementById("subtask-form-status").textContent = "";
+  updateSubtaskFormPrefix();
+}
+
+/**
+ * MR作成フォームの「Issue名ー」表示を更新する
+ */
+function updateSubtaskFormPrefix() {
+  const prefixEl = document.getElementById("subtask-form-prefix");
+  prefixEl.textContent = `${currentIssueTitle}${MR_NAME_SEPARATOR}`;
+  prefixEl.title = currentIssueTitle;
+}
+
+/**
+ * MR作成フォームに初期入力するMR固有名
+ *
+ * ①から順に走査し、表示中IssueのMR名と重複しない最初の番号を返す。
+ * サーバー側で空欄時に割り当てる連番（core/mr_naming.py）と合わせる。
+ */
+function nextDefaultMrSuffix() {
+  const used = new Set(currentSubtasks.map((s) => s.title));
+  let n = 1;
+  while (used.has(`${currentIssueTitle}${MR_NAME_SEPARATOR}${numberLabel(n)}`)) n++;
+  return numberLabel(n);
+}
+
+/**
+ * 連番の表示文字列
+ *
+ * 丸数字が無い番号は半角数字にする。
+ */
+function numberLabel(n) {
+  const range = CIRCLED_NUMBER_RANGES.find((r) => r.first <= n && n <= r.last);
+  return range ? String.fromCodePoint(range.base + n - range.first) : String(n);
 }
 
 function selectSubtask(subtaskId) {

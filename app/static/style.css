@@ -132,6 +132,23 @@ header h1 {
   cursor: default;
 }
 
+/* MR作成フォーム
+
+「Issue名ー」の後ろにMR固有名の入力欄を並べる。
+収まらない場合はIssue名の部分のみ末尾を…で省略する。
+*/
+.subtask-form-prefix {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#subtask-form input {
+  flex: 1 0 5em;
+}
+
 #issue-create-status,
 #subtask-form-status {
   flex-basis: 100%;
