@@ -7,6 +7,7 @@
   --soft: #edf2ff;
   --warning: #b45309;
   --expander-size: 24px;
+  --title-number-font-size: 0.8em;
 }
 
 * {
@@ -756,6 +757,7 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
 
 .title-number {
   flex-shrink: 0;
+  font-size: var(--title-number-font-size);
   white-space: nowrap;
 }
 
