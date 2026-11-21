@@ -2,7 +2,9 @@ import asyncio
 
 from claude_agent_sdk import PermissionResultAllow, PermissionResultDeny
 
-from core.claude_client import restrict_to_worktree
+from core import claude_client
+from core.attachments import MAX_ATTACHMENT_BYTES
+from core.claude_client import MAX_BUFFER_SIZE, restrict_to_worktree
 
 
 def _check(worktree, tool_name, tool_input):
@@ -59,3 +61,20 @@ def test_allows_absolute_path_inside_worktree(tmp_path):
 def test_denies_edit_outside_worktree(tmp_path):
     result = _check(str(tmp_path), "Write", {"file_path": "C:/git/ClaudeManagementTower/core/config.py"})
     assert isinstance(result, PermissionResultDeny)
+
+
+def test_max_buffer_size_covers_multiple_attachments():
+    assert MAX_BUFFER_SIZE >= MAX_ATTACHMENT_BYTES * 10 * 4 // 3
+
+
+def test_run_claude_passes_max_buffer_size(monkeypatch, tmp_path):
+    captured = {}
+
+    async def fake_query(prompt, options):
+        captured["options"] = options
+        return
+        yield
+
+    monkeypatch.setattr(claude_client, "query", fake_query)
+    asyncio.run(claude_client.run_claude("prompt", str(tmp_path)))
+    assert captured["options"].max_buffer_size == MAX_BUFFER_SIZE
