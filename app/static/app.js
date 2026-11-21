@@ -55,8 +55,6 @@ const MR_STATUS_FILTER_BUTTONS = [
   { status: MR_STATUS.resolved, label: "Resolved" },
   { status: MR_STATUS.merging, label: "→" },
   { status: MR_STATUS.merged, label: "Merged" },
-  { status: MR_STATUS.deploying, label: "→" },
-  { status: MR_STATUS.deployed, label: "Deployed" },
 ];
 const MR_STATUS_FILTER_CLEAR_LABEL = "クリア";
 const MR_STATUS_FILTER_TOOLTIP = "のMRで絞り込み（全リポジトリでMRが無い場合は選択不可）";
