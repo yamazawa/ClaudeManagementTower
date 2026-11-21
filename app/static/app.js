@@ -829,19 +829,27 @@ function refreshProjectCounts() {
 }
 
 /**
- * MRステータスフィルタの選択中に、表示中の先頭のリポジトリを選択する
+ * 選択中のリポジトリが非表示になった場合に、表示中の先頭のリポジトリを選択し直す
  *
  * 選択中のリポジトリが表示中の場合は選択し直さない。
- * 表示中のリポジトリが無い場合は選択を変えない。
+ * 未選択の場合は、MRステータスフィルタの選択中のみ先頭を選択する。
+ * 表示中のリポジトリが無い場合は選択を外す。
+ * 選択を変更した場合はtrueを返す。
  */
 function selectFirstVisibleProject(items) {
-  if (!isMrStatusFilterActive()) return false;
   const visible = items.filter((li) => !li.hidden);
   if (visible.some((li) => Number(li.dataset.projectId) === currentProjectId)) return false;
+  if (currentProjectId === null && !isMrStatusFilterActive()) return false;
   const [first] = visible;
-  if (!first) return false;
+  if (!first) return clearVisibleProjectSelection();
   const project = allProjects.find((p) => p.id === Number(first.dataset.projectId));
   selectProject(project).catch(() => {});
+  return true;
+}
+
+function clearVisibleProjectSelection() {
+  if (currentProjectId === null) return false;
+  clearProjectSelection();
   return true;
 }
 
