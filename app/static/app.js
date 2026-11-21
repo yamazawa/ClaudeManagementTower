@@ -395,9 +395,23 @@ function renderMergePill(m) {
 // ヘッダーのMRステータスフィルタで選択中の表示ステータス
 const selectedMrStatuses = new Set();
 // 全リポジトリのMRステータス集計（/api/mr-statusesの応答）
+// projectsはリポジトリID→Issue番号→ステータス別MR数とする
 let mrStatusSummary = { counts: {}, projects: {} };
 // Issue一覧に表示中の絞り込み結果（変化した場合のみIssue一覧を再取得する）
 let lastMatchedIssueKey = "";
+
+// 登録済みのリポジトリ（/api/projectsの応答）
+let allProjects = [];
+// リポジトリIDごとのOpenなIssue番号（取得前のリポジトリは含めない）
+const openIssueNumbersByProject = new Map();
+const OPEN_ISSUES_POLL_MS = 60000;
+// リポジトリ一覧のMR数で解決済とみなす表示ステータス（それ以外は未解決とする）
+const MR_STATUS_RESOLVED = [MR_STATUS.merged, MR_STATUS.deploying, MR_STATUS.deployed];
+const REPO_LABEL_PREFIX = "Repo";
+const PROJECT_COUNT_TOOLTIP = "OpenなIssueの未解決MR数 / 解決済MR数";
+const PROJECT_COUNT_FILTERED_TOOLTIP = "OpenなIssueで、選択中のステータスのMR数";
+const PROJECT_LIST_NO_PROJECT_TEXT = "リポジトリが登録されていません。";
+const PROJECT_LIST_NO_MATCH_TEXT = "選択中のステータスのMRを持つリポジトリはありません。";
 
 /**
  * ヘッダーのMRステータスフィルタの初期化
@@ -464,13 +478,15 @@ function isMrStatusFilterActive() {
  * MRステータスフィルタの選択変更をIssue一覧・MR一覧に反映する
  *
  * 選択中はIssue一覧・MR一覧の既存フィルタを隠す。
+ * リポジトリを選択し直した場合は、Issue一覧の読み込みを選択処理に任せる。
  */
 function onMrStatusFilterChanged() {
   updateMrStatusFilterButtons();
   const active = isMrStatusFilterActive();
   document.getElementById("issue-filter").hidden = active;
   document.getElementById("subtask-filter").hidden = active;
-  if (currentProjectId !== null) loadIssues().catch(() => {});
+  const reselected = refreshProjectCounts();
+  if (currentProjectId !== null && !reselected) loadIssues().catch(() => {});
   renderSubtaskList();
 }
 
@@ -480,7 +496,7 @@ function onMrStatusFilterChanged() {
 function matchedIssueNumbers() {
   const byIssue = mrStatusSummary.projects[currentProjectId] || {};
   return Object.entries(byIssue)
-    .filter(([, statuses]) => statuses.some((status) => selectedMrStatuses.has(status)))
+    .filter(([, statusCounts]) => Object.keys(statusCounts).some((status) => selectedMrStatuses.has(status)))
     .map(([number]) => Number(number));
 }
 
@@ -509,6 +525,7 @@ async function pollMrStatuses() {
 async function refreshMrStatuses() {
   mrStatusSummary = await fetch("/api/mr-statuses").then((r) => r.json());
   updateMrStatusFilterButtons();
+  refreshProjectCounts();
   refreshMatchedIssues();
 }
 
@@ -571,8 +588,12 @@ const DEPLOY_TIMEOUT_MS = 30 * 60 * 1000;
 const DEPLOY_RESTART_SERVER = "restart_server";
 const DEPLOY_DEFINED_TOOLTIP = "リポジトリに定義したデプロイ手順を実行します（デプロイすると動作確認できます）";
 const DEPLOY_UNDEFINED_TOOLTIP = "デプロイが定義されていません（.claude-tower/deploy.json）";
-// リポジトリ見出しのDeployボタン名
+// リポジトリ一覧の行・リポジトリ見出しのDeployボタン名
 const DEPLOY_BUTTON_LABEL = "Deploy";
+// Deployボタンに付けるクラス（同じリポジトリのボタンを合わせて更新する）
+const DEPLOY_BUTTON_CLASS = "deploy-button";
+// デプロイ実行中のリポジトリID
+const deployingProjectIds = new Set();
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -610,21 +631,12 @@ function clearIssueDetail() {
 }
 
 async function init() {
-  const projects = await fetch("/api/projects").then((r) => r.json());
+  allProjects = await fetch("/api/projects").then((r) => r.json());
   const listEl = document.getElementById("project-list-items");
   listEl.innerHTML = "";
-  if (projects.length === 0) {
-    listEl.innerHTML = '<li class="empty">リポジトリが登録されていません。</li>';
-  } else {
-    for (const project of projects) {
-      const li = document.createElement("li");
-      li.className = "project-item";
-      li.dataset.projectId = project.id;
-      li.innerHTML = `<span class="project-name">${escapeHtml(project.display_name)}</span><span class="project-branch">${project.default_branch}</span>`;
-      li.addEventListener("click", () => selectProject(project));
-      listEl.appendChild(li);
-    }
-  }
+  if (allProjects.length === 0) listEl.innerHTML = `<li class="empty">${PROJECT_LIST_NO_PROJECT_TEXT}</li>`;
+  else renderProjectItems(listEl);
+  pollOpenIssues();
   pollWorkers();
   pollMerges();
   pollRateLimits();
@@ -676,6 +688,137 @@ function highlightSelectedProject() {
 }
 
 /**
+ * リポジトリ一覧の各行と、フィルタで全て隠れた場合の文言を並べる
+ */
+function renderProjectItems(listEl) {
+  allProjects.forEach((project) => listEl.appendChild(renderProjectItem(project)));
+  listEl.insertAdjacentHTML("beforeend", `<li id="project-list-no-match" class="empty" hidden>${PROJECT_LIST_NO_MATCH_TEXT}</li>`);
+}
+
+/**
+ * リポジトリ一覧の1行
+ *
+ * 「Repo番号 表示名 MR数 Deployボタン」を並べる。
+ */
+function renderProjectItem(project) {
+  const li = document.createElement("li");
+  li.className = "project-item";
+  li.dataset.projectId = project.id;
+  const label = project.repo_number ? `${REPO_LABEL_PREFIX}${project.repo_number}` : REPO_LABEL_PREFIX;
+  li.innerHTML =
+    `<span class="project-number">${label}</span>` +
+    `<span class="project-name" title="${escapeAttr(project.display_name)}">${escapeHtml(project.display_name)}</span>` +
+    `<span class="project-count"></span>` +
+    `<button type="button" class="title-action-button">${DEPLOY_BUTTON_LABEL}</button>`;
+  bindDeployButton(li.querySelector("button"), project);
+  li.addEventListener("click", () => selectProject(project));
+  return li;
+}
+
+/**
+ * 全リポジトリのOpenなIssue番号の定期取得
+ *
+ * GitHubへの問い合わせを伴うため、MR状態の集計より長い間隔で取得する。
+ */
+async function pollOpenIssues() {
+  await Promise.all(allProjects.map((project) => refreshOpenIssueNumbers(project.id)));
+  refreshProjectCounts();
+  setTimeout(pollOpenIssues, OPEN_ISSUES_POLL_MS);
+}
+
+async function refreshOpenIssueNumbers(projectId) {
+  try {
+    setOpenIssueNumbers(projectId, await fetchProjectIssues(projectId, "open"));
+  } catch (error) {
+    // サーバー再起動中などで取得に失敗した場合は前回の値のまま表示する
+  }
+}
+
+function setOpenIssueNumbers(projectId, issues) {
+  openIssueNumbersByProject.set(projectId, new Set(issues.map((issue) => issue.number)));
+}
+
+/**
+ * リポジトリのOpenなIssueが持つMRのうち、条件に合うステータスのMR数を数える
+ */
+function countOpenIssueMrs(projectId, matchesStatus) {
+  const openNumbers = openIssueNumbersByProject.get(projectId) || new Set();
+  return Object.entries(mrStatusSummary.projects[projectId] || {})
+    .filter(([number]) => openNumbers.has(Number(number)))
+    .flatMap(([, statusCounts]) => Object.entries(statusCounts))
+    .filter(([status]) => matchesStatus(status))
+    .reduce((sum, [, count]) => sum + count, 0);
+}
+
+function countSelectedStatusOpenIssueMrs(projectId) {
+  return countOpenIssueMrs(projectId, (status) => selectedMrStatuses.has(status));
+}
+
+/**
+ * リポジトリのMR数表示
+ *
+ * 通常は「未解決MR数/解決済MR数」とする。
+ * MRステータスフィルタの選択中は、選択中のステータスのMR数とする。
+ * OpenなIssue番号の取得前は表示しない。
+ */
+function projectCountText(projectId) {
+  if (!openIssueNumbersByProject.has(projectId)) return "";
+  if (isMrStatusFilterActive()) return String(countSelectedStatusOpenIssueMrs(projectId));
+  const unresolved = countOpenIssueMrs(projectId, (status) => !MR_STATUS_RESOLVED.includes(status));
+  const resolved = countOpenIssueMrs(projectId, (status) => MR_STATUS_RESOLVED.includes(status));
+  return `${unresolved}/${resolved}`;
+}
+
+/**
+ * MRステータスフィルタの選択中に、該当MRが0件のリポジトリか
+ *
+ * OpenなIssue番号の取得前は判定できないため表示する。
+ */
+function isProjectFilteredOut(projectId) {
+  if (!isMrStatusFilterActive() || !openIssueNumbersByProject.has(projectId)) return false;
+  return countSelectedStatusOpenIssueMrs(projectId) === 0;
+}
+
+function renderProjectItemCount(li) {
+  const projectId = Number(li.dataset.projectId);
+  const el = li.querySelector(".project-count");
+  el.textContent = projectCountText(projectId);
+  el.title = isMrStatusFilterActive() ? PROJECT_COUNT_FILTERED_TOOLTIP : PROJECT_COUNT_TOOLTIP;
+  li.hidden = isProjectFilteredOut(projectId);
+}
+
+/**
+ * リポジトリ一覧のMR数・表示有無を更新する
+ *
+ * MRステータスフィルタの選択中は、該当MRが0件のリポジトリを隠す。
+ * リポジトリを選択し直した場合はtrueを返す。
+ */
+function refreshProjectCounts() {
+  const items = [...document.querySelectorAll(".project-item")];
+  items.forEach(renderProjectItemCount);
+  const noMatch = document.getElementById("project-list-no-match");
+  if (noMatch) noMatch.hidden = items.some((li) => !li.hidden);
+  return selectFirstVisibleProject(items);
+}
+
+/**
+ * MRステータスフィルタの選択中に、表示中の先頭のリポジトリを選択する
+ *
+ * 選択中のリポジトリが表示中の場合は選択し直さない。
+ * 表示中のリポジトリが無い場合は選択を変えない。
+ */
+function selectFirstVisibleProject(items) {
+  if (!isMrStatusFilterActive()) return false;
+  const visible = items.filter((li) => !li.hidden);
+  if (visible.some((li) => Number(li.dataset.projectId) === currentProjectId)) return false;
+  const [first] = visible;
+  if (!first) return false;
+  const project = allProjects.find((p) => p.id === Number(first.dataset.projectId));
+  selectProject(project).catch(() => {});
+  return true;
+}
+
+/**
  * リポジトリ見出しの表示
  *
  * 「Repo #番号 表示名」とし、番号部分はGitHubのリポジトリページへのリンクにする。
@@ -688,11 +831,35 @@ function renderRepoHeading(project) {
     `${renderTitleNumber(label, project.repo_url)}<span id="repo-title">${escapeHtml(project.display_name)}</span>` +
     `<button type="button" id="deploy-button" class="title-action-button">${DEPLOY_BUTTON_LABEL}</button>`;
   document.getElementById("deploy-status").textContent = "";
-  const button = document.getElementById("deploy-button");
-  button.disabled = !project.deploy_defined;
+  bindDeployButton(document.getElementById("deploy-button"), project);
+}
+
+/**
+ * Deployボタンの初期化
+ *
+ * リポジトリ一覧の行と見出しで共通に使う。
+ * デプロイ未定義・デプロイ実行中のリポジトリではDeployボタンを無効化する。
+ * 一覧の行では、デプロイ状況を見出しに表示するため、リポジトリを選択してからデプロイする。
+ */
+function bindDeployButton(button, project) {
+  button.classList.add(DEPLOY_BUTTON_CLASS);
+  button.dataset.projectId = project.id;
   button.title = project.deploy_defined ? DEPLOY_DEFINED_TOOLTIP : DEPLOY_UNDEFINED_TOOLTIP;
-  button.addEventListener("click", () => onClickDeploy(project, button));
-  if (project.deploy_defined) refreshDeployPending(project.id, button);
+  updateDeployButtonEnabled(button, project);
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (project.id !== currentProjectId) selectProject(project).catch(() => {});
+    onClickDeploy(project);
+  });
+  if (project.deploy_defined) refreshDeployPending(project.id);
+}
+
+function deployButtons(projectId) {
+  return document.querySelectorAll(`.${DEPLOY_BUTTON_CLASS}[data-project-id="${projectId}"]`);
+}
+
+function updateDeployButtonEnabled(button, project) {
+  button.disabled = !project.deploy_defined || deployingProjectIds.has(project.id);
 }
 
 /**
@@ -700,8 +867,9 @@ function renderRepoHeading(project) {
  *
  * デプロイ先のソースに未取り込みの対応がある場合はプライマリ色にする。
  * 取得に失敗した場合は通常の色のままとする。
+ * リポジトリ一覧の行と見出しのボタンを合わせて更新する。
  */
-async function refreshDeployPending(projectId, button) {
+async function refreshDeployPending(projectId) {
   let pending = false;
   try {
     const response = await fetch(`/api/projects/${projectId}/deploy/pending`);
@@ -709,7 +877,7 @@ async function refreshDeployPending(projectId, button) {
   } catch (error) {
     pending = false;
   }
-  if (button.isConnected) button.classList.toggle("primary", pending);
+  deployButtons(projectId).forEach((button) => button.classList.toggle("primary", pending));
 }
 
 // 表示中のDeployボタンの色を取得中か（git fetchを伴うため多重に取得しない）
@@ -726,7 +894,7 @@ async function refreshCurrentDeployPending() {
   if (deployPendingRefreshing || currentProjectId === null || !button || button.disabled) return;
   deployPendingRefreshing = true;
   try {
-    await refreshDeployPending(currentProjectId, button);
+    await refreshDeployPending(currentProjectId);
   } finally {
     deployPendingRefreshing = false;
   }
@@ -737,22 +905,29 @@ async function refreshCurrentDeployPending() {
  *
  * 結果が出るまでポーリングし、サーバー再起動を含む場合は再起動完了まで待つ。
  * 実行中にリポジトリを切り替えた場合も、結果は実行したリポジトリの見出しにのみ表示する。
+ * 実行中は、リポジトリ一覧の行と見出しのDeployボタンを無効化する。
  */
-async function onClickDeploy(project, button) {
+async function onClickDeploy(project) {
   if (!confirm(`${project.display_name} をデプロイしますか？`)) return;
   const setStatus = (text) => {
     if (currentProjectId === project.id) document.getElementById("deploy-status").textContent = text;
   };
-  button.disabled = true;
+  setProjectDeploying(project, true);
   setStatus("デプロイ中...");
   try {
     setStatus(await runDeploy(project.id, setStatus));
   } catch (error) {
     setStatus(`デプロイに失敗しました: ${error.message}`);
   } finally {
-    button.disabled = false;
-    refreshDeployPending(project.id, button);
+    setProjectDeploying(project, false);
+    refreshDeployPending(project.id);
   }
+}
+
+function setProjectDeploying(project, deploying) {
+  if (deploying) deployingProjectIds.add(project.id);
+  else deployingProjectIds.delete(project.id);
+  deployButtons(project.id).forEach((button) => updateDeployButtonEnabled(button, project));
 }
 
 async function runDeploy(projectId, setStatus) {
@@ -794,12 +969,18 @@ async function waitForDeployResult(projectId) {
  *
  * フィルタに該当するIssueを表示し、表示したIssueを返す。
  * MRステータスフィルタの選択中は、Open・Closeを問わず該当Issueを表示する。
+ * Openを表示した場合は、リポジトリ一覧のMR数にも反映する。
  */
 async function loadIssues() {
   lastMatchedIssueKey = matchedIssueKey();
-  const issues = isMrStatusFilterActive()
-    ? await fetchIssuesByMrStatus()
-    : await fetchIssues(document.getElementById("issue-filter").value);
+  const projectId = currentProjectId;
+  const filtered = isMrStatusFilterActive();
+  const state = document.getElementById("issue-filter").value;
+  const issues = filtered ? await fetchIssuesByMrStatus() : await fetchIssues(state);
+  if (!filtered && state === "open") {
+    setOpenIssueNumbers(projectId, issues);
+    refreshProjectCounts();
+  }
   const listEl = document.getElementById("issue-list-items");
   listEl.innerHTML = "";
   if (issues.length === 0) listEl.innerHTML = '<li class="empty">Issueがありません。</li>';
@@ -808,9 +989,11 @@ async function loadIssues() {
 }
 
 async function fetchIssues(state) {
-  return fetch(
-    `/api/projects/${currentProjectId}/issues?state=${encodeURIComponent(state)}`
-  ).then((r) => r.json());
+  return fetchProjectIssues(currentProjectId, state);
+}
+
+async function fetchProjectIssues(projectId, state) {
+  return fetch(`/api/projects/${projectId}/issues?state=${encodeURIComponent(state)}`).then((r) => r.json());
 }
 
 /**
