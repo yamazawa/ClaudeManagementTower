@@ -83,8 +83,8 @@ def test_get_issues_includes_mr_counts(session_factory, monkeypatch):
     issues = projects.get_issues(1)
 
     assert [i["mr_counts"] for i in issues] == [
-        {"resolved": 2, "unresolved": 2, "total": 4, "review": 1, "undeployed": 2},
-        {"resolved": 0, "unresolved": 0, "total": 0, "review": 0, "undeployed": 0},
+        {"resolved": 2, "unresolved": 2, "total": 4},
+        {"resolved": 0, "unresolved": 0, "total": 0},
     ]
 
 
@@ -97,16 +97,14 @@ def test_get_mr_counts_returns_db_counts(session_factory, monkeypatch):
     _add_subtasks(session_factory, 7, ["canceled"])
 
     assert projects.get_mr_counts(1) == {
-        5: {"resolved": 1, "unresolved": 1, "total": 2, "review": 1, "undeployed": 1}
+        5: {"resolved": 1, "unresolved": 1, "total": 2}
     }
 
 
 def test_mr_counts_treat_deployed_as_resolved(session_factory):
     _add_subtasks(session_factory, 5, ["merged", "deployed", "draft"])
 
-    assert projects.get_mr_counts(1)[5] == {
-        "resolved": 2, "unresolved": 1, "total": 3, "review": 0, "undeployed": 1
-    }
+    assert projects.get_mr_counts(1)[5] == {"resolved": 2, "unresolved": 1, "total": 3}
 
 
 def test_get_issues_passes_state_filter_to_github(session_factory, monkeypatch):

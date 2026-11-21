@@ -16,14 +16,15 @@ const LIFECYCLE = {
   canceled: "canceled",
 };
 
-// MRの表示ステータス
-// Resolving・Mergingは保存せず、lifecycle_stateと実行中のジョブから導出する
+// MRの表示ステータス（core/mr_status.pyと合わせる）
+// Resolving・Merging・Deployingは保存せず、lifecycle_stateと実行中の処理から導出する
 const MR_STATUS = {
   draft: "draft",
   resolving: "resolving",
   resolved: "resolved",
   merging: "merging",
   merged: "merged",
+  deploying: "deploying",
   deployed: "deployed",
   canceled: "canceled",
 };
@@ -34,6 +35,7 @@ const MR_STATUS_LABELS = {
   [MR_STATUS.resolved]: "Resolved",
   [MR_STATUS.merging]: "Merging",
   [MR_STATUS.merged]: "Merged",
+  [MR_STATUS.deploying]: "Deploying",
   [MR_STATUS.deployed]: "Deployed",
   [MR_STATUS.canceled]: "Canceled",
 };
@@ -42,7 +44,24 @@ const MR_STATUS_LABELS = {
 const MR_STATUS_TOOLTIPS = {
   [MR_STATUS.resolving]: "実装中",
   [MR_STATUS.merging]: "マージ中",
+  [MR_STATUS.deploying]: "デプロイ中",
 };
+
+// ヘッダーのMRステータスフィルタのボタン（表示順）
+// 遷移中のステータスは矢印で表し、showCountがfalseのボタンは件数を表示しない
+const MR_STATUS_FILTER_BUTTONS = [
+  { status: MR_STATUS.draft, label: "Draft" },
+  { status: MR_STATUS.resolving, label: "→" },
+  { status: MR_STATUS.resolved, label: "Resolved" },
+  { status: MR_STATUS.merging, label: "→" },
+  { status: MR_STATUS.merged, label: "Merged" },
+  { status: MR_STATUS.deploying, label: "→" },
+  { status: MR_STATUS.deployed, label: "Deployed", showCount: false },
+];
+const MR_STATUS_FILTER_CLEAR_LABEL = "クリア";
+const MR_STATUS_FILTER_TOOLTIP = "のMRで絞り込み（数字は全リポジトリのMR数）";
+const MR_STATUS_FILTER_CLEAR_TOOLTIP = "ステータスでの絞り込みを解除";
+const MR_STATUS_POLL_MS = 3000;
 
 // MR一覧フィルタの値ごとに表示対象のlifecycle_stateを定義する
 // 未解決はDraft〜Merging、解決済はMerged〜Deployedを表示する
@@ -120,12 +139,10 @@ const JOB_POLL_MS = 3000;
 // Issue一覧のMR数で解決済とみなす状態と、数えない状態（マージされずクローズ）
 const MR_COUNT_RESOLVED_STATES = [LIFECYCLE.merged, LIFECYCLE.deployed];
 const MR_COUNT_EXCLUDED_STATE = LIFECYCLE.canceled;
-// レビュー待ち・デプロイ待ちとみなす状態（app/routes/projects.pyと合わせる）
-// デプロイ待ちはDeployボタンの件数に使い、デプロイすると動作確認できるMergedのMRを数える
-const MR_COUNT_REVIEW_STATES = [LIFECYCLE.resolved];
-const MR_COUNT_UNDEPLOYED_STATES = [LIFECYCLE.merged];
 // 作成直後のIssue（Open）が表示対象となるIssue一覧のフィルタの値
 const ISSUE_FILTERS_SHOWING_NEW_ISSUE = ["open"];
+// Issue一覧APIで指定できるIssueの状態（app/routes/projects.pyと合わせる）
+const ISSUE_STATES = ["open", "closed"];
 
 // MR状態の自動更新間隔（サーバー側のPR同期間隔と合わせて10秒以内に反映させる）
 const SUBTASK_POLL_MS = 3000;
@@ -377,6 +394,122 @@ function renderMergePill(m) {
   return `<span class="worker-pill merge-pill ${statusClass}" title="${escapeAttr(text)}">${escapeHtml(text)}</span>`;
 }
 
+// ヘッダーのMRステータスフィルタで選択中の表示ステータス
+const selectedMrStatuses = new Set();
+// 全リポジトリのMRステータス集計（/api/mr-statusesの応答）
+let mrStatusSummary = { counts: {}, projects: {} };
+// Issue一覧に表示中の絞り込み結果（変化した場合のみIssue一覧を再取得する）
+let lastMatchedIssueKey = "";
+
+/**
+ * ヘッダーのMRステータスフィルタの初期化
+ *
+ * ボタンは1度だけ作り、件数と選択状態はupdateMrStatusFilterButtonsで更新する。
+ */
+function setupMrStatusFilter() {
+  const container = document.getElementById("mr-status-filter");
+  container.innerHTML =
+    MR_STATUS_FILTER_BUTTONS.map(renderMrStatusFilterButton).join("") +
+    `<button type="button" id="mr-status-filter-clear" class="mr-status-filter-button"` +
+    ` title="${MR_STATUS_FILTER_CLEAR_TOOLTIP}">${MR_STATUS_FILTER_CLEAR_LABEL}</button>`;
+  container
+    .querySelectorAll("[data-status]")
+    .forEach((b) => b.addEventListener("click", () => toggleMrStatusFilter(b.dataset.status)));
+  document.getElementById("mr-status-filter-clear").addEventListener("click", clearMrStatusFilter);
+  updateMrStatusFilterButtons();
+}
+
+function renderMrStatusFilterButton(def) {
+  const tooltip = `${MR_STATUS_LABELS[def.status]}${MR_STATUS_FILTER_TOOLTIP}`;
+  return (
+    `<button type="button" class="mr-status-filter-button" data-status="${def.status}"` +
+    ` aria-pressed="false" title="${escapeAttr(tooltip)}">${def.label}` +
+    `<span class="mr-status-filter-count"></span></button>`
+  );
+}
+
+/**
+ * MRステータスフィルタのボタンの件数・選択状態を更新する
+ *
+ * 未選択の場合はクリアボタンを無効化する。
+ */
+function updateMrStatusFilterButtons() {
+  MR_STATUS_FILTER_BUTTONS.forEach((def) => {
+    const button = document.querySelector(`#mr-status-filter [data-status="${def.status}"]`);
+    button.setAttribute("aria-pressed", String(selectedMrStatuses.has(def.status)));
+    const count = mrStatusSummary.counts[def.status] ?? 0;
+    button.querySelector(".mr-status-filter-count").textContent = def.showCount === false ? "" : ` ${count}`;
+  });
+  document.getElementById("mr-status-filter-clear").disabled = selectedMrStatuses.size === 0;
+}
+
+function toggleMrStatusFilter(status) {
+  if (selectedMrStatuses.has(status)) selectedMrStatuses.delete(status);
+  else selectedMrStatuses.add(status);
+  onMrStatusFilterChanged();
+}
+
+function clearMrStatusFilter() {
+  selectedMrStatuses.clear();
+  onMrStatusFilterChanged();
+}
+
+function isMrStatusFilterActive() {
+  return selectedMrStatuses.size > 0;
+}
+
+/**
+ * MRステータスフィルタの選択変更をIssue一覧・MR一覧に反映する
+ *
+ * 選択中はIssue一覧・MR一覧の既存フィルタを隠す。
+ */
+function onMrStatusFilterChanged() {
+  updateMrStatusFilterButtons();
+  const active = isMrStatusFilterActive();
+  document.getElementById("issue-filter").hidden = active;
+  document.getElementById("subtask-filter").hidden = active;
+  if (currentProjectId !== null) loadIssues().catch(() => {});
+  renderSubtaskList();
+}
+
+/**
+ * 表示中リポジトリで、選択中のステータスのMRを持つIssue番号
+ */
+function matchedIssueNumbers() {
+  const byIssue = mrStatusSummary.projects[currentProjectId] || {};
+  return Object.entries(byIssue)
+    .filter(([, statuses]) => statuses.some((status) => selectedMrStatuses.has(status)))
+    .map(([number]) => Number(number));
+}
+
+function matchedIssueKey() {
+  if (!isMrStatusFilterActive() || currentProjectId === null) return "";
+  return `${currentProjectId}:${matchedIssueNumbers().sort((a, b) => a - b).join(",")}`;
+}
+
+/**
+ * 集計の更新で絞り込み結果が変わった場合に、Issue一覧を再取得する
+ */
+function refreshMatchedIssues() {
+  if (matchedIssueKey() === lastMatchedIssueKey) return;
+  if (isMrStatusFilterActive() && currentProjectId !== null) loadIssues().catch(() => {});
+}
+
+async function pollMrStatuses() {
+  try {
+    if (!document.hidden) await refreshMrStatuses();
+  } catch (error) {
+    // サーバー再起動中などで取得に失敗しても監視を継続する
+  }
+  setTimeout(pollMrStatuses, MR_STATUS_POLL_MS);
+}
+
+async function refreshMrStatuses() {
+  mrStatusSummary = await fetch("/api/mr-statuses").then((r) => r.json());
+  updateMrStatusFilterButtons();
+  refreshMatchedIssues();
+}
+
 // ヘッダーに表示するClaudeのレート制限枠（core/rate_limits.pyと合わせる）
 const RATE_LIMIT_WINDOWS = [
   { type: "five_hour", label: "5h" },
@@ -434,12 +567,10 @@ const DEPLOY_POLL_MS = 2000;
 const DEPLOY_TIMEOUT_MS = 30 * 60 * 1000;
 // サーバー再起動を表すデプロイ結果のrestartsの値（core/supervisor_control.pyと合わせる）
 const DEPLOY_RESTART_SERVER = "restart_server";
-const DEPLOY_DEFINED_TOOLTIP = "リポジトリに定義したデプロイ手順を実行します（数字はMergedのMR数。デプロイすると動作確認できます）";
+const DEPLOY_DEFINED_TOOLTIP = "リポジトリに定義したデプロイ手順を実行します（デプロイすると動作確認できます）";
 const DEPLOY_UNDEFINED_TOOLTIP = "デプロイが定義されていません（.claude-tower/deploy.json）";
-// リポジトリ見出しのボタン名（件数を併記する）
-const REVIEW_BUTTON_LABEL = "Rev";
-const DEPLOY_BUTTON_LABEL = "Dep";
-const REVIEW_TOOLTIP = "レビュー待ち（Resolved）のMR数（クリック操作は未実装）";
+// リポジトリ見出しのDeployボタン名
+const DEPLOY_BUTTON_LABEL = "Deploy";
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -495,6 +626,7 @@ async function init() {
   pollWorkers();
   pollMerges();
   pollRateLimits();
+  pollMrStatuses();
   pollSubtaskStates();
 }
 
@@ -545,18 +677,15 @@ function highlightSelectedProject() {
  * リポジトリ見出しの表示
  *
  * 「Repo #番号 表示名」とし、番号部分はGitHubのリポジトリページへのリンクにする。
- * 右端にReview・Deployボタンを置き、レビュー待ち・デプロイ待ちのMR数を併記する。
- * Reviewボタンはクリックしても何もしない。
+ * 右端にDeployボタンを置く。
  * デプロイ未定義のリポジトリではDeployボタンを無効化する。
  */
 function renderRepoHeading(project) {
   const label = project.repo_number ? `Repo #${project.repo_number}` : "Repo";
   document.getElementById("repo-heading").innerHTML =
     `${renderTitleNumber(label, project.repo_url)}<span id="repo-title">${escapeHtml(project.display_name)}</span>` +
-    `<button type="button" id="review-button" class="title-action-button" title="${REVIEW_TOOLTIP}">${REVIEW_BUTTON_LABEL}</button>` +
     `<button type="button" id="deploy-button" class="title-action-button">${DEPLOY_BUTTON_LABEL}</button>`;
   document.getElementById("deploy-status").textContent = "";
-  refreshIssueListMrCounts().catch(() => {});
   const button = document.getElementById("deploy-button");
   button.disabled = !project.deploy_defined;
   button.title = project.deploy_defined ? DEPLOY_DEFINED_TOOLTIP : DEPLOY_UNDEFINED_TOOLTIP;
@@ -662,17 +791,39 @@ async function waitForDeployResult(projectId) {
  * Issue一覧の読み込み
  *
  * フィルタに該当するIssueを表示し、表示したIssueを返す。
+ * MRステータスフィルタの選択中は、Open・Closeを問わず該当Issueを表示する。
  */
 async function loadIssues() {
-  const state = document.getElementById("issue-filter").value;
-  const issues = await fetch(
-    `/api/projects/${currentProjectId}/issues?state=${encodeURIComponent(state)}`
-  ).then((r) => r.json());
+  lastMatchedIssueKey = matchedIssueKey();
+  const issues = isMrStatusFilterActive()
+    ? await fetchIssuesByMrStatus()
+    : await fetchIssues(document.getElementById("issue-filter").value);
   const listEl = document.getElementById("issue-list-items");
   listEl.innerHTML = "";
   if (issues.length === 0) listEl.innerHTML = '<li class="empty">Issueがありません。</li>';
   else issues.forEach((issue) => listEl.appendChild(renderIssueItem(issue)));
   return issues;
+}
+
+async function fetchIssues(state) {
+  return fetch(
+    `/api/projects/${currentProjectId}/issues?state=${encodeURIComponent(state)}`
+  ).then((r) => r.json());
+}
+
+/**
+ * 選択中のステータスのMRを持つIssueを、Open・Closeの両方から取得する
+ *
+ * 並び順はIssue番号の降順とする。
+ */
+async function fetchIssuesByMrStatus() {
+  const numbers = new Set(matchedIssueNumbers());
+  if (numbers.size === 0) return [];
+  const lists = await Promise.all(ISSUE_STATES.map(fetchIssues));
+  return lists
+    .flat()
+    .filter((issue) => numbers.has(issue.number))
+    .sort((a, b) => b.number - a.number);
 }
 
 /**
@@ -712,7 +863,13 @@ function updateIssueItemCounts(li, counts) {
   applyIssueToggleState(li.querySelector(".issue-item-toggle"), li.dataset.state === "OPEN", counts);
 }
 
+/**
+ * MR一覧の表示対象
+ *
+ * MRステータスフィルタの選択中は、選択中のいずれかのステータスのMRを表示する。
+ */
 function filterSubtasks(subtasks) {
+  if (isMrStatusFilterActive()) return subtasks.filter((s) => selectedMrStatuses.has(mrStatus(s)));
   const states = SUBTASK_FILTER_STATES[document.getElementById("subtask-filter").value];
   return subtasks.filter((s) => states.includes(s.lifecycle_state));
 }
@@ -857,11 +1014,13 @@ function renderSubtaskRow(s) {
  *
  * 未解決のMRで実装ジョブが実行中の場合はResolvingとする。
  * ResolvedのMRがマージ待ち・マージ中の場合はMergingとする。
+ * MergedのMRのリポジトリでデプロイ実行中の場合はDeployingとする。
  */
 function mrStatus(s) {
   const isOpen = SUBTASK_FILTER_STATES.unresolved.includes(s.lifecycle_state);
   if (isOpen && isJobActive(s.latest_job)) return MR_STATUS.resolving;
   if (s.lifecycle_state === LIFECYCLE.resolved && isMergeActive(s.latest_merge)) return MR_STATUS.merging;
+  if (s.lifecycle_state === LIFECYCLE.merged && s.deploying) return MR_STATUS.deploying;
   return s.lifecycle_state;
 }
 
@@ -1327,25 +1486,6 @@ async function refreshIssueListMrCounts() {
   document
     .querySelectorAll(".issue-item")
     .forEach((li) => updateIssueItemCounts(li, counts[li.dataset.number] || countMrs([])));
-  updateRepoMrTotals(Object.values(counts));
-}
-
-/**
- * リポジトリ見出しのReview・Deployボタンの件数を更新する
- *
- * Reviewはレビュー待ちMRがある場合にプライマリ色にする。
- * Deployボタンの色は従来どおり未取り込みの対応の有無で決める。
- */
-function updateRepoMrTotals(issueCounts) {
-  const sum = (key) => issueCounts.reduce((total, c) => total + (c[key] || 0), 0);
-  const review = sum("review");
-  const reviewButton = document.getElementById("review-button");
-  if (reviewButton) {
-    reviewButton.textContent = `${REVIEW_BUTTON_LABEL} ${review}`;
-    reviewButton.classList.toggle("primary", review > 0);
-  }
-  const deployButton = document.getElementById("deploy-button");
-  if (deployButton) deployButton.textContent = `${DEPLOY_BUTTON_LABEL} ${sum("undeployed")}`;
 }
 
 /**
@@ -1360,8 +1500,6 @@ function countMrs(subtasks) {
     resolved: countIn(MR_COUNT_RESOLVED_STATES),
     unresolved: countIn(SUBTASK_FILTER_STATES.unresolved),
     total: counted.length,
-    review: countIn(MR_COUNT_REVIEW_STATES),
-    undeployed: countIn(MR_COUNT_UNDEPLOYED_STATES),
   };
 }
 
@@ -1482,7 +1620,10 @@ async function openCreatedIssueAndSubtask(issue, subtaskId) {
 function supplementCreatedIssue(issue) {
   const listEl = document.getElementById("issue-list-items");
   const isListed = listEl.querySelector(`.issue-item[data-number="${issue.number}"]`);
-  const showsOpen = ISSUE_FILTERS_SHOWING_NEW_ISSUE.includes(document.getElementById("issue-filter").value);
+  // MRステータスフィルタの選択中は、集計の更新を待って一覧に反映させる
+  const showsOpen =
+    !isMrStatusFilterActive() &&
+    ISSUE_FILTERS_SHOWING_NEW_ISSUE.includes(document.getElementById("issue-filter").value);
   if (!isListed && showsOpen) {
     listEl.querySelector(".empty")?.remove();
     const subtasks = issue.number === currentIssueNumber ? currentSubtasks : [];
@@ -1644,6 +1785,7 @@ async function showReport(jobId, subtaskId) {
 }
 
 setupExpanders();
+setupMrStatusFilter();
 document.getElementById("issue-create-form").addEventListener("submit", onSubmitIssueForm);
 document.getElementById("issue-filter").addEventListener("change", loadIssues);
 document.getElementById("subtask-filter").addEventListener("change", renderSubtaskList);

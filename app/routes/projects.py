@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy import case, func
 
 from core.db import SessionLocal
-from core.deploy import is_deploy_defined
+from core.deploy import is_deploy_defined, is_deploy_running
 from core.github_client import (
     GitHubClientError,
     close_issue,
@@ -30,10 +30,7 @@ UNRESOLVED_LIFECYCLE_STATES = LifecycleState.OPEN_STATES
 RESOLVED_LIFECYCLE_STATES = LifecycleState.MERGED_STATES
 # Issue一覧のMR数から除外するlifecycle_state（マージされずクローズ）
 UNCOUNTED_LIFECYCLE_STATE = LifecycleState.CANCELED
-# レビュー待ち・デプロイ待ちとみなすlifecycle_state
-REVIEW_LIFECYCLE_STATE = LifecycleState.RESOLVED
-UNDEPLOYED_LIFECYCLE_STATE = LifecycleState.MERGED
-EMPTY_MR_COUNTS = {"resolved": 0, "unresolved": 0, "total": 0, "review": 0, "undeployed": 0}
+EMPTY_MR_COUNTS = {"resolved": 0, "unresolved": 0, "total": 0}
 
 
 def _latest_job_summary(session, subtask_id: int) -> dict | None:
@@ -98,11 +95,10 @@ def get_mr_counts(project_id: int):
 
 
 def _mr_counts_by_issue(session, project_id: int) -> dict[int, dict]:
-    """Issueごとの解決済MR数・未解決MR数・MR総数・レビュー待ちMR数・デプロイ待ちMR数
+    """Issueごとの解決済MR数・未解決MR数・MR総数
 
     マージされずクローズされたMRはいずれにも数えない。
     未解決MR数は一覧の閉じるボタンの活性判定に使う。
-    レビュー待ち・デプロイ待ちMR数はリポジトリ見出しの件数表示に使う。
     """
     rows = (
         session.query(
@@ -110,8 +106,6 @@ def _mr_counts_by_issue(session, project_id: int) -> dict[int, dict]:
             _count_in(RESOLVED_LIFECYCLE_STATES),
             _count_in(UNRESOLVED_LIFECYCLE_STATES),
             func.count(),
-            _count_in((REVIEW_LIFECYCLE_STATE,)),
-            _count_in((UNDEPLOYED_LIFECYCLE_STATE,)),
         )
         .filter_by(project_id=project_id)
         .filter(Subtask.lifecycle_state != UNCOUNTED_LIFECYCLE_STATE)
@@ -119,14 +113,8 @@ def _mr_counts_by_issue(session, project_id: int) -> dict[int, dict]:
         .all()
     )
     return {
-        number: {
-            "resolved": resolved,
-            "unresolved": unresolved,
-            "total": total,
-            "review": review,
-            "undeployed": undeployed,
-        }
-        for number, resolved, unresolved, total, review, undeployed in rows
+        number: {"resolved": resolved, "unresolved": unresolved, "total": total}
+        for number, resolved, unresolved, total in rows
     }
 
 
@@ -197,12 +185,17 @@ def _rename_subtasks(session, project: Project, number: int, old_title: str, new
 
 
 def _subtask_summaries(session, project: Project, number: int) -> list[dict]:
+    """IssueのMR一覧
+
+    deployingは画面でDeployingを導出するため、リポジトリのデプロイ実行中かを返す。
+    """
     subtasks = (
         session.query(Subtask)
         .filter_by(project_id=project.id, github_issue_number=number)
         .order_by(Subtask.id)
         .all()
     )
+    deploying = is_deploy_running(project.id)
     return [
         {
             "id": s.id,
@@ -217,6 +210,7 @@ def _subtask_summaries(session, project: Project, number: int) -> list[dict]:
             ),
             "latest_job": _latest_job_summary(session, s.id),
             "latest_merge": latest_merge_summary(session, s.id),
+            "deploying": deploying,
         }
         for s in subtasks
     ]

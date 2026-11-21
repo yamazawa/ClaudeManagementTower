@@ -13,8 +13,8 @@ class LifecycleState:
     DEPLOYED : マージ済で、デプロイしたソースに含まれる
     CANCELED : マージせずクローズ済
 
-    画面のResolving（実装中）・Merging（マージ中）は保存しない。
-    DRAFT・RESOLVEDと実行中のジョブから画面側で導出する。
+    Resolving（実装中）・Merging（マージ中）・Deploying（デプロイ中）は保存しない。
+    lifecycle_stateと実行中の処理から導出する（core/mr_status.py）。
     """
 
     DRAFT = "draft"
