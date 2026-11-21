@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     pr_sync_interval_seconds: float = 5.0
     self_repo: str = "yamazawa/ClaudeManagementTower"
     claude_credentials_path: str = ""
-    claude_usage_cache_seconds: float = 60.0
+    claude_usage_refresh_interval_seconds: float = 300.0
 
 
 settings = Settings()
