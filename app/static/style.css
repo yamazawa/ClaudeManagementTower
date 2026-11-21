@@ -87,6 +87,10 @@ header h1 {
   white-space: nowrap;
 }
 
+.project-item[hidden] {
+  display: none;
+}
+
 #issue-create-form,
 #subtask-form {
   margin-top: 10px;

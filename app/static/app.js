@@ -414,6 +414,7 @@ const REPO_LABEL_PREFIX = "Repo";
 const PROJECT_COUNT_TOOLTIP = "OpenなIssueの未解決MR数 / 解決済MR数";
 const PROJECT_COUNT_FILTERED_TOOLTIP = "OpenなIssueで、選択中のステータスのMR数";
 const PROJECT_LIST_NO_PROJECT_TEXT = "リポジトリが登録されていません。";
+const PROJECT_LIST_NO_MATCH_TEXT = "選択中のステータスのMRを持つリポジトリはありません。";
 
 /**
  * ヘッダーのMRステータスフィルタの初期化
@@ -480,6 +481,7 @@ function isMrStatusFilterActive() {
  * MRステータスフィルタの選択変更をIssue一覧・MR一覧に反映する
  *
  * 選択中はIssue一覧・MR一覧の既存フィルタを隠す。
+ * リポジトリを選択し直した場合は、Issue一覧の読み込みを選択処理に任せる。
  */
 function onMrStatusFilterChanged() {
   updateMrStatusFilterButtons();
@@ -487,8 +489,8 @@ function onMrStatusFilterChanged() {
   document.getElementById("issue-filter").hidden = active;
   document.getElementById("subtask-filter").hidden = active;
   refreshIssueCounts();
-  refreshProjectCounts();
-  if (currentProjectId !== null) loadIssues().catch(() => {});
+  const reselected = refreshProjectCounts();
+  if (currentProjectId !== null && !reselected) loadIssues().catch(() => {});
   renderSubtaskList();
 }
 
@@ -635,6 +637,7 @@ async function init() {
   listEl.innerHTML = "";
   if (allProjects.length === 0) listEl.innerHTML = `<li class="empty">${PROJECT_LIST_NO_PROJECT_TEXT}</li>`;
   else allProjects.forEach((project) => listEl.appendChild(renderProjectItem(project)));
+  listEl.insertAdjacentHTML("beforeend", `<li id="project-list-no-match" class="empty" hidden>${PROJECT_LIST_NO_MATCH_TEXT}</li>`);
   pollOpenIssues();
   pollWorkers();
   pollMerges();
@@ -758,17 +761,53 @@ function projectCountText(projectId) {
   return `${unresolved}/${resolved}`;
 }
 
+/**
+ * MRステータスフィルタの選択中に、該当MRが0件のリポジトリか
+ *
+ * OpenなIssue番号の取得前は判定できないため表示する。
+ */
+function isProjectFilteredOut(projectId) {
+  if (!isMrStatusFilterActive() || !openIssueNumbersByProject.has(projectId)) return false;
+  return countSelectedStatusOpenIssueMrs(projectId) === 0;
+}
+
 function renderProjectItemCount(li) {
+  const projectId = Number(li.dataset.projectId);
   const el = li.querySelector(".project-count");
-  el.textContent = projectCountText(Number(li.dataset.projectId));
+  el.textContent = projectCountText(projectId);
   el.title = isMrStatusFilterActive() ? PROJECT_COUNT_FILTERED_TOOLTIP : PROJECT_COUNT_TOOLTIP;
+  li.hidden = isProjectFilteredOut(projectId);
 }
 
 /**
- * リポジトリ一覧のMR数を更新する
+ * リポジトリ一覧のMR数・表示有無を更新する
+ *
+ * MRステータスフィルタの選択中は、該当MRが0件のリポジトリを隠す。
+ * リポジトリを選択し直した場合はtrueを返す。
  */
 function refreshProjectCounts() {
-  document.querySelectorAll(".project-item").forEach(renderProjectItemCount);
+  const items = [...document.querySelectorAll(".project-item")];
+  items.forEach(renderProjectItemCount);
+  const noMatch = document.getElementById("project-list-no-match");
+  if (noMatch) noMatch.hidden = items.some((li) => !li.hidden);
+  return selectFirstVisibleProject(items);
+}
+
+/**
+ * MRステータスフィルタの選択中に、表示中の先頭のリポジトリを選択する
+ *
+ * 選択中のリポジトリが表示中の場合は選択し直さない。
+ * 表示中のリポジトリが無い場合は選択を変えない。
+ */
+function selectFirstVisibleProject(items) {
+  if (!isMrStatusFilterActive()) return false;
+  const visible = items.filter((li) => !li.hidden);
+  if (visible.some((li) => Number(li.dataset.projectId) === currentProjectId)) return false;
+  const [first] = visible;
+  if (!first) return false;
+  const project = allProjects.find((p) => p.id === Number(first.dataset.projectId));
+  selectProject(project).catch(() => {});
+  return true;
 }
 
 /**
