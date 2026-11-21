@@ -640,8 +640,7 @@ async function init() {
   const listEl = document.getElementById("project-list-items");
   listEl.innerHTML = "";
   if (allProjects.length === 0) listEl.innerHTML = `<li class="empty">${PROJECT_LIST_NO_PROJECT_TEXT}</li>`;
-  else allProjects.forEach((project) => listEl.appendChild(renderProjectItem(project)));
-  listEl.insertAdjacentHTML("beforeend", `<li id="project-list-no-match" class="empty" hidden>${PROJECT_LIST_NO_MATCH_TEXT}</li>`);
+  else renderProjectItems(listEl);
   pollOpenIssues();
   pollWorkers();
   pollMerges();
@@ -691,6 +690,14 @@ function highlightSelectedProject() {
   document
     .querySelectorAll(".project-item")
     .forEach((li) => li.classList.toggle("active", Number(li.dataset.projectId) === currentProjectId));
+}
+
+/**
+ * リポジトリ一覧の各行と、フィルタで全て隠れた場合の文言を並べる
+ */
+function renderProjectItems(listEl) {
+  allProjects.forEach((project) => listEl.appendChild(renderProjectItem(project)));
+  listEl.insertAdjacentHTML("beforeend", `<li id="project-list-no-match" class="empty" hidden>${PROJECT_LIST_NO_MATCH_TEXT}</li>`);
 }
 
 /**
@@ -972,9 +979,10 @@ async function waitForDeployResult(projectId) {
 async function loadIssues() {
   lastMatchedIssueKey = matchedIssueKey();
   const projectId = currentProjectId;
+  const filtered = isMrStatusFilterActive();
   const state = document.getElementById("issue-filter").value;
-  const issues = isMrStatusFilterActive() ? await fetchIssuesByMrStatus() : await fetchIssues(state);
-  if (!isMrStatusFilterActive() && state === "open") {
+  const issues = filtered ? await fetchIssuesByMrStatus() : await fetchIssues(state);
+  if (!filtered && state === "open") {
     setOpenIssueNumbers(projectId, issues);
     refreshProjectCounts();
   }
