@@ -1078,18 +1078,18 @@ function highlightSelectedSubtaskRow() {
  * 表示中のMRが無い場合は未選択とし、縦長表示ではMR内容を閉じる。
  * 縦長表示ではIssue内容を開き、MR一覧の表示が1件のみの場合は閉じる。
  * 表示が複数件の場合は、MRを選択し直せるよう開いたままにする。
+ * 開閉は内容の切り替え後に行い、切り替え前の内容で開閉しないようにする。
  */
 async function selectIssue(number) {
   currentIssueNumber = number;
   currentSelectedSubtaskId = null;
-  autoSetSectionExpanded(SECTION_IDS.issue, true);
   document
     .querySelectorAll(".issue-item")
     .forEach((el) => el.classList.toggle("active", Number(el.dataset.number) === number));
 
   await refreshIssueDetail();
   selectFirstSubtask();
-  if (filterSubtasks(currentSubtasks).length === 1) autoSetSectionExpanded(SECTION_IDS.issue, false);
+  autoSetSectionExpanded(SECTION_IDS.issue, filterSubtasks(currentSubtasks).length !== 1);
 }
 
 /**
