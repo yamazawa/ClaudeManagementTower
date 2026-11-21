@@ -395,7 +395,6 @@ function renderMergePill(m) {
 // ヘッダーのMRステータスフィルタで選択中の表示ステータス
 const selectedMrStatuses = new Set();
 // 全リポジトリのMRステータス集計（/api/mr-statusesの応答）
-// projectsはリポジトリID→Issue番号→ステータス別MR数とする
 let mrStatusSummary = { counts: {}, projects: {} };
 // Issue一覧に表示中の絞り込み結果（変化した場合のみIssue一覧を再取得する）
 let lastMatchedIssueKey = "";
@@ -481,7 +480,7 @@ function onMrStatusFilterChanged() {
 function matchedIssueNumbers() {
   const byIssue = mrStatusSummary.projects[currentProjectId] || {};
   return Object.entries(byIssue)
-    .filter(([, statusCounts]) => Object.keys(statusCounts).some((status) => selectedMrStatuses.has(status)))
+    .filter(([, statuses]) => statuses.some((status) => selectedMrStatuses.has(status)))
     .map(([number]) => Number(number));
 }
 
