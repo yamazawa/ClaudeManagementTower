@@ -22,7 +22,14 @@ body {
   font: 15px/1.7 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
+/* ヘッダー
+
+スクロールしても常に画面上端に表示する。
+*/
 header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
   background: #18243c;
   color: #fff;
   padding: 16px 24px;
