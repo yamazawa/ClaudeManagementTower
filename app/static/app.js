@@ -821,15 +821,29 @@ async function fetchIssues(state) {
  * 選択中のステータスのMRを持つIssueを、Open・Closeの両方から取得する
  *
  * 並び順はIssue番号の降順とする。
+ * 一覧に無い番号（PR番号に紐づいたMRなど）は個別に取得して表示する。
  */
 async function fetchIssuesByMrStatus() {
   const numbers = new Set(matchedIssueNumbers());
   if (numbers.size === 0) return [];
   const lists = await Promise.all(ISSUE_STATES.map(fetchIssues));
-  return lists
-    .flat()
-    .filter((issue) => numbers.has(issue.number))
-    .sort((a, b) => b.number - a.number);
+  const listed = lists.flat().filter((issue) => numbers.has(issue.number));
+  const listedNumbers = new Set(listed.map((issue) => issue.number));
+  const missing = [...numbers].filter((number) => !listedNumbers.has(number));
+  const extra = await Promise.all(missing.map(fetchUnlistedIssue));
+  return [...listed, ...extra].sort((a, b) => b.number - a.number);
+}
+
+/**
+ * Issue一覧APIに含まれない番号を個別に取得する
+ *
+ * 取得に失敗した場合も、MRへ辿れるよう番号だけの行にする。
+ */
+async function fetchUnlistedIssue(number) {
+  const response = await fetch(`/api/projects/${currentProjectId}/issues/${number}`);
+  const detail = response.ok ? await response.json() : { number, title: `#${number}`, state: "CLOSED" };
+  const subtasks = detail.subtasks || [];
+  return { number, title: detail.title, state: detail.state, url: detail.url, mr_counts: countMrs(subtasks) };
 }
 
 /**
