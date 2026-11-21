@@ -445,7 +445,7 @@ function mrStatusFilterCount(status) {
 /**
  * MRステータスフィルタのボタンの選択状態・選択可否・件数を更新する
  *
- * MRが0件のステータスは無効化し、件数も表示しない。
+ * MRが0件のステータスは無効化する（件数は0と表示する）。
  */
 function updateMrStatusFilterButtons() {
   MR_STATUS_FILTER_BUTTONS.forEach((def) => {
@@ -453,7 +453,7 @@ function updateMrStatusFilterButtons() {
     const count = mrStatusFilterCount(def.status);
     button.setAttribute("aria-pressed", String(selectedMrStatuses.has(def.status)));
     button.disabled = count === 0;
-    button.querySelector(".mr-status-filter-count").textContent = count === 0 ? "" : String(count);
+    button.querySelector(".mr-status-filter-count").textContent = String(count);
   });
 }
 

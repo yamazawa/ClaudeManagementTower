@@ -215,7 +215,7 @@ header h1 {
   margin-left: 0;
 }
 
-/* ステータス名の下に件数を小さく表示する（0件は空文字のため高さを確保しておく） */
+/* ステータス名の下に件数を小さく表示する */
 .mr-status-filter-segments .mr-status-filter-button {
   display: inline-flex;
   flex-direction: column;
@@ -227,7 +227,6 @@ header h1 {
   font-size: 9px;
   font-weight: normal;
   line-height: 1;
-  min-height: 9px;
   opacity: 0.85;
 }
 
