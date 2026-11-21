@@ -474,6 +474,16 @@ section.collapsed > .section-title-row {
   border-top: 1px solid var(--line);
 }
 
+/* ペイン先頭の小見出し（作成フォームの見出し）
+
+ペインの見出しの直下に置くため、上の余白と区切り線は付けない。
+*/
+.section-heading-top {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
 /* 一覧の状態フィルタ
 
 選択欄は他の入力欄と枠線・角丸を揃える。
