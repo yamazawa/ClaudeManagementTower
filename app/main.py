@@ -6,6 +6,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.routes import deploy, jobs, merges, mr_statuses, projects, subtasks, system, workers
+from core.claude_usage import start_refresh_loop as start_usage_refresh_loop
 from core.config import settings
 from core.db import ensure_default_project, init_db
 from core.merge_queue import start_merge_loop
@@ -21,9 +22,11 @@ async def lifespan(app: FastAPI):
     ensure_default_project()
     stop_pr_sync = start_sync_loop(settings.pr_sync_interval_seconds)
     stop_merge_loop = start_merge_loop()
+    stop_usage_refresh = start_usage_refresh_loop(settings.claude_usage_refresh_interval_seconds)
     yield
     stop_pr_sync.set()
     stop_merge_loop.set()
+    stop_usage_refresh.set()
 
 
 app = FastAPI(title="Claude管理塔", lifespan=lifespan)

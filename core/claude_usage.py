@@ -7,7 +7,7 @@ SDKのRateLimitEventは状態変化時しか通知されず使用率も欠ける
 
 import json
 import os
-import time
+import threading
 import urllib.request
 from collections.abc import Callable
 from datetime import datetime
@@ -20,7 +20,7 @@ OAUTH_BETA_HEADER = "oauth-2025-04-20"
 USER_AGENT = "claude-tower"
 REQUEST_TIMEOUT_SECONDS = 5
 
-_cache: dict = {"fetched_at": None, "usage": None}
+_cache: dict = {"usage": None}
 
 
 def credentials_path() -> Path:
@@ -98,19 +98,54 @@ def fetch_usage(
         return None
 
 
-def get_usage(fetcher: Callable[[], dict | None] = fetch_usage, now: Callable[[], float] = time.monotonic) -> dict | None:
-    """使用率APIの応答をキャッシュ付きで返す
+def refresh_usage(fetcher: Callable[[], dict | None] = fetch_usage) -> bool:
+    """使用率APIを取得して保持値を更新する
 
-    画面のポーリング毎にAPIを呼ばないよう、失敗時も含めて一定時間キャッシュする。
+    取得に失敗した場合は前回の取得値を残す。
+    更新できたかを返す。
     """
-    fetched_at = _cache["fetched_at"]
-    if fetched_at is not None and now() - fetched_at < settings.claude_usage_cache_seconds:
-        return _cache["usage"]
-    _cache["usage"] = fetcher()
-    _cache["fetched_at"] = now()
+    usage = fetcher()
+    if usage is None:
+        return False
+    _cache["usage"] = usage
+    return True
+
+
+def get_usage() -> dict | None:
+    """保持している使用率APIの最新取得値を返す
+
+    画面のポーリング毎にAPIは呼ばず、定期更新タスクの取得値を返す。
+    """
     return _cache["usage"]
 
 
 def clear_cache() -> None:
-    _cache["fetched_at"] = None
     _cache["usage"] = None
+
+
+def _refresh_loop(
+    stop_event: threading.Event, interval_seconds: float, fetcher: Callable[[], dict | None]
+) -> None:
+    while not stop_event.is_set():
+        try:
+            refresh_usage(fetcher)
+        except Exception as exc:  # noqa: BLE001
+            # 一時的な失敗で定期更新を止めない
+            print(f"[claude_usage] 使用率の取得に失敗しました: {exc}")
+        stop_event.wait(interval_seconds)
+
+
+def start_refresh_loop(
+    interval_seconds: float, fetcher: Callable[[], dict | None] = fetch_usage
+) -> threading.Event:
+    """使用率の定期更新をバックグラウンドで開始する
+
+    起動直後に1回取得し、以降は指定間隔で取得する。
+    返したEventをsetすると停止する。
+    """
+    stop_event = threading.Event()
+    thread = threading.Thread(
+        target=_refresh_loop, args=(stop_event, interval_seconds, fetcher), daemon=True
+    )
+    thread.start()
+    return stop_event
