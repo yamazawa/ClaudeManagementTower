@@ -9,6 +9,15 @@ from claude_agent_sdk import (
     query,
 )
 
+from core.attachments import MAX_ATTACHMENT_BYTES
+
+# SDKとCLIプロセス間のJSONメッセージバッファ上限（SDK既定は1MB）
+# 添付画像をReadするとBase64化された内容が1メッセージで返るため既定値では溢れる。
+# 添付10件分を想定し、Base64化(約4/3倍)とJSONのオーバーヘッドを1.5倍で見込む。
+MAX_BUFFER_ATTACHMENT_COUNT = 10
+MAX_BUFFER_OVERHEAD_RATIO = 1.5
+MAX_BUFFER_SIZE = int(MAX_ATTACHMENT_BYTES * MAX_BUFFER_ATTACHMENT_COUNT * MAX_BUFFER_OVERHEAD_RATIO)
+
 SHELL_TOOL_NAMES = {"Bash", "PowerShell"}
 
 DANGEROUS_COMMAND_PATTERNS = [
@@ -105,6 +114,7 @@ async def run_claude(
         can_use_tool=restrict_to_worktree(worktree),
         permission_mode="acceptEdits",
         resume=resume,
+        max_buffer_size=MAX_BUFFER_SIZE,
         system_prompt={
             "type": "preset",
             "preset": "claude_code",
