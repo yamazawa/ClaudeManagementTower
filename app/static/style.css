@@ -164,8 +164,100 @@ header h1 {
 
 選択中（aria-pressed）のボタンはアクセント色にする。
 */
-#mr-status-filter {
+/* ステータスフィルタの右にDeployボタンとデプロイ結果を並べる */
+.header-bottom {
   margin-top: 8px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.header-deploy-button {
+  align-self: stretch;
+  font: inherit;
+  font-size: 12.5px;
+  padding: 2px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  cursor: pointer;
+}
+
+.header-deploy-button.primary {
+  border-color: var(--accent);
+  background: var(--accent);
+  font-weight: bold;
+}
+
+.header-deploy-button:hover:not(:disabled) {
+  filter: brightness(1.15);
+}
+
+.header-deploy-button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.header-deploy-status {
+  font-size: 12.5px;
+}
+
+.header-deploy-status:empty {
+  display: none;
+}
+
+/* デプロイ確認ダイアログ */
+.deploy-dialog {
+  max-width: min(480px, 95vw);
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.deploy-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.deploy-dialog-message {
+  margin: 0 0 8px;
+}
+
+.deploy-dialog-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.deploy-dialog-list label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: 8px;
+  padding: 4px 0;
+  cursor: pointer;
+}
+
+.deploy-dialog-name {
+  font-weight: 600;
+}
+
+.deploy-dialog-count,
+.deploy-dialog-note {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.deploy-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+#mr-status-filter {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;

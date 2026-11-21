@@ -149,6 +149,17 @@ def test_failed_step_skips_mark_deployed(monkeypatch, control):
     assert marked == []
 
 
+def test_finish_without_steps_marks_all_merged(monkeypatch, control):
+    marked = []
+    monkeypatch.setattr(deploy, "mark_all_merged_deployed", marked.append)
+
+    deploy.finish_without_steps(1)
+
+    assert marked == [1]
+    assert read_result(1) == {"status": "done", "restarts": [], "skipped": True}
+    assert control == []
+
+
 def test_command_runs_in_repo(tmp_path, control):
     script = "import pathlib; pathlib.Path('out.txt').write_text('ok')"
     run_deploy(1, str(tmp_path), "master", [{"type": "command", "run": f'"{sys.executable}" -c "{script}"'}])
