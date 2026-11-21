@@ -96,6 +96,7 @@ header h1 {
 
 タイトル入力欄の右に作成ボタンを右詰めで配置する。
 入力欄が残りの幅を埋め、状態表示は次の行に出す。
+入力欄は縦余白を持たず、作成ボタンの高さに揃えて伸ばす。
 */
 #issue-create-form,
 #subtask-form {
@@ -108,9 +109,10 @@ header h1 {
 #issue-create-form input,
 #subtask-form input {
   flex: 1 1 0;
+  align-self: stretch;
   min-width: 0;
   font: inherit;
-  padding: 8px 10px;
+  padding: 0 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
 }
