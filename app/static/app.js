@@ -447,15 +447,13 @@ function mrStatusFilterCount(status) {
  * MRステータスフィルタのボタンの選択状態・選択可否・件数を更新する
  *
  * MRが0件のステータスは無効化し、件数も表示しない。
- * ただし選択中のボタンは解除できるよう無効化しない。
  */
 function updateMrStatusFilterButtons() {
   MR_STATUS_FILTER_BUTTONS.forEach((def) => {
     const button = document.querySelector(`#mr-status-filter [data-status="${def.status}"]`);
     const count = mrStatusFilterCount(def.status);
-    const selected = selectedMrStatuses.has(def.status);
-    button.setAttribute("aria-pressed", String(selected));
-    button.disabled = !selected && count === 0;
+    button.setAttribute("aria-pressed", String(selectedMrStatuses.has(def.status)));
+    button.disabled = count === 0;
     button.querySelector(".mr-status-filter-count").textContent = count === 0 ? "" : String(count);
   });
 }
@@ -470,6 +468,22 @@ function toggleMrStatusFilter(status) {
   selectedMrStatuses.clear();
   if (!wasSelected) selectedMrStatuses.add(status);
   onMrStatusFilterChanged();
+}
+
+/**
+ * 選択中のステータスが0件になった場合に、選択を次のステータスへ移す
+ *
+ * 後続で1件以上あるステータスを選択する。
+ * 該当が無い場合（Merged選択中など）は未選択に戻す。
+ * 選択を変更した場合はtrueを返す。
+ */
+function moveEmptyMrStatusSelection() {
+  const index = MR_STATUS_FILTER_BUTTONS.findIndex((def) => selectedMrStatuses.has(def.status));
+  if (index < 0 || mrStatusFilterCount(MR_STATUS_FILTER_BUTTONS[index].status) > 0) return false;
+  const next = MR_STATUS_FILTER_BUTTONS.slice(index + 1).find((def) => mrStatusFilterCount(def.status) > 0);
+  selectedMrStatuses.clear();
+  if (next) selectedMrStatuses.add(next.status);
+  return true;
 }
 
 function isMrStatusFilterActive() {
@@ -526,6 +540,10 @@ async function pollMrStatuses() {
 
 async function refreshMrStatuses() {
   mrStatusSummary = await fetch("/api/mr-statuses").then((r) => r.json());
+  if (moveEmptyMrStatusSelection()) {
+    onMrStatusFilterChanged();
+    return;
+  }
   updateMrStatusFilterButtons();
   refreshProjectCounts();
   refreshMatchedIssues();
