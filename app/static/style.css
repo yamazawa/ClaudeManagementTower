@@ -572,8 +572,8 @@ section.collapsed > .section-title-row {
 }
 
 .issue-item .title-action-button {
-  font-size: 12px;
-  padding: 2px 10px;
+  font-size: 11px;
+  padding: 1px 8px;
 }
 
 /* 命名規則に沿っていないMR名 */
@@ -770,9 +770,9 @@ section.collapsed > .section-title-row {
   flex-shrink: 0;
   margin-left: auto;
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: normal;
-  padding: 3px 12px;
+  padding: 2px 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: #fff;
