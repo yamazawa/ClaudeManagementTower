@@ -1,13 +1,25 @@
-# サブタスク: 未選択時の表示ー①
+# サブタスク: 添付画像でジョブが失敗するー①
 
+core/claude_client.pyのClaudeAgentOptionsにmax_buffer_sizeを指定し、SDKのメッセージバッファ上限（既定1MB）を緩和する。
 
-## 実行指示（2026-11-21 11:49:25 UTC）
+添付画像をReadツールで読むと、Base64化された内容がSDKとCLIプロセス間のJSONメッセージとして返るため、既定の1MB上限を超えて"Failed to decode JSON: JSON message exceeded maximum buffer size"で失敗する事例がある（Issue #153 サブタスク3で確認済み）。
 
-全ての一覧表示に対して、以下ルールにして。
+対応方針：
+core/attachments.pyのMAX_ATTACHMENT_BYTES（添付ファイル1件あたりの上限）を使い、添付ファイル10件程度・Base64化とJSONのオーバーヘッドを見込んだ値をmax_buffer_sizeに設定する。
+目安はMAX_ATTACHMENT_BYTES * 10 * 1.5程度（約300MB）。
+値は定数として切り出し、根拠をコメントで残すこと。
 
-①一覧表示がフィルタや項目のステータス変更により選択項目が非表示になる場合は、その項目の選択をクリアして更新後のリストの先頭項目を選択し直す。
+既存テスト（pytest -k "claude_client or attachment"）が通ることを確認する。
+## 実行指示（2026-11-21 12:31:49 UTC）
 
-②①により親のリストの選択が変わった場合、その選択に合わせて表示する。選択項目がなくなる場合は、項目表示をなくして、エクスパンダを閉じる。
+core/claude_client.pyのClaudeAgentOptionsにmax_buffer_sizeを指定し、SDKのメッセージバッファ上限（既定1MB）を緩和する。
 
-③リポジトリ一覧からMR表示まで①、②について同時に更新するようにする。
+添付画像をReadツールで読むと、Base64化された内容がSDKとCLIプロセス間のJSONメッセージとして返るため、既定の1MB上限を超えて"Failed to decode JSON: JSON message exceeded maximum buffer size"で失敗する事例がある（Issue #153 サブタスク3で確認済み）。
+
+対応方針：
+core/attachments.pyのMAX_ATTACHMENT_BYTES（添付ファイル1件あたりの上限）を使い、添付ファイル10件程度・Base64化とJSONのオーバーヘッドを見込んだ値をmax_buffer_sizeに設定する。
+目安はMAX_ATTACHMENT_BYTES * 10 * 1.5程度（約300MB）。
+値は定数として切り出し、根拠をコメントで残すこと。
+
+既存テスト（pytest -k "claude_client or attachment"）が通ることを確認する。
 
