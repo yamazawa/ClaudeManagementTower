@@ -38,12 +38,12 @@
           <option value="closed">Close</option>
         </select>
       </h3>
-      <ul id="issue-list-items"></ul>
       <form id="issue-create-form">
         <input type="text" name="title" placeholder="タイトル" required />
         <button type="submit">作成</button>
         <p id="issue-create-status" class="empty"></p>
       </form>
+      <ul id="issue-list-items"></ul>
     </div>
   </section>
   <section id="subtask-list" aria-label="Issue内容">
@@ -62,12 +62,12 @@
           <option value="solved">解決済</option>
         </select>
       </h3>
-      <div id="subtask-list-container"></div>
       <form id="subtask-form">
         <input type="text" name="title" placeholder="MR名（空欄なら連番）" />
         <button type="submit">作成</button>
         <p id="subtask-form-status" class="empty"></p>
       </form>
+      <div id="subtask-list-container"></div>
     </div>
   </section>
   <section id="subtask-detail" aria-label="MR内容">
