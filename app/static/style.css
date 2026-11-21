@@ -356,23 +356,13 @@ section.collapsed > .section-title-row {
 
 /* ペイン内の小見出し
 
-Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り線を付ける。
+作成フォームと一覧の区切りが分かるよう、上に余白と区切り線を付ける。
 */
 .section-heading {
   font-size: 14px;
   margin: 16px 0 10px;
   padding-top: 12px;
   border-top: 1px solid var(--line);
-}
-
-/* リポジトリ見出し直下の小見出し
-
-見出しの下線と重ならないよう、上の区切り線と余白を外す。
-*/
-#issue-list .section-heading {
-  margin-top: 0;
-  padding-top: 0;
-  border-top: none;
 }
 
 /* 一覧の状態フィルタ

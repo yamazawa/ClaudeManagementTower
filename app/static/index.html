@@ -31,6 +31,11 @@
     <p id="deploy-status" class="title-status empty" role="status"></p>
     <p id="issue-list-placeholder" class="empty">左の一覧からリポジトリを選択してください。</p>
     <div id="issue-panel" hidden>
+      <form id="issue-create-form">
+        <input type="text" name="title" placeholder="タイトル" required />
+        <button type="submit">作成</button>
+        <p id="issue-create-status" class="empty"></p>
+      </form>
       <h3 class="section-heading section-heading-with-filter">
         Issue一覧
         <select id="issue-filter" class="heading-filter" aria-label="Issue一覧の表示フィルタ">
@@ -38,11 +43,6 @@
           <option value="closed">Close</option>
         </select>
       </h3>
-      <form id="issue-create-form">
-        <input type="text" name="title" placeholder="タイトル" required />
-        <button type="submit">作成</button>
-        <p id="issue-create-status" class="empty"></p>
-      </form>
       <ul id="issue-list-items"></ul>
     </div>
   </section>
@@ -55,6 +55,11 @@
       <p class="empty">左の一覧からIssueを選択してください。</p>
     </div>
     <div id="subtask-panel" hidden>
+      <form id="subtask-form">
+        <input type="text" name="title" placeholder="MR名（空欄なら連番）" />
+        <button type="submit">作成</button>
+        <p id="subtask-form-status" class="empty"></p>
+      </form>
       <h3 class="section-heading section-heading-with-filter">
         MR一覧
         <select id="subtask-filter" class="heading-filter" aria-label="MR一覧の表示フィルタ">
@@ -62,11 +67,6 @@
           <option value="solved">解決済</option>
         </select>
       </h3>
-      <form id="subtask-form">
-        <input type="text" name="title" placeholder="MR名（空欄なら連番）" />
-        <button type="submit">作成</button>
-        <p id="subtask-form-status" class="empty"></p>
-      </form>
       <div id="subtask-list-container"></div>
     </div>
   </section>
