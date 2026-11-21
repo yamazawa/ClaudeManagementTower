@@ -56,9 +56,7 @@ const MR_STATUS_FILTER_BUTTONS = [
   { status: MR_STATUS.merging, label: "→" },
   { status: MR_STATUS.merged, label: "Merged" },
 ];
-const MR_STATUS_FILTER_CLEAR_LABEL = "クリア";
 const MR_STATUS_FILTER_TOOLTIP = "のMRで絞り込み（全リポジトリでMRが無い場合は選択不可）";
-const MR_STATUS_FILTER_CLEAR_TOOLTIP = "ステータスでの絞り込みを解除";
 const MR_STATUS_POLL_MS = 3000;
 
 // MR一覧フィルタの値ごとに表示対象のlifecycle_stateを定義する
@@ -417,20 +415,17 @@ const PROJECT_LIST_NO_MATCH_TEXT = "選択中のステータスのMRを持つリ
  * ヘッダーのMRステータスフィルタの初期化
  *
  * ボタンは1度だけ作り、選択状態と選択可否はupdateMrStatusFilterButtonsで更新する。
- * ステータスのボタンは隙間なく並べるため、クリアボタンと分けてまとめる。
+ * ステータスのボタンは隙間なく並べる。
  */
 function setupMrStatusFilter() {
   const container = document.getElementById("mr-status-filter");
   container.innerHTML =
     `<span class="mr-status-filter-segments">` +
     MR_STATUS_FILTER_BUTTONS.map(renderMrStatusFilterButton).join("") +
-    `</span>` +
-    `<button type="button" id="mr-status-filter-clear" class="mr-status-filter-button"` +
-    ` title="${MR_STATUS_FILTER_CLEAR_TOOLTIP}">${MR_STATUS_FILTER_CLEAR_LABEL}</button>`;
+    `</span>`;
   container
     .querySelectorAll("[data-status]")
     .forEach((b) => b.addEventListener("click", () => toggleMrStatusFilter(b.dataset.status)));
-  document.getElementById("mr-status-filter-clear").addEventListener("click", clearMrStatusFilter);
   updateMrStatusFilterButtons();
 }
 
@@ -438,36 +433,57 @@ function renderMrStatusFilterButton(def) {
   const tooltip = `${MR_STATUS_LABELS[def.status]}${MR_STATUS_FILTER_TOOLTIP}`;
   return (
     `<button type="button" class="mr-status-filter-button" data-status="${def.status}"` +
-    ` aria-pressed="false" title="${escapeAttr(tooltip)}">${def.label}</button>`
+    ` aria-pressed="false" title="${escapeAttr(tooltip)}">` +
+    `<span class="mr-status-filter-label">${def.label}</span>` +
+    `<span class="mr-status-filter-count"></span></button>`
   );
 }
 
+function mrStatusFilterCount(status) {
+  return mrStatusSummary.counts[status] ?? 0;
+}
+
 /**
- * MRステータスフィルタのボタンの選択状態・選択可否を更新する
+ * MRステータスフィルタのボタンの選択状態・選択可否・件数を更新する
  *
- * MRが0件のステータスは無効化する。
- * ただし選択中のボタンは解除できるよう無効化しない。
- * 未選択の場合はクリアボタンを無効化する。
+ * MRが0件のステータスは無効化し、件数も表示しない。
  */
 function updateMrStatusFilterButtons() {
   MR_STATUS_FILTER_BUTTONS.forEach((def) => {
     const button = document.querySelector(`#mr-status-filter [data-status="${def.status}"]`);
-    const selected = selectedMrStatuses.has(def.status);
-    button.setAttribute("aria-pressed", String(selected));
-    button.disabled = !selected && (mrStatusSummary.counts[def.status] ?? 0) === 0;
+    const count = mrStatusFilterCount(def.status);
+    button.setAttribute("aria-pressed", String(selectedMrStatuses.has(def.status)));
+    button.disabled = count === 0;
+    button.querySelector(".mr-status-filter-count").textContent = count === 0 ? "" : String(count);
   });
-  document.getElementById("mr-status-filter-clear").disabled = selectedMrStatuses.size === 0;
 }
 
+/**
+ * MRステータスフィルタの選択を切り替える
+ *
+ * 選択できるステータスは1つのみとする。
+ */
 function toggleMrStatusFilter(status) {
-  if (selectedMrStatuses.has(status)) selectedMrStatuses.delete(status);
-  else selectedMrStatuses.add(status);
+  const wasSelected = selectedMrStatuses.has(status);
+  selectedMrStatuses.clear();
+  if (!wasSelected) selectedMrStatuses.add(status);
   onMrStatusFilterChanged();
 }
 
-function clearMrStatusFilter() {
+/**
+ * 選択中のステータスが0件になった場合に、選択を次のステータスへ移す
+ *
+ * 後続で1件以上あるステータスを選択する。
+ * 該当が無い場合（Merged選択中など）は未選択に戻す。
+ * 選択を変更した場合はtrueを返す。
+ */
+function moveEmptyMrStatusSelection() {
+  const index = MR_STATUS_FILTER_BUTTONS.findIndex((def) => selectedMrStatuses.has(def.status));
+  if (index < 0 || mrStatusFilterCount(MR_STATUS_FILTER_BUTTONS[index].status) > 0) return false;
+  const next = MR_STATUS_FILTER_BUTTONS.slice(index + 1).find((def) => mrStatusFilterCount(def.status) > 0);
   selectedMrStatuses.clear();
-  onMrStatusFilterChanged();
+  if (next) selectedMrStatuses.add(next.status);
+  return true;
 }
 
 function isMrStatusFilterActive() {
@@ -524,6 +540,10 @@ async function pollMrStatuses() {
 
 async function refreshMrStatuses() {
   mrStatusSummary = await fetch("/api/mr-statuses").then((r) => r.json());
+  if (moveEmptyMrStatusSelection()) {
+    onMrStatusFilterChanged();
+    return;
+  }
   updateMrStatusFilterButtons();
   refreshProjectCounts();
   refreshMatchedIssues();
