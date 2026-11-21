@@ -593,8 +593,12 @@ const DEPLOY_TIMEOUT_MS = 30 * 60 * 1000;
 const DEPLOY_RESTART_SERVER = "restart_server";
 const DEPLOY_DEFINED_TOOLTIP = "リポジトリに定義したデプロイ手順を実行します（デプロイすると動作確認できます）";
 const DEPLOY_UNDEFINED_TOOLTIP = "デプロイが定義されていません（.claude-tower/deploy.json）";
-// リポジトリ見出しのDeployボタン名
+// リポジトリ一覧の行・リポジトリ見出しのDeployボタン名
 const DEPLOY_BUTTON_LABEL = "Deploy";
+// Deployボタンに付けるクラス（同じリポジトリのボタンを合わせて更新する）
+const DEPLOY_BUTTON_CLASS = "deploy-button";
+// デプロイ実行中のリポジトリID
+const deployingProjectIds = new Set();
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -702,7 +706,9 @@ function renderProjectItem(project) {
   li.innerHTML =
     `<span class="project-number">${label}</span>` +
     `<span class="project-name" title="${escapeAttr(project.display_name)}">${escapeHtml(project.display_name)}</span>` +
-    `<span class="project-count"></span>`;
+    `<span class="project-count"></span>` +
+    `<button type="button" class="title-action-button">${DEPLOY_BUTTON_LABEL}</button>`;
+  bindDeployButton(li.querySelector("button"), project);
   li.addEventListener("click", () => selectProject(project));
   return li;
 }
@@ -823,11 +829,35 @@ function renderRepoHeading(project) {
     `${renderTitleNumber(label, project.repo_url)}<span id="repo-title">${escapeHtml(project.display_name)}</span>` +
     `<button type="button" id="deploy-button" class="title-action-button">${DEPLOY_BUTTON_LABEL}</button>`;
   document.getElementById("deploy-status").textContent = "";
-  const button = document.getElementById("deploy-button");
-  button.disabled = !project.deploy_defined;
+  bindDeployButton(document.getElementById("deploy-button"), project);
+}
+
+/**
+ * Deployボタンの初期化
+ *
+ * リポジトリ一覧の行と見出しで共通に使う。
+ * デプロイ未定義・デプロイ実行中のリポジトリではDeployボタンを無効化する。
+ * 一覧の行では、デプロイ状況を見出しに表示するため、リポジトリを選択してからデプロイする。
+ */
+function bindDeployButton(button, project) {
+  button.classList.add(DEPLOY_BUTTON_CLASS);
+  button.dataset.projectId = project.id;
   button.title = project.deploy_defined ? DEPLOY_DEFINED_TOOLTIP : DEPLOY_UNDEFINED_TOOLTIP;
-  button.addEventListener("click", () => onClickDeploy(project, button));
-  if (project.deploy_defined) refreshDeployPending(project.id, button);
+  updateDeployButtonEnabled(button, project);
+  button.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (project.id !== currentProjectId) selectProject(project).catch(() => {});
+    onClickDeploy(project);
+  });
+  if (project.deploy_defined) refreshDeployPending(project.id);
+}
+
+function deployButtons(projectId) {
+  return document.querySelectorAll(`.${DEPLOY_BUTTON_CLASS}[data-project-id="${projectId}"]`);
+}
+
+function updateDeployButtonEnabled(button, project) {
+  button.disabled = !project.deploy_defined || deployingProjectIds.has(project.id);
 }
 
 /**
@@ -835,8 +865,9 @@ function renderRepoHeading(project) {
  *
  * デプロイ先のソースに未取り込みの対応がある場合はプライマリ色にする。
  * 取得に失敗した場合は通常の色のままとする。
+ * リポジトリ一覧の行と見出しのボタンを合わせて更新する。
  */
-async function refreshDeployPending(projectId, button) {
+async function refreshDeployPending(projectId) {
   let pending = false;
   try {
     const response = await fetch(`/api/projects/${projectId}/deploy/pending`);
@@ -844,7 +875,7 @@ async function refreshDeployPending(projectId, button) {
   } catch (error) {
     pending = false;
   }
-  if (button.isConnected) button.classList.toggle("primary", pending);
+  deployButtons(projectId).forEach((button) => button.classList.toggle("primary", pending));
 }
 
 // 表示中のDeployボタンの色を取得中か（git fetchを伴うため多重に取得しない）
@@ -861,7 +892,7 @@ async function refreshCurrentDeployPending() {
   if (deployPendingRefreshing || currentProjectId === null || !button || button.disabled) return;
   deployPendingRefreshing = true;
   try {
-    await refreshDeployPending(currentProjectId, button);
+    await refreshDeployPending(currentProjectId);
   } finally {
     deployPendingRefreshing = false;
   }
@@ -872,22 +903,29 @@ async function refreshCurrentDeployPending() {
  *
  * 結果が出るまでポーリングし、サーバー再起動を含む場合は再起動完了まで待つ。
  * 実行中にリポジトリを切り替えた場合も、結果は実行したリポジトリの見出しにのみ表示する。
+ * 実行中は、リポジトリ一覧の行と見出しのDeployボタンを無効化する。
  */
-async function onClickDeploy(project, button) {
+async function onClickDeploy(project) {
   if (!confirm(`${project.display_name} をデプロイしますか？`)) return;
   const setStatus = (text) => {
     if (currentProjectId === project.id) document.getElementById("deploy-status").textContent = text;
   };
-  button.disabled = true;
+  setProjectDeploying(project, true);
   setStatus("デプロイ中...");
   try {
     setStatus(await runDeploy(project.id, setStatus));
   } catch (error) {
     setStatus(`デプロイに失敗しました: ${error.message}`);
   } finally {
-    button.disabled = false;
-    refreshDeployPending(project.id, button);
+    setProjectDeploying(project, false);
+    refreshDeployPending(project.id);
   }
+}
+
+function setProjectDeploying(project, deploying) {
+  if (deploying) deployingProjectIds.add(project.id);
+  else deployingProjectIds.delete(project.id);
+  deployButtons(project.id).forEach((button) => updateDeployButtonEnabled(button, project));
 }
 
 async function runDeploy(projectId, setStatus) {
