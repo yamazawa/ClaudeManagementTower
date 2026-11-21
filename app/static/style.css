@@ -189,6 +189,28 @@ header h1 {
   cursor: default;
 }
 
+/* ステータスのボタンは四角にして隙間なく並べる（境界線は重ねて1本にする） */
+.mr-status-filter-segments {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.mr-status-filter-segments .mr-status-filter-button {
+  padding: 2px 7px;
+  border-radius: 0;
+  margin-left: -1px;
+}
+
+.mr-status-filter-segments .mr-status-filter-button:first-child {
+  margin-left: 0;
+}
+
+/* 選択中のアクセント色の枠線を隣のボタンの枠線より前に出す */
+.mr-status-filter-segments .mr-status-filter-button[aria-pressed="true"] {
+  position: relative;
+  z-index: 1;
+}
+
 .worker-pill {
   padding: 2px 9px;
   border-radius: 99px;

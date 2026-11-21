@@ -409,11 +409,14 @@ let lastMatchedIssueKey = "";
  * ヘッダーのMRステータスフィルタの初期化
  *
  * ボタンは1度だけ作り、件数と選択状態はupdateMrStatusFilterButtonsで更新する。
+ * ステータスのボタンは隙間なく並べるため、クリアボタンと分けてまとめる。
  */
 function setupMrStatusFilter() {
   const container = document.getElementById("mr-status-filter");
   container.innerHTML =
+    `<span class="mr-status-filter-segments">` +
     MR_STATUS_FILTER_BUTTONS.map(renderMrStatusFilterButton).join("") +
+    `</span>` +
     `<button type="button" id="mr-status-filter-clear" class="mr-status-filter-button"` +
     ` title="${MR_STATUS_FILTER_CLEAR_TOOLTIP}">${MR_STATUS_FILTER_CLEAR_LABEL}</button>`;
   container
