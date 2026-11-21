@@ -1114,7 +1114,8 @@ async function toggleIssue(number, isOpen, button) {
 /**
  * Issue名の保存
  *
- * サーバー側で紐づくMR名も書き換わるため、MR一覧を再取得する。
+ * Issue見出し・MR見出しのどちらからも呼ばれる。
+ * サーバー側で紐づくMR名も書き換わるため、MR一覧とMR見出しを描画し直す。
  * MR名の書き換えに失敗したMRがあれば件数を表示する。
  */
 async function saveIssueTitle(number, title) {
@@ -1123,19 +1124,33 @@ async function saveIssueTitle(number, title) {
     title
   );
   if (error) return error;
-  const itemTitle = document.querySelector(
-    `.issue-item[data-number="${number}"] .issue-item-title`
-  );
+  updateIssueTitleDisplay(number, title);
+  if (number !== currentIssueNumber) return null;
+  currentIssueTitle = title;
+  const failedCount = (body.failed_subtasks || []).length;
+  const renameStatus = document.getElementById("issue-rename-status");
+  if (renameStatus)
+    renameStatus.textContent = failedCount > 0 ? `MR名の書き換えに${failedCount}件失敗しました` : "";
+  await refreshSubtaskStates().catch(() => {});
+  refreshSelectedSubtaskTitle();
+  return null;
+}
+
+/**
+ * Issue一覧の行・Issue見出しのIssue名を差し替える
+ *
+ * Issue見出しは表示中のIssueの場合のみ差し替える。
+ */
+function updateIssueTitleDisplay(number, title) {
+  const itemTitle = document.querySelector(`.issue-item[data-number="${number}"] .issue-item-title`);
   if (itemTitle) {
     itemTitle.textContent = title;
     itemTitle.title = title;
   }
-  currentIssueTitle = title;
-  const failedCount = (body.failed_subtasks || []).length;
-  document.getElementById("issue-rename-status").textContent =
-    failedCount > 0 ? `MR名の書き換えに${failedCount}件失敗しました` : "";
-  await refreshSubtaskStates().catch(() => {});
-  return null;
+  const headingTitle = document.getElementById("issue-title");
+  if (number !== currentIssueNumber || !headingTitle) return;
+  headingTitle.textContent = title;
+  updateTitleTooltip(headingTitle);
 }
 
 /**
@@ -1367,16 +1382,18 @@ function renderSubtaskDetail(s) {
 /**
  * MR見出しのタイトル編集の初期化
  *
+ * Issue名とMR固有名をそれぞれクリックして別々に編集する。
+ * Issue名の編集はIssue名の変更（紐づくMR名の書き換えを含む）とする。
  * 命名規則に沿わない場合は全体をクリックしてMR固有名を編集する。
  */
 function setupSubtaskTitleEditing(subtaskId) {
   const titleEl = document.getElementById("subtask-title");
+  const statusEl = document.getElementById("subtask-title-status");
+  const issueEl = titleEl.querySelector(".mr-title-issue");
   const suffixEl = titleEl.querySelector(".mr-title-suffix, .mr-title-whole");
-  makeTitleEditable(
-    suffixEl,
-    document.getElementById("subtask-title-status"),
-    (title) => saveSubtaskTitle(subtaskId, title)
-  );
+  const issueNumber = currentIssueNumber;
+  if (issueEl) makeTitleEditable(issueEl, statusEl, (title) => saveIssueTitle(issueNumber, title));
+  makeTitleEditable(suffixEl, statusEl, (title) => saveSubtaskTitle(subtaskId, title));
 }
 
 /**
