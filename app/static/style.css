@@ -171,8 +171,11 @@ header h1 {
   cursor: pointer;
 }
 
-.mr-status-filter-button:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.24);
+/* タッチ端末でタップ後もhoverが残り、選択中の色を上書きしないようにする */
+@media (hover: hover) {
+  .mr-status-filter-button:hover:not(:disabled):not([aria-pressed="true"]) {
+    background: rgba(255, 255, 255, 0.24);
+  }
 }
 
 .mr-status-filter-button[aria-pressed="true"] {
