@@ -58,6 +58,8 @@ const MR_STATUS_FILTER_BUTTONS = [
 ];
 const MR_STATUS_FILTER_TOOLTIP = "のMRで絞り込み（全リポジトリでMRが無い場合は選択不可）";
 const MR_STATUS_POLL_MS = 3000;
+// MRステータスフィルタの選択中に隠す要素（既存フィルタ・作成フォーム）
+const MR_STATUS_FILTER_HIDDEN_IDS = ["issue-filter", "subtask-filter", "issue-create-block", "subtask-create-block"];
 
 // MR一覧フィルタの値ごとに表示対象のlifecycle_stateを定義する
 // 未解決はDraft〜Merging、解決済はMerged〜Deployedを表示する
@@ -482,15 +484,14 @@ function isMrStatusFilterActive() {
 /**
  * MRステータスフィルタの選択変更をIssue一覧・MR一覧に反映する
  *
- * 選択中はIssue一覧・MR一覧の既存フィルタを隠す。
+ * 選択中はIssue一覧・MR一覧の既存フィルタと、Issue作成・MR作成を隠す。
  * リポジトリを選択し直した場合は、Issue一覧の読み込みを選択処理に任せる。
  * MR一覧はIssue一覧の読み込み後に、Issue一覧とまとめて描画し直す。
  */
 function onMrStatusFilterChanged() {
   updateMrStatusFilterButtons();
   const active = isMrStatusFilterActive();
-  document.getElementById("issue-filter").hidden = active;
-  document.getElementById("subtask-filter").hidden = active;
+  MR_STATUS_FILTER_HIDDEN_IDS.forEach((id) => (document.getElementById(id).hidden = active));
   const reselected = refreshProjectCounts();
   if (currentProjectId !== null && !reselected) reloadIssues().catch(() => {});
 }
@@ -1215,7 +1216,7 @@ async function postAction(url) {
  */
 function applyIssueToggleState(button, isOpen, counts) {
   const hasUnresolved = counts.unresolved > 0;
-  button.textContent = isOpen ? "閉じる" : "再開";
+  button.textContent = isOpen ? "Close" : "ReOpen";
   button.classList.toggle("primary", isOpen && counts.resolved > 0 && !hasUnresolved);
   button.disabled = isOpen && hasUnresolved;
   button.title = button.disabled ? "未解決のMRがあるため閉じられません" : "";

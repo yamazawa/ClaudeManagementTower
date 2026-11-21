@@ -9,6 +9,9 @@
   --expander-size: 24px;
   --title-number-font-size: 0.8em;
   --section-heading-font-size: 12.5px;
+  --create-row-height: 36px;
+  --list-row-padding-x: 12px;
+  --list-row-border-width: 1px;
 }
 
 * {
@@ -22,7 +25,14 @@ body {
   font: 15px/1.7 system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 
+/* ヘッダー
+
+スクロールしても常に画面上端に表示する。
+*/
 header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
   background: #18243c;
   color: #fff;
   padding: 16px 24px;
@@ -96,6 +106,7 @@ header h1 {
 
 タイトル入力欄の右に作成ボタンを右詰めで配置する。
 入力欄が残りの幅を埋め、状態表示は次の行に出す。
+入力欄と作成ボタンは同じ高さに固定する。
 */
 #issue-create-form,
 #subtask-form {
@@ -108,9 +119,11 @@ header h1 {
 #issue-create-form input,
 #subtask-form input {
   flex: 1 1 0;
+  height: var(--create-row-height);
   min-width: 0;
   font: inherit;
-  padding: 8px 10px;
+  line-height: normal;
+  padding: 0 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
 }
@@ -118,8 +131,11 @@ header h1 {
 #issue-create-form button,
 #subtask-form button {
   flex: 0 0 auto;
+  height: var(--create-row-height);
   font: inherit;
-  padding: 7px 16px;
+  font-size: 14px;
+  line-height: normal;
+  padding: 0 12px;
   border: 1px solid var(--accent);
   border-radius: 6px;
   background: var(--accent);
@@ -137,10 +153,12 @@ header h1 {
 
 「Issue名ー」の後ろにMR固有名の入力欄を並べる。
 収まらない場合はIssue名の部分のみ末尾を…で省略する。
+先頭文字の左端は一覧の行内の先頭文字に揃える。
 */
 .subtask-form-prefix {
   flex: 0 1 auto;
   min-width: 0;
+  margin-left: calc(var(--list-row-border-width) + var(--list-row-padding-x));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -479,10 +497,16 @@ section.collapsed > .section-title-row {
 
 ペインの見出しの直下に置くため、上の余白と区切り線は付けない。
 */
-.section-heading-top {
+.section-heading-top,
+.create-block[hidden] + .section-heading {
   margin-top: 0;
   padding-top: 0;
   border-top: none;
+}
+
+/* MRステータスフィルタの選択中に隠す作成フォーム */
+.create-block[hidden] {
+  display: none;
 }
 
 /* 一覧の状態フィルタ
@@ -542,8 +566,8 @@ section.collapsed > .section-title-row {
   justify-content: space-between;
   align-items: baseline;
   gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
+  padding: 10px var(--list-row-padding-x);
+  border: var(--list-row-border-width) solid var(--line);
   border-radius: 6px;
   margin-bottom: 8px;
   cursor: pointer;
@@ -572,8 +596,8 @@ section.collapsed > .section-title-row {
 }
 
 .issue-item .title-action-button {
-  font-size: 12px;
-  padding: 2px 10px;
+  font-size: 11px;
+  padding: 1px 8px;
 }
 
 /* 命名規則に沿っていないMR名 */
@@ -770,9 +794,9 @@ section.collapsed > .section-title-row {
   flex-shrink: 0;
   margin-left: auto;
   font: inherit;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: normal;
-  padding: 3px 12px;
+  padding: 2px 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: #fff;
