@@ -48,7 +48,7 @@ const MR_STATUS_TOOLTIPS = {
 };
 
 // ヘッダーのMRステータスフィルタのボタン（表示順）
-// 遷移中のステータスは矢印で表し、showCountがfalseのボタンは件数を表示しない
+// 遷移中のステータスは矢印で表す
 const MR_STATUS_FILTER_BUTTONS = [
   { status: MR_STATUS.draft, label: "Draft" },
   { status: MR_STATUS.resolving, label: "→" },
@@ -56,10 +56,10 @@ const MR_STATUS_FILTER_BUTTONS = [
   { status: MR_STATUS.merging, label: "→" },
   { status: MR_STATUS.merged, label: "Merged" },
   { status: MR_STATUS.deploying, label: "→" },
-  { status: MR_STATUS.deployed, label: "Deployed", showCount: false },
+  { status: MR_STATUS.deployed, label: "Deployed" },
 ];
 const MR_STATUS_FILTER_CLEAR_LABEL = "クリア";
-const MR_STATUS_FILTER_TOOLTIP = "のMRで絞り込み（数字は全リポジトリのMR数）";
+const MR_STATUS_FILTER_TOOLTIP = "のMRで絞り込み（全リポジトリでMRが無い場合は選択不可）";
 const MR_STATUS_FILTER_CLEAR_TOOLTIP = "ステータスでの絞り込みを解除";
 const MR_STATUS_POLL_MS = 3000;
 
@@ -408,7 +408,7 @@ let lastMatchedIssueKey = "";
 /**
  * ヘッダーのMRステータスフィルタの初期化
  *
- * ボタンは1度だけ作り、件数と選択状態はupdateMrStatusFilterButtonsで更新する。
+ * ボタンは1度だけ作り、選択状態と選択可否はupdateMrStatusFilterButtonsで更新する。
  * ステータスのボタンは隙間なく並べるため、クリアボタンと分けてまとめる。
  */
 function setupMrStatusFilter() {
@@ -430,22 +430,23 @@ function renderMrStatusFilterButton(def) {
   const tooltip = `${MR_STATUS_LABELS[def.status]}${MR_STATUS_FILTER_TOOLTIP}`;
   return (
     `<button type="button" class="mr-status-filter-button" data-status="${def.status}"` +
-    ` aria-pressed="false" title="${escapeAttr(tooltip)}">${def.label}` +
-    `<span class="mr-status-filter-count"></span></button>`
+    ` aria-pressed="false" title="${escapeAttr(tooltip)}">${def.label}</button>`
   );
 }
 
 /**
- * MRステータスフィルタのボタンの件数・選択状態を更新する
+ * MRステータスフィルタのボタンの選択状態・選択可否を更新する
  *
+ * MRが0件のステータスは無効化する。
+ * ただし選択中のボタンは解除できるよう無効化しない。
  * 未選択の場合はクリアボタンを無効化する。
  */
 function updateMrStatusFilterButtons() {
   MR_STATUS_FILTER_BUTTONS.forEach((def) => {
     const button = document.querySelector(`#mr-status-filter [data-status="${def.status}"]`);
-    button.setAttribute("aria-pressed", String(selectedMrStatuses.has(def.status)));
-    const count = mrStatusSummary.counts[def.status] ?? 0;
-    button.querySelector(".mr-status-filter-count").textContent = def.showCount === false ? "" : ` ${count}`;
+    const selected = selectedMrStatuses.has(def.status);
+    button.setAttribute("aria-pressed", String(selected));
+    button.disabled = !selected && (mrStatusSummary.counts[def.status] ?? 0) === 0;
   });
   document.getElementById("mr-status-filter-clear").disabled = selectedMrStatuses.size === 0;
 }
