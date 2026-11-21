@@ -531,6 +531,10 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
   font-size: 12px;
 }
 
+#attachment-list:empty {
+  display: none;
+}
+
 .attachment-table {
   border-collapse: collapse;
   font-size: 12px;

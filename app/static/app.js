@@ -1316,8 +1316,6 @@ function renderSubtaskDetail(s) {
   el.innerHTML = `
     <p id="subtask-title-status" class="title-status empty"></p>
     <div class="instruction-form">
-      <div id="subtask-actions" class="subtask-actions" data-subtask-id="${s.id}"></div>
-      <textarea id="instruction-${s.id}" name="instruction" aria-label="指示内容" placeholder="Claudeへの指示内容を入力してください（添付ファイルはS1、S2などのIDで指定できます）">${escapeHtml(s.instruction)}</textarea>
       <div class="attachment-area">
         <button type="button" id="attach-file-button" class="subtask-action-button attach-button">ファイル添付</button>
         <button type="button" id="attach-image-button" class="subtask-action-button attach-button">画像添付</button>
@@ -1326,6 +1324,8 @@ function renderSubtaskDetail(s) {
         <span id="attachment-status" class="empty"></span>
       </div>
       <div id="attachment-list" data-subtask-id="${s.id}"></div>
+      <textarea id="instruction-${s.id}" name="instruction" aria-label="指示内容" placeholder="Claudeへの指示内容を入力してください（添付ファイルはS1、S2などのIDで指定できます）">${escapeHtml(s.instruction)}</textarea>
+      <div id="subtask-actions" class="subtask-actions" data-subtask-id="${s.id}"></div>
     </div>
     <p id="subtask-action-status" class="title-status empty"></p>
     <p class="job-status empty" data-subtask-id="${s.id}"></p>
