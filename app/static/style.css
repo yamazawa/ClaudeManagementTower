@@ -143,20 +143,6 @@ header h1 {
   display: none;
 }
 
-#worker-status,
-#merge-status {
-  margin-top: 8px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  font-size: 12.5px;
-}
-
-.worker-summary {
-  color: #b8c7e3;
-}
-
 /* ヘッダーのMRステータスフィルタ
 
 選択中（aria-pressed）のボタンはアクセント色にする。
@@ -215,7 +201,7 @@ header h1 {
   margin-left: 0;
 }
 
-/* ステータス名の下に件数を小さく表示する（0件は空文字のため高さを確保しておく） */
+/* ステータス名の下に件数を小さく表示する */
 .mr-status-filter-segments .mr-status-filter-button {
   display: inline-flex;
   flex-direction: column;
@@ -227,7 +213,6 @@ header h1 {
   font-size: 9px;
   font-weight: normal;
   line-height: 1;
-  min-height: 9px;
   opacity: 0.85;
 }
 
@@ -235,35 +220,6 @@ header h1 {
 .mr-status-filter-segments .mr-status-filter-button[aria-pressed="true"] {
   position: relative;
   z-index: 1;
-}
-
-.worker-pill {
-  padding: 2px 9px;
-  border-radius: 99px;
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.worker-busy {
-  background: #e38b39;
-  color: #18243c;
-}
-
-.worker-offline {
-  background: rgba(255, 255, 255, 0.06);
-  color: #7a869e;
-}
-
-/* ヘッダーのマージ状況（マージ中・マージ待ちのMR） */
-.merge-running {
-  background: #4fa3e3;
-  color: #18243c;
-}
-
-.merge-pill {
-  max-width: 280px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 /* ヘッダー右上のClaudeトークン使用状況 */
