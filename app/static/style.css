@@ -7,8 +7,7 @@
   --soft: #edf2ff;
   --warning: #b45309;
   --expander-size: 24px;
-  --title-number-font-size: 0.6em;
-  --title-number-line-height: 1;
+  --title-number-font-size: 0.8em;
 }
 
 * {
@@ -756,16 +755,9 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
   gap: 6px;
 }
 
-/* タイトルの番号表示
-
-種別と番号を2行に積み、タイトル文字と同程度の高さに収める。 */
 .title-number {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: center;
   flex-shrink: 0;
   font-size: var(--title-number-font-size);
-  line-height: var(--title-number-line-height);
   white-space: nowrap;
 }
 

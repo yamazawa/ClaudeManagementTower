@@ -841,14 +841,13 @@ function selectFirstVisibleProject(items) {
 /**
  * リポジトリ見出しの表示
  *
- * 「Repo #番号 表示名」とし、番号部分はGitHubのリポジトリページへのリンクにする。
+ * 「Repo 表示名」とし、「Repo」部分はGitHubのリポジトリページへのリンクにする。
  * 右端にDeployボタンを置く。
  * デプロイ未定義のリポジトリではDeployボタンを無効化する。
  */
 function renderRepoHeading(project) {
-  const label = project.repo_number ? `Repo #${project.repo_number}` : "Repo";
   document.getElementById("repo-heading").innerHTML =
-    `${renderTitleNumber(label, project.repo_url)}<span id="repo-title">${escapeHtml(project.display_name)}</span>` +
+    `${renderTitleNumber("Repo", project.repo_url)}<span id="repo-title">${escapeHtml(project.display_name)}</span>` +
     `<button type="button" id="deploy-button" class="title-action-button">${DEPLOY_BUTTON_LABEL}</button>`;
   document.getElementById("deploy-status").textContent = "";
   bindDeployButton(document.getElementById("deploy-button"), project);
@@ -1058,7 +1057,7 @@ function renderIssueItem(issue) {
   li.dataset.number = issue.number;
   li.dataset.state = issue.state;
   li.innerHTML = `
-    ${renderTitleNumber(`Issue #${issue.number}`, issue.url)}
+    ${renderTitleNumber("Issue", issue.url)}
     <span class="issue-item-title" title="${escapeAttr(issue.title)}">${escapeHtml(issue.title)}</span>
     <span class="issue-item-meta" title="解決済MR数 / MR総数"></span>
     <button type="button" class="title-action-button issue-item-toggle"></button>
@@ -1307,15 +1306,13 @@ function selectFirstSubtask() {
 }
 
 /**
- * 見出しの番号表示
+ * 見出しの種別表示
  *
- * 種別と番号を2行に分けて表示する。
  * URLがある場合はGitHubを開くリンクにする。
  */
 function renderTitleNumber(label, url) {
-  const content = label.split(" ").map((part) => `<span>${part}</span>`).join("");
-  if (!url) return `<span class="title-number">${content}</span>`;
-  return `<a class="title-number" href="${url}" target="_blank" rel="noopener" title="GitHubで開く">${content}</a>`;
+  if (!url) return `<span class="title-number">${label}</span>`;
+  return `<a class="title-number" href="${url}" target="_blank" rel="noopener" title="GitHubで開く">${label}</a>`;
 }
 
 async function refreshIssueDetail() {
@@ -1327,7 +1324,7 @@ async function refreshIssueDetail() {
   updateIssueMrCounts(issue.number, issue.subtasks);
 
   document.getElementById("issue-heading").innerHTML =
-    `${renderTitleNumber(`Issue #${issue.number}`, issue.url)}<span id="issue-title">${escapeHtml(issue.title)}</span>` +
+    `${renderTitleNumber("Issue", issue.url)}<span id="issue-title">${escapeHtml(issue.title)}</span>` +
     `<button type="button" id="issue-toggle-button" class="title-action-button"></button>`;
   document.getElementById("subtask-list-body").innerHTML = `
     <p id="issue-title-status" class="title-status empty"></p>
@@ -1368,13 +1365,12 @@ function selectSubtask(subtaskId) {
 }
 
 /**
- * MR見出しの番号表示
+ * MR見出しの種別表示
  *
- * PR作成前は番号が無いため「MR」のみ表示する。
+ * PR作成前はリンクにせず「MR」のみ表示する。
  */
 function renderSubtaskNumber(s) {
-  const label = s.github_pr_number ? `MR #${s.github_pr_number}` : "MR";
-  return renderTitleNumber(label, s.pr_url);
+  return renderTitleNumber("MR", s.pr_url);
 }
 
 function renderSubtaskDetail(s) {
