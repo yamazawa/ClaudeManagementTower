@@ -531,6 +531,10 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
   font-size: 12px;
 }
 
+#attachment-list:empty {
+  display: none;
+}
+
 .attachment-table {
   border-collapse: collapse;
   font-size: 12px;
@@ -723,6 +727,30 @@ Issue情報とMR一覧の区切りが分かるよう、上に余白と区切り�
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* MR名の表示
+
+Issue名・区切り文字・MR固有名を1行に並べる。
+収まらない場合はIssue名の部分のみ末尾を…で省略する。
+*/
+.mr-title {
+  display: inline-flex;
+  align-items: baseline;
+}
+
+.mr-title-issue,
+.mr-title-whole {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mr-title-separator,
+.mr-title-suffix {
+  flex-shrink: 0;
   white-space: nowrap;
 }
 

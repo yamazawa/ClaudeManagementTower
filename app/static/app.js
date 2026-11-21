@@ -274,7 +274,7 @@ function makeTitleEditable(titleEl, statusEl, onSave) {
  * 省略表示されても読めるよう、全文と編集方法を表示する。
  */
 function updateTitleTooltip(titleEl) {
-  const warning = titleEl.classList.contains(MR_TITLE_WARNING_CLASS)
+  const warning = titleEl.closest(`.${MR_TITLE_WARNING_CLASS}`)
     ? `\n${MR_TITLE_WARNING_TEXT}`
     : "";
   titleEl.title = `${titleEl.textContent}${warning}\n（クリックしてタイトルを編集）`;
@@ -294,18 +294,30 @@ function splitMrTitle(mrTitle) {
 /**
  * MR名の表示要素
  *
- * 命名規則に沿う場合はMR固有名のみ、沿わない場合は全体を警告表示する。
+ * 命名規則に沿う場合はIssue名・区切り文字・MR固有名に分けて表示する。
+ * 収まらない場合はIssue名の部分のみ省略し、MR固有名は常に表示する。
+ * 沿わない場合は全体を警告表示する。
  */
 function renderMrTitle(s, { id = "", className = "" } = {}) {
   const suffix = splitMrTitle(s.title);
   const warning = suffix === null;
-  const classes = [className, warning ? MR_TITLE_WARNING_CLASS : ""].filter(Boolean).join(" ");
+  const classes = ["mr-title", className, warning ? MR_TITLE_WARNING_CLASS : ""].filter(Boolean).join(" ");
   const idAttr = id ? ` id="${id}"` : "";
   const tooltip = warning ? `${s.title}\n${MR_TITLE_WARNING_TEXT}` : s.title;
+  const content = warning ? renderMrTitlePart("whole", s.title) : renderMrTitleParts(suffix);
+  return `<span${idAttr} class="${classes}" title="${escapeAttr(tooltip)}">${content}</span>`;
+}
+
+function renderMrTitleParts(suffix) {
   return (
-    `<span${idAttr} class="${classes}" title="${escapeAttr(tooltip)}">` +
-    `${escapeHtml(warning ? s.title : suffix)}</span>`
+    renderMrTitlePart("issue", currentIssueTitle) +
+    renderMrTitlePart("separator", MR_NAME_SEPARATOR) +
+    renderMrTitlePart("suffix", suffix)
   );
+}
+
+function renderMrTitlePart(part, text) {
+  return `<span class="mr-title-${part}">${escapeHtml(text)}</span>`;
 }
 
 function escapeAttr(text) {
@@ -1102,7 +1114,8 @@ async function toggleIssue(number, isOpen, button) {
 /**
  * Issue名の保存
  *
- * サーバー側で紐づくMR名も書き換わるため、MR一覧を再取得する。
+ * Issue見出し・MR見出しのどちらからも呼ばれる。
+ * サーバー側で紐づくMR名も書き換わるため、MR一覧とMR見出しを描画し直す。
  * MR名の書き換えに失敗したMRがあれば件数を表示する。
  */
 async function saveIssueTitle(number, title) {
@@ -1111,32 +1124,59 @@ async function saveIssueTitle(number, title) {
     title
   );
   if (error) return error;
-  const itemTitle = document.querySelector(
-    `.issue-item[data-number="${number}"] .issue-item-title`
-  );
+  updateIssueTitleDisplay(number, title);
+  if (number !== currentIssueNumber) return null;
+  currentIssueTitle = title;
+  const failedCount = (body.failed_subtasks || []).length;
+  const renameStatus = document.getElementById("issue-rename-status");
+  if (renameStatus)
+    renameStatus.textContent = failedCount > 0 ? `MR名の書き換えに${failedCount}件失敗しました` : "";
+  await refreshSubtaskStates().catch(() => {});
+  refreshSelectedSubtaskTitle();
+  return null;
+}
+
+/**
+ * Issue一覧の行・Issue見出しのIssue名を差し替える
+ *
+ * Issue見出しは表示中のIssueの場合のみ差し替える。
+ */
+function updateIssueTitleDisplay(number, title) {
+  const itemTitle = document.querySelector(`.issue-item[data-number="${number}"] .issue-item-title`);
   if (itemTitle) {
     itemTitle.textContent = title;
     itemTitle.title = title;
   }
-  currentIssueTitle = title;
-  const failedCount = (body.failed_subtasks || []).length;
-  document.getElementById("issue-rename-status").textContent =
-    failedCount > 0 ? `MR名の書き換えに${failedCount}件失敗しました` : "";
-  await refreshSubtaskStates().catch(() => {});
-  return null;
+  const headingTitle = document.getElementById("issue-title");
+  if (number !== currentIssueNumber || !headingTitle) return;
+  headingTitle.textContent = title;
+  updateTitleTooltip(headingTitle);
 }
 
 /**
  * MR名の保存
  *
- * 編集対象はMR固有名のみ。保存後は命名規則に沿うため警告表示を外す。
+ * 編集対象はMR固有名のみ。保存後は命名規則に沿うため見出しを描画し直す。
  */
 async function saveSubtaskTitle(subtaskId, suffix) {
   const { error } = await patchTitle(`/api/subtasks/${subtaskId}`, suffix);
   if (error) return error;
-  document.getElementById("subtask-title")?.classList.remove(MR_TITLE_WARNING_CLASS);
   await refreshSubtaskStates().catch(() => {});
+  refreshSelectedSubtaskTitle();
   return null;
+}
+
+/**
+ * 選択中MRの見出しタイトルを描画し直す
+ *
+ * 編集中（テキストボックス表示中）は描画し直さない。
+ */
+function refreshSelectedSubtaskTitle() {
+  const titleEl = document.getElementById("subtask-title");
+  const selected = currentSubtasks.find((s) => s.id === currentSelectedSubtaskId);
+  if (!titleEl || !selected || titleEl.querySelector(".title-input")) return;
+  titleEl.outerHTML = renderMrTitle(selected, { id: "subtask-title" });
+  setupSubtaskTitleEditing(selected.id);
 }
 
 /**
@@ -1316,8 +1356,6 @@ function renderSubtaskDetail(s) {
   el.innerHTML = `
     <p id="subtask-title-status" class="title-status empty"></p>
     <div class="instruction-form">
-      <div id="subtask-actions" class="subtask-actions" data-subtask-id="${s.id}"></div>
-      <textarea id="instruction-${s.id}" name="instruction" aria-label="指示内容" placeholder="Claudeへの指示内容を入力してください（添付ファイルはS1、S2などのIDで指定できます）">${escapeHtml(s.instruction)}</textarea>
       <div class="attachment-area">
         <button type="button" id="attach-file-button" class="subtask-action-button attach-button">ファイル添付</button>
         <button type="button" id="attach-image-button" class="subtask-action-button attach-button">画像添付</button>
@@ -1326,6 +1364,8 @@ function renderSubtaskDetail(s) {
         <span id="attachment-status" class="empty"></span>
       </div>
       <div id="attachment-list" data-subtask-id="${s.id}"></div>
+      <textarea id="instruction-${s.id}" name="instruction" aria-label="指示内容" placeholder="Claudeへの指示内容を入力してください（添付ファイルはS1、S2などのIDで指定できます）">${escapeHtml(s.instruction)}</textarea>
+      <div id="subtask-actions" class="subtask-actions" data-subtask-id="${s.id}"></div>
     </div>
     <p id="subtask-action-status" class="title-status empty"></p>
     <p class="job-status empty" data-subtask-id="${s.id}"></p>
@@ -1333,14 +1373,27 @@ function renderSubtaskDetail(s) {
   `;
 
   renderSubtaskActions(s);
-  makeTitleEditable(
-    document.getElementById("subtask-title"),
-    document.getElementById("subtask-title-status"),
-    (title) => saveSubtaskTitle(s.id, title)
-  );
+  setupSubtaskTitleEditing(s.id);
   setupAttachmentForm(s.id);
 
   restoreJobState(s);
+}
+
+/**
+ * MR見出しのタイトル編集の初期化
+ *
+ * Issue名とMR固有名をそれぞれクリックして別々に編集する。
+ * Issue名の編集はIssue名の変更（紐づくMR名の書き換えを含む）とする。
+ * 命名規則に沿わない場合は全体をクリックしてMR固有名を編集する。
+ */
+function setupSubtaskTitleEditing(subtaskId) {
+  const titleEl = document.getElementById("subtask-title");
+  const statusEl = document.getElementById("subtask-title-status");
+  const issueEl = titleEl.querySelector(".mr-title-issue");
+  const suffixEl = titleEl.querySelector(".mr-title-suffix, .mr-title-whole");
+  const issueNumber = currentIssueNumber;
+  if (issueEl) makeTitleEditable(issueEl, statusEl, (title) => saveIssueTitle(issueNumber, title));
+  makeTitleEditable(suffixEl, statusEl, (title) => saveSubtaskTitle(subtaskId, title));
 }
 
 /**
