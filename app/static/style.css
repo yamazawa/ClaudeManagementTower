@@ -8,6 +8,7 @@
   --warning: #b45309;
   --expander-size: 24px;
   --title-number-font-size: 0.8em;
+  --section-heading-font-size: 12.5px;
 }
 
 * {
@@ -468,10 +469,20 @@ section.collapsed > .section-title-row {
 作成フォームと一覧の区切りが分かるよう、上に余白と区切り線を付ける。
 */
 .section-heading {
-  font-size: 14px;
+  font-size: var(--section-heading-font-size);
   margin: 16px 0 10px;
   padding-top: 12px;
   border-top: 1px solid var(--line);
+}
+
+/* ペイン先頭の小見出し（作成フォームの見出し）
+
+ペインの見出しの直下に置くため、上の余白と区切り線は付けない。
+*/
+.section-heading-top {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
 }
 
 /* 一覧の状態フィルタ
