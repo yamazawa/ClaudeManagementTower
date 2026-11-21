@@ -17,19 +17,19 @@ def get_mr_statuses():
     """全リポジトリのMRの表示ステータス
 
     ヘッダーのステータスフィルタ用に、ステータスごとのMR数と、
-    リポジトリ・Issueごとのステータス別MR数を返す。
+    リポジトリ・Issueごとに含まれるステータスの一覧を返す。
     マージされずクローズされたMRは含めない。
     """
     with SessionLocal() as session:
         rows = _subtask_status_rows(session)
     counts = Counter(status for _, _, status in rows)
-    issues: dict[int, dict[int, Counter]] = defaultdict(lambda: defaultdict(Counter))
+    issues: dict[int, dict[int, set[str]]] = defaultdict(lambda: defaultdict(set))
     for project_id, issue_number, status in rows:
-        issues[project_id][issue_number][status] += 1
+        issues[project_id][issue_number].add(status)
     return {
         "counts": {status: counts.get(status, 0) for status in MrStatus.COUNTED},
         "projects": {
-            pid: {number: dict(statuses) for number, statuses in by_issue.items()}
+            pid: {number: sorted(statuses) for number, statuses in by_issue.items()}
             for pid, by_issue in issues.items()
         },
     }

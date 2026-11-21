@@ -61,8 +61,8 @@ def test_counts_all_projects_by_derived_status(session_factory):
         "deployed": 1,
     }
     assert result["projects"] == {
-        1: {10: {"draft": 1, "resolving": 1}, 11: {"merging": 1}},
-        2: {20: {"merged": 1, "resolved": 1}, 21: {"deployed": 1}},
+        1: {10: ["draft", "resolving"], 11: ["merging"]},
+        2: {20: ["merged", "resolved"], 21: ["deployed"]},
     }
 
 
@@ -74,17 +74,7 @@ def test_merged_in_deploying_project_is_deploying(session_factory, monkeypatch):
     result = mr_statuses.get_mr_statuses()
 
     assert (result["counts"]["merged"], result["counts"]["deploying"]) == (1, 1)
-    assert result["projects"][2] == {20: {"deploying": 1}}
-
-
-def test_counts_mrs_per_issue_and_status(session_factory):
-    _add(session_factory, 1, 10, "draft")
-    _add(session_factory, 1, 10, "draft", jobs=("succeeded",))
-    _add(session_factory, 1, 10, "resolved")
-
-    result = mr_statuses.get_mr_statuses()
-
-    assert result["projects"][1] == {10: {"draft": 2, "resolved": 1}}
+    assert result["projects"][2] == {20: ["deploying"]}
 
 
 def test_no_subtasks_returns_zero_counts(session_factory):
