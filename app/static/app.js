@@ -403,6 +403,18 @@ let mrStatusSummary = { counts: {}, projects: {} };
 // Issue一覧に表示中の絞り込み結果（変化した場合のみIssue一覧を再取得する）
 let lastMatchedIssueKey = "";
 
+// 登録済みのリポジトリ（/api/projectsの応答）
+let allProjects = [];
+// リポジトリIDごとのOpenなIssue番号（取得前のリポジトリは含めない）
+const openIssueNumbersByProject = new Map();
+const OPEN_ISSUES_POLL_MS = 60000;
+// リポジトリ一覧のMR数で解決済とみなす表示ステータス（それ以外は未解決とする）
+const MR_STATUS_RESOLVED = [MR_STATUS.merged, MR_STATUS.deploying, MR_STATUS.deployed];
+const REPO_LABEL_PREFIX = "Repo";
+const PROJECT_COUNT_TOOLTIP = "OpenなIssueの未解決MR数 / 解決済MR数";
+const PROJECT_COUNT_FILTERED_TOOLTIP = "OpenなIssueで、選択中のステータスのMR数";
+const PROJECT_LIST_NO_PROJECT_TEXT = "リポジトリが登録されていません。";
+
 /**
  * ヘッダーのMRステータスフィルタの初期化
  *
@@ -475,6 +487,7 @@ function onMrStatusFilterChanged() {
   document.getElementById("issue-filter").hidden = active;
   document.getElementById("subtask-filter").hidden = active;
   refreshIssueCounts();
+  refreshProjectCounts();
   if (currentProjectId !== null) loadIssues().catch(() => {});
   renderSubtaskList();
 }
@@ -515,6 +528,7 @@ async function refreshMrStatuses() {
   mrStatusSummary = await fetch("/api/mr-statuses").then((r) => r.json());
   updateMrStatusFilterButtons();
   refreshIssueCounts();
+  refreshProjectCounts();
   refreshMatchedIssues();
 }
 
@@ -616,21 +630,12 @@ function clearIssueDetail() {
 }
 
 async function init() {
-  const projects = await fetch("/api/projects").then((r) => r.json());
+  allProjects = await fetch("/api/projects").then((r) => r.json());
   const listEl = document.getElementById("project-list-items");
   listEl.innerHTML = "";
-  if (projects.length === 0) {
-    listEl.innerHTML = '<li class="empty">リポジトリが登録されていません。</li>';
-  } else {
-    for (const project of projects) {
-      const li = document.createElement("li");
-      li.className = "project-item";
-      li.dataset.projectId = project.id;
-      li.innerHTML = `<span class="project-name">${escapeHtml(project.display_name)}</span><span class="project-branch">${project.default_branch}</span>`;
-      li.addEventListener("click", () => selectProject(project));
-      listEl.appendChild(li);
-    }
-  }
+  if (allProjects.length === 0) listEl.innerHTML = `<li class="empty">${PROJECT_LIST_NO_PROJECT_TEXT}</li>`;
+  else allProjects.forEach((project) => listEl.appendChild(renderProjectItem(project)));
+  pollOpenIssues();
   pollWorkers();
   pollMerges();
   pollRateLimits();
@@ -679,6 +684,91 @@ function highlightSelectedProject() {
   document
     .querySelectorAll(".project-item")
     .forEach((li) => li.classList.toggle("active", Number(li.dataset.projectId) === currentProjectId));
+}
+
+/**
+ * リポジトリ一覧の1行
+ *
+ * 「Repo番号 表示名 MR数 Deployボタン」を並べる。
+ */
+function renderProjectItem(project) {
+  const li = document.createElement("li");
+  li.className = "project-item";
+  li.dataset.projectId = project.id;
+  const label = project.repo_number ? `${REPO_LABEL_PREFIX}${project.repo_number}` : REPO_LABEL_PREFIX;
+  li.innerHTML =
+    `<span class="project-number">${label}</span>` +
+    `<span class="project-name" title="${escapeAttr(project.display_name)}">${escapeHtml(project.display_name)}</span>` +
+    `<span class="project-count"></span>`;
+  li.addEventListener("click", () => selectProject(project));
+  return li;
+}
+
+/**
+ * 全リポジトリのOpenなIssue番号の定期取得
+ *
+ * GitHubへの問い合わせを伴うため、MR状態の集計より長い間隔で取得する。
+ */
+async function pollOpenIssues() {
+  await Promise.all(allProjects.map((project) => refreshOpenIssueNumbers(project.id)));
+  refreshProjectCounts();
+  setTimeout(pollOpenIssues, OPEN_ISSUES_POLL_MS);
+}
+
+async function refreshOpenIssueNumbers(projectId) {
+  try {
+    setOpenIssueNumbers(projectId, await fetchProjectIssues(projectId, "open"));
+  } catch (error) {
+    // サーバー再起動中などで取得に失敗した場合は前回の値のまま表示する
+  }
+}
+
+function setOpenIssueNumbers(projectId, issues) {
+  openIssueNumbersByProject.set(projectId, new Set(issues.map((issue) => issue.number)));
+}
+
+/**
+ * リポジトリのOpenなIssueが持つMRのうち、条件に合うステータスのMR数を数える
+ */
+function countOpenIssueMrs(projectId, matchesStatus) {
+  const openNumbers = openIssueNumbersByProject.get(projectId) || new Set();
+  return Object.entries(mrStatusSummary.projects[projectId] || {})
+    .filter(([number]) => openNumbers.has(Number(number)))
+    .flatMap(([, statusCounts]) => Object.entries(statusCounts))
+    .filter(([status]) => matchesStatus(status))
+    .reduce((sum, [, count]) => sum + count, 0);
+}
+
+function countSelectedStatusOpenIssueMrs(projectId) {
+  return countOpenIssueMrs(projectId, (status) => selectedMrStatuses.has(status));
+}
+
+/**
+ * リポジトリのMR数表示
+ *
+ * 通常は「未解決MR数/解決済MR数」とする。
+ * MRステータスフィルタの選択中は、選択中のステータスのMR数とする。
+ * OpenなIssue番号の取得前は表示しない。
+ */
+function projectCountText(projectId) {
+  if (!openIssueNumbersByProject.has(projectId)) return "";
+  if (isMrStatusFilterActive()) return String(countSelectedStatusOpenIssueMrs(projectId));
+  const unresolved = countOpenIssueMrs(projectId, (status) => !MR_STATUS_RESOLVED.includes(status));
+  const resolved = countOpenIssueMrs(projectId, (status) => MR_STATUS_RESOLVED.includes(status));
+  return `${unresolved}/${resolved}`;
+}
+
+function renderProjectItemCount(li) {
+  const el = li.querySelector(".project-count");
+  el.textContent = projectCountText(Number(li.dataset.projectId));
+  el.title = isMrStatusFilterActive() ? PROJECT_COUNT_FILTERED_TOOLTIP : PROJECT_COUNT_TOOLTIP;
+}
+
+/**
+ * リポジトリ一覧のMR数を更新する
+ */
+function refreshProjectCounts() {
+  document.querySelectorAll(".project-item").forEach(renderProjectItemCount);
 }
 
 /**
@@ -800,12 +890,17 @@ async function waitForDeployResult(projectId) {
  *
  * フィルタに該当するIssueを表示し、表示したIssueを返す。
  * MRステータスフィルタの選択中は、Open・Closeを問わず該当Issueを表示する。
+ * Openを表示した場合は、リポジトリ一覧のMR数にも反映する。
  */
 async function loadIssues() {
   lastMatchedIssueKey = matchedIssueKey();
-  const issues = isMrStatusFilterActive()
-    ? await fetchIssuesByMrStatus()
-    : await fetchIssues(document.getElementById("issue-filter").value);
+  const projectId = currentProjectId;
+  const state = document.getElementById("issue-filter").value;
+  const issues = isMrStatusFilterActive() ? await fetchIssuesByMrStatus() : await fetchIssues(state);
+  if (!isMrStatusFilterActive() && state === "open") {
+    setOpenIssueNumbers(projectId, issues);
+    refreshProjectCounts();
+  }
   const listEl = document.getElementById("issue-list-items");
   listEl.innerHTML = "";
   if (issues.length === 0) listEl.innerHTML = '<li class="empty">Issueがありません。</li>';
@@ -814,9 +909,11 @@ async function loadIssues() {
 }
 
 async function fetchIssues(state) {
-  return fetch(
-    `/api/projects/${currentProjectId}/issues?state=${encodeURIComponent(state)}`
-  ).then((r) => r.json());
+  return fetchProjectIssues(currentProjectId, state);
+}
+
+async function fetchProjectIssues(projectId, state) {
+  return fetch(`/api/projects/${projectId}/issues?state=${encodeURIComponent(state)}`).then((r) => r.json());
 }
 
 /**
