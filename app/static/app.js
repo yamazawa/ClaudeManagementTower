@@ -1215,7 +1215,7 @@ async function postAction(url) {
  */
 function applyIssueToggleState(button, isOpen, counts) {
   const hasUnresolved = counts.unresolved > 0;
-  button.textContent = isOpen ? "閉じる" : "再開";
+  button.textContent = isOpen ? "Close" : "ReOpen";
   button.classList.toggle("primary", isOpen && counts.resolved > 0 && !hasUnresolved);
   button.disabled = isOpen && hasUnresolved;
   button.title = button.disabled ? "未解決のMRがあるため閉じられません" : "";
