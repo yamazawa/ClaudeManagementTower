@@ -193,6 +193,41 @@ function isSectionExpanded(sectionId) {
   return !document.getElementById(sectionId).classList.contains("collapsed");
 }
 
+// 選択項目が無くなったため閉じたペインのID（選択項目ができた場合に開き直す）
+const emptyCollapsedSectionIds = new Set();
+
+/**
+ * 選択項目が無くなったペインを閉じる
+ *
+ * 縦長表示・横長表示を問わず閉じる。
+ */
+function collapseEmptySection(sectionId) {
+  setSectionExpanded(sectionId, false);
+  emptyCollapsedSectionIds.add(sectionId);
+}
+
+/**
+ * 選択項目が無くなったため閉じたペインを、選択項目ができた際に開き直す
+ *
+ * 縦長表示では各選択処理の自動開閉に任せる。
+ */
+function reopenEmptyCollapsedSection(sectionId) {
+  if (!emptyCollapsedSectionIds.delete(sectionId)) return;
+  if (!isPortrait()) setSectionExpanded(sectionId, true);
+}
+
+// 選択の切り替え要求の通番（後発の要求があれば、先発の取得結果で表示を上書きしない）
+let selectionRequestId = 0;
+
+function nextSelectionRequest() {
+  selectionRequestId += 1;
+  return selectionRequestId;
+}
+
+function isLatestSelectionRequest(requestId) {
+  return requestId === selectionRequestId;
+}
+
 /**
  * 表示中のIssueがMR自動作成中か
  *
@@ -220,7 +255,10 @@ function setAutoMrCreatingIssue(issueNumber) {
 function setupExpanders() {
   document.querySelectorAll("section .expander").forEach((button) => {
     const section = button.closest("section");
-    button.addEventListener("click", () => setSectionExpanded(section.id, !isSectionExpanded(section.id)));
+    button.addEventListener("click", () => {
+      emptyCollapsedSectionIds.delete(section.id);
+      setSectionExpanded(section.id, !isSectionExpanded(section.id));
+    });
   });
   [SECTION_IDS.repo, SECTION_IDS.issue, SECTION_IDS.mr].forEach((id) => autoSetSectionExpanded(id, false));
 }
@@ -446,6 +484,7 @@ function isMrStatusFilterActive() {
  *
  * 選択中はIssue一覧・MR一覧の既存フィルタを隠す。
  * リポジトリを選択し直した場合は、Issue一覧の読み込みを選択処理に任せる。
+ * MR一覧はIssue一覧の読み込み後に、Issue一覧とまとめて描画し直す。
  */
 function onMrStatusFilterChanged() {
   updateMrStatusFilterButtons();
@@ -453,8 +492,7 @@ function onMrStatusFilterChanged() {
   document.getElementById("issue-filter").hidden = active;
   document.getElementById("subtask-filter").hidden = active;
   const reselected = refreshProjectCounts();
-  if (currentProjectId !== null && !reselected) loadIssues().catch(() => {});
-  renderSubtaskList();
+  if (currentProjectId !== null && !reselected) reloadIssues().catch(() => {});
 }
 
 /**
@@ -477,7 +515,7 @@ function matchedIssueKey() {
  */
 function refreshMatchedIssues() {
   if (matchedIssueKey() === lastMatchedIssueKey) return;
-  if (isMrStatusFilterActive() && currentProjectId !== null) loadIssues().catch(() => {});
+  if (isMrStatusFilterActive() && currentProjectId !== null) reloadIssues().catch(() => {});
 }
 
 async function pollMrStatuses() {
@@ -590,14 +628,41 @@ async function waitForNewBootId(oldBootId) {
   return false;
 }
 
-// 別リポジトリへ切り替えた際に前のIssue表示が残らないよう、Issue未選択の表示に戻す
-function clearIssueDetail() {
+/**
+ * Issueの選択を外し、Issue・MRを未選択の表示に戻す
+ *
+ * Issue内容・MR内容のペインは閉じる。
+ */
+function clearIssueSelection() {
+  currentIssueNumber = null;
+  currentIssueState = null;
+  currentIssueTitle = null;
+  currentSubtasks = [];
+  currentSelectedSubtaskId = null;
+  highlightSelectedIssue();
   document.getElementById("issue-heading").textContent = "Issue";
   document.getElementById("subtask-list-body").innerHTML =
     '<p class="empty">左の一覧からIssueを選択してください。</p>';
   document.getElementById("subtask-panel").hidden = true;
-  autoSetSectionExpanded(SECTION_IDS.issue, false);
+  collapseEmptySection(SECTION_IDS.issue);
   renderSubtaskDetail(null);
+}
+
+/**
+ * リポジトリの選択を外し、Issue一覧以降を未選択の表示に戻す
+ *
+ * Issue一覧・Issue内容・MR内容のペインは閉じる。
+ */
+function clearProjectSelection() {
+  nextSelectionRequest();
+  currentProjectId = null;
+  highlightSelectedProject();
+  document.getElementById("repo-heading").textContent = "Repo";
+  document.getElementById("issue-list-placeholder").hidden = false;
+  document.getElementById("issue-panel").hidden = true;
+  document.getElementById("issue-list-items").innerHTML = "";
+  collapseEmptySection(SECTION_IDS.repo);
+  clearIssueSelection();
 }
 
 async function init() {
@@ -615,38 +680,36 @@ async function init() {
 /**
  * リポジトリの選択
  *
- * 別リポジトリへ切り替えた場合は、前のIssue・MRの表示を消す。
+ * Issue一覧と先頭Issueの内容を取得してから、MR内容までまとめて表示を切り替える。
+ * 別リポジトリへ切り替えた場合は、前のIssue・MRの選択を外す。
  * 縦長表示ではリポジトリ一覧を閉じ、Issue一覧を開く。
- * Issue一覧に表示中の先頭Issueを自動選択する。
+ * 縦長表示では、Issue一覧の表示が1件のみの場合は閉じる。
  */
 async function selectProject(project) {
-  if (project.id !== currentProjectId) {
-    currentIssueNumber = null;
-    clearIssueDetail();
-  }
+  const requestId = nextSelectionRequest();
+  if (project.id !== currentProjectId) currentIssueNumber = null;
+  const wasIssueSelected = currentIssueNumber !== null;
   currentProjectId = project.id;
-  highlightSelectedProject();
-  autoSetSectionExpanded(SECTION_IDS.projects, false);
-  autoSetSectionExpanded(SECTION_IDS.repo, true);
-  document.getElementById("issue-list-placeholder").hidden = true;
-  document.getElementById("issue-panel").hidden = false;
-  renderRepoHeading(project);
-  await selectFirstIssue(await loadIssues());
+  const issues = await fetchIssueList();
+  const target = await fetchIssueSelection(issues);
+  if (!isLatestSelectionRequest(requestId)) return;
+
+  showProject(project);
+  applyIssueList(issues, target);
+  if (!wasIssueSelected && issues.length === 1) autoSetSectionExpanded(SECTION_IDS.repo, false);
 }
 
 /**
- * Issue一覧に表示中の先頭Issueを選択する
- *
- * 選択中のIssueが一覧に表示中の場合は選択し直さない。
- * 表示中のIssueが無い場合は未選択のままとする。
- * 縦長表示では、Issue一覧の表示が1件のみの場合は閉じる。
+ * 選択したリポジトリの見出しとIssue一覧のペインを表示する
  */
-async function selectFirstIssue(issues) {
-  if (issues.some((issue) => issue.number === currentIssueNumber)) return;
-  const [first] = issues;
-  if (!first) return;
-  await selectIssue(first.number);
-  if (issues.length === 1) autoSetSectionExpanded(SECTION_IDS.repo, false);
+function showProject(project) {
+  highlightSelectedProject();
+  autoSetSectionExpanded(SECTION_IDS.projects, false);
+  autoSetSectionExpanded(SECTION_IDS.repo, true);
+  reopenEmptyCollapsedSection(SECTION_IDS.repo);
+  document.getElementById("issue-list-placeholder").hidden = true;
+  document.getElementById("issue-panel").hidden = false;
+  renderRepoHeading(project);
 }
 
 function highlightSelectedProject() {
@@ -766,19 +829,27 @@ function refreshProjectCounts() {
 }
 
 /**
- * MRステータスフィルタの選択中に、表示中の先頭のリポジトリを選択する
+ * 選択中のリポジトリが非表示になった場合に、表示中の先頭のリポジトリを選択し直す
  *
  * 選択中のリポジトリが表示中の場合は選択し直さない。
- * 表示中のリポジトリが無い場合は選択を変えない。
+ * 未選択の場合は、MRステータスフィルタの選択中のみ先頭を選択する。
+ * 表示中のリポジトリが無い場合は選択を外す。
+ * 選択を変更した場合はtrueを返す。
  */
 function selectFirstVisibleProject(items) {
-  if (!isMrStatusFilterActive()) return false;
   const visible = items.filter((li) => !li.hidden);
   if (visible.some((li) => Number(li.dataset.projectId) === currentProjectId)) return false;
+  if (currentProjectId === null && !isMrStatusFilterActive()) return false;
   const [first] = visible;
-  if (!first) return false;
+  if (!first) return clearVisibleProjectSelection();
   const project = allProjects.find((p) => p.id === Number(first.dataset.projectId));
   selectProject(project).catch(() => {});
+  return true;
+}
+
+function clearVisibleProjectSelection() {
+  if (currentProjectId === null) return false;
+  clearProjectSelection();
   return true;
 }
 
@@ -926,27 +997,70 @@ async function waitForDeployResult(projectId) {
 }
 
 /**
- * Issue一覧の読み込み
+ * Issue一覧の再読み込み
  *
- * フィルタに該当するIssueを表示し、表示したIssueを返す。
- * MRステータスフィルタの選択中は、Open・Closeを問わず該当Issueを表示する。
- * Openを表示した場合は、リポジトリ一覧のMR数にも反映する。
+ * 選択中のIssueが一覧から外れた場合は、先頭のIssueを選択し直す。
+ * 表示するIssueが無い場合は、Issue・MRの表示を消してペインを閉じる。
+ * Issue内容の取得後に、Issue一覧からMR内容までまとめて表示を切り替える。
  */
-async function loadIssues() {
+async function reloadIssues() {
+  const requestId = nextSelectionRequest();
+  const issues = await fetchIssueList();
+  const target = await fetchIssueSelection(issues);
+  if (!isLatestSelectionRequest(requestId)) return;
+  applyIssueList(issues, target);
+}
+
+/**
+ * Issue一覧の取得
+ *
+ * フィルタに該当するIssueを返す。
+ * MRステータスフィルタの選択中は、Open・Closeを問わず該当Issueを返す。
+ * Openを取得した場合は、リポジトリ一覧のMR数の集計に使う値も更新する。
+ */
+async function fetchIssueList() {
   lastMatchedIssueKey = matchedIssueKey();
   const projectId = currentProjectId;
   const filtered = isMrStatusFilterActive();
   const state = document.getElementById("issue-filter").value;
   const issues = filtered ? await fetchIssuesByMrStatus() : await fetchIssues(state);
-  if (!filtered && state === "open") {
-    setOpenIssueNumbers(projectId, issues);
-    refreshProjectCounts();
-  }
+  if (!filtered && state === "open") setOpenIssueNumbers(projectId, issues);
+  return issues;
+}
+
+/**
+ * Issue一覧の更新後に選択するIssueを決め、内容を取得する
+ *
+ * 選択中のIssueが一覧に有る場合は選択し直さない（内容は取得しない）。
+ * 一覧に無い場合は先頭のIssueとし、一覧が空の場合は未選択とする。
+ */
+async function fetchIssueSelection(issues) {
+  if (issues.some((issue) => issue.number === currentIssueNumber)) return { number: currentIssueNumber, detail: null };
+  const [first] = issues;
+  if (!first) return { number: null, detail: null };
+  return { number: first.number, detail: await fetchIssueDetail(first.number) };
+}
+
+/**
+ * 取得したIssue一覧と選択するIssueを表示に反映する
+ *
+ * 選択し直したIssueは内容とMR一覧・MR内容を描画する。
+ * 選択を変えない場合も、フィルタの変更に追従させるためMR一覧を描画し直す。
+ */
+function applyIssueList(issues, { number, detail }) {
+  if (number === null) clearIssueSelection();
+  else currentIssueNumber = number;
+  renderIssueList(issues);
+  if (detail) showIssueDetail(detail);
+  else if (number !== null) renderSubtaskList();
+  refreshProjectCounts();
+}
+
+function renderIssueList(issues) {
   const listEl = document.getElementById("issue-list-items");
   listEl.innerHTML = "";
   if (issues.length === 0) listEl.innerHTML = '<li class="empty">Issueがありません。</li>';
   else issues.forEach((issue) => listEl.appendChild(renderIssueItem(issue)));
-  return issues;
 }
 
 async function fetchIssues(state) {
@@ -1048,6 +1162,36 @@ function renderSubtaskList() {
   });
   highlightSelectedSubtaskRow();
   updateIssueToggleButton();
+  ensureSubtaskSelection(subtasks);
+}
+
+/**
+ * 選択中のMRがMR一覧から外れた場合に、先頭のMRを選択し直す
+ *
+ * 選択中のMRが表示中の場合は選択し直さない。
+ * 表示するMRが無い場合は、MR内容の表示を消してペインを閉じる。
+ */
+function ensureSubtaskSelection(visibleSubtasks) {
+  if (visibleSubtasks.some((s) => s.id === currentSelectedSubtaskId)) return;
+  const [first] = visibleSubtasks;
+  if (first) selectSubtask(first.id);
+  else clearSubtaskSelection();
+}
+
+/**
+ * MRの選択を外し、MR未選択の表示に戻す
+ *
+ * 未選択のまま一覧を描画し直した場合は、ペインの開閉を変えない。
+ */
+function clearSubtaskSelection() {
+  if (currentSelectedSubtaskId === null && !isSubtaskDetailShown()) return;
+  currentSelectedSubtaskId = null;
+  highlightSelectedSubtaskRow();
+  renderSubtaskDetail(null);
+}
+
+function isSubtaskDetailShown() {
+  return document.getElementById("subtask-actions") !== null;
 }
 
 /**
@@ -1110,7 +1254,7 @@ async function toggleIssue(number, isOpen, button) {
   const message = error ? `失敗しました: ${error}` : `Issueを${verb}ました`;
   if (statusEl) statusEl.textContent = message;
   else if (error) alert(message);
-  await loadIssues();
+  await reloadIssues();
 }
 
 /**
@@ -1247,33 +1391,37 @@ function highlightSelectedSubtaskRow() {
 /**
  * Issueの選択
  *
+ * Issue内容の取得後に、Issue一覧の選択表示からMR内容までまとめて切り替える。
+ */
+async function selectIssue(number) {
+  const requestId = nextSelectionRequest();
+  const detail = await fetchIssueDetail(number);
+  if (!isLatestSelectionRequest(requestId)) return;
+  currentIssueNumber = number;
+  highlightSelectedIssue();
+  showIssueDetail(detail);
+}
+
+function highlightSelectedIssue() {
+  document
+    .querySelectorAll(".issue-item")
+    .forEach((el) => el.classList.toggle("active", Number(el.dataset.number) === currentIssueNumber));
+}
+
+/**
+ * 選択し直したIssueの内容を表示する
+ *
  * MR一覧に表示中の先頭MRを自動選択する。
- * 表示中のMRが無い場合は未選択とし、縦長表示ではMR内容を閉じる。
+ * 表示中のMRが無い場合は未選択とし、MR内容を閉じる。
  * 縦長表示ではIssue内容を開き、MR一覧の表示が1件のみの場合は閉じる。
  * 表示が複数件の場合は、MRを選択し直せるよう開いたままにする。
  * 開閉は内容の切り替え後に行い、切り替え前の内容で開閉しないようにする。
  */
-async function selectIssue(number) {
-  currentIssueNumber = number;
+function showIssueDetail(issue) {
   currentSelectedSubtaskId = null;
-  document
-    .querySelectorAll(".issue-item")
-    .forEach((el) => el.classList.toggle("active", Number(el.dataset.number) === number));
-
-  await refreshIssueDetail();
-  selectFirstSubtask();
+  renderIssueDetail(issue);
+  reopenEmptyCollapsedSection(SECTION_IDS.issue);
   autoSetSectionExpanded(SECTION_IDS.issue, filterSubtasks(currentSubtasks).length !== 1);
-}
-
-/**
- * MR一覧に表示中の先頭MRを選択する
- *
- * 表示中のMRが無い場合はMR未選択の表示にする。
- */
-function selectFirstSubtask() {
-  const [first] = filterSubtasks(currentSubtasks);
-  if (first) selectSubtask(first.id);
-  else renderSubtaskDetail(null);
 }
 
 /**
@@ -1286,10 +1434,26 @@ function renderTitleNumber(label, url) {
   return `<a class="title-number" href="${url}" target="_blank" rel="noopener" title="GitHubで開く">${label}</a>`;
 }
 
+async function fetchIssueDetail(number) {
+  return fetch(`/api/projects/${currentProjectId}/issues/${number}`).then((r) => r.json());
+}
+
+/**
+ * 選択中のIssueの内容を取得し直して描画する
+ *
+ * MRの選択は、MR一覧に表示中であれば維持する。
+ */
 async function refreshIssueDetail() {
-  const issue = await fetch(
-    `/api/projects/${currentProjectId}/issues/${currentIssueNumber}`
-  ).then((r) => r.json());
+  const issueNumber = currentIssueNumber;
+  const issue = await fetchIssueDetail(issueNumber);
+  if (issueNumber !== currentIssueNumber) return;
+  renderIssueDetail(issue);
+}
+
+/**
+ * Issue内容（見出し・MR作成フォーム・MR一覧）の描画
+ */
+function renderIssueDetail(issue) {
   currentSubtasks = issue.subtasks;
   currentIssueTitle = issue.title;
   updateIssueMrCounts(issue.number, issue.subtasks);
@@ -1384,9 +1548,10 @@ function renderSubtaskDetail(s) {
   if (!s) {
     heading.textContent = "MR";
     el.innerHTML = '<p class="empty">左の一覧からMRを選択してください。</p>';
-    autoSetSectionExpanded(SECTION_IDS.mr, false);
+    collapseEmptySection(SECTION_IDS.mr);
     return;
   }
+  reopenEmptyCollapsedSection(SECTION_IDS.mr);
 
   heading.innerHTML =
     `${renderSubtaskNumber(s)}${renderMrTitle(s, { id: "subtask-title" })}${renderSubtaskState(s)}`;
@@ -1831,12 +1996,17 @@ async function linkPendingSubtask(projectId, issueNumber, pendingPromise) {
  * 作成したIssueとMRを開く
  *
  * IssueとMRの作成完了後にまとめて画面へ反映する。
- * 高速化のため、Issue一覧の再取得とIssueの選択を並行して行う。
+ * 高速化のため、Issue一覧と作成したIssueの内容を並行して取得する。
+ * GitHubの一覧反映が遅れても、作成したIssueを選択する。
  * 縦長表示ではIssue一覧とIssue内容を閉じ、MRの指示内容の入力欄を見せる。
  * MR作成に失敗した場合はIssueのみ開く。
  */
 async function openCreatedIssueAndSubtask(issue, subtaskId) {
-  await Promise.all([loadIssues(), selectIssue(issue.number)]).catch(() => {});
+  const requestId = nextSelectionRequest();
+  const fetched = await Promise.all([fetchIssueList(), fetchIssueDetail(issue.number)]).catch(() => null);
+  if (!fetched || !isLatestSelectionRequest(requestId)) return;
+  const [issues, detail] = fetched;
+  applyIssueList(issues, { number: issue.number, detail });
   supplementCreatedIssue(issue);
   autoSetSectionExpanded(SECTION_IDS.repo, false);
   if (subtaskId === null || issue.number !== currentIssueNumber) return;
@@ -1919,6 +2089,7 @@ async function openCreatedSubtask(issueNumber, subtaskId) {
   } else {
     await selectIssue(issueNumber);
   }
+  if (issueNumber !== currentIssueNumber) return;
   autoSetSectionExpanded(SECTION_IDS.issue, false);
   selectSubtask(subtaskId);
   focusWithScroll(document.getElementById(`instruction-${subtaskId}`));
@@ -2000,8 +2171,10 @@ async function onJobFinished(job, jobId, subtaskId) {
     return;
   }
   if (currentSelectedSubtaskId !== subtaskId) return;
-  // refreshIssueDetailが詳細ペインの選択状態を消すため、再描画してから選択し直す
+  // 詳細ペインの表示を作り直すため、Issue内容を再描画してから選択し直す
   await refreshIssueDetail();
+  // 再描画でMR一覧から外れて別のMRを選択し直した場合は、そちらの表示を優先する
+  if (currentSelectedSubtaskId !== subtaskId) return;
   selectSubtask(subtaskId);
   await showReport(jobId, subtaskId);
 }
@@ -2025,7 +2198,7 @@ document.getElementById("deploy-dialog-list").addEventListener("change", updateD
 document.getElementById("deploy-dialog-cancel").addEventListener("click", () => document.getElementById("deploy-dialog").close());
 document.getElementById("deploy-dialog-confirm").addEventListener("click", onConfirmDeployDialog);
 document.getElementById("issue-create-form").addEventListener("submit", onSubmitIssueForm);
-document.getElementById("issue-filter").addEventListener("change", loadIssues);
+document.getElementById("issue-filter").addEventListener("change", () => reloadIssues().catch(() => {}));
 document.getElementById("subtask-filter").addEventListener("change", renderSubtaskList);
 document.getElementById("subtask-form").addEventListener("submit", onSubmitSubtaskForm);
 document.addEventListener("visibilitychange", () => {
