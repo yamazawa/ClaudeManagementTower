@@ -1,4 +1,5 @@
 import json
+import time
 
 import pytest
 
@@ -59,17 +60,32 @@ def test_fetch_usage_passes_token():
     assert claude_usage.fetch_usage(lambda: "t", lambda token: {"token": token}) == {"token": "t"}
 
 
-def test_get_usage_caches_within_ttl(monkeypatch):
-    monkeypatch.setattr(claude_usage.settings, "claude_usage_cache_seconds", 60)
-    calls = []
+def test_get_usage_returns_none_before_refresh():
+    assert claude_usage.get_usage() is None
 
-    def fetcher():
-        calls.append(1)
-        return {"n": len(calls)}
 
-    assert claude_usage.get_usage(fetcher, lambda: 0) == {"n": 1}
-    assert claude_usage.get_usage(fetcher, lambda: 59) == {"n": 1}
-    assert claude_usage.get_usage(fetcher, lambda: 61) == {"n": 2}
+def test_refresh_usage_updates_held_value():
+    assert claude_usage.refresh_usage(lambda: {"n": 1}) is True
+    assert claude_usage.get_usage() == {"n": 1}
+
+
+def test_refresh_usage_keeps_previous_value_on_failure():
+    claude_usage.refresh_usage(lambda: {"n": 1})
+
+    assert claude_usage.refresh_usage(lambda: None) is False
+    assert claude_usage.get_usage() == {"n": 1}
+
+
+def test_refresh_loop_fetches_on_start():
+    stop_event = claude_usage.start_refresh_loop(60, lambda: {"n": 1})
+    try:
+        deadline = time.monotonic() + 5
+        while claude_usage.get_usage() is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+    finally:
+        stop_event.set()
+
+    assert claude_usage.get_usage() == {"n": 1}
 
 
 def test_credentials_path_uses_setting(monkeypatch, tmp_path):
