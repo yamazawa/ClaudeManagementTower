@@ -12,7 +12,11 @@
     <h1>Claude管理塔</h1>
     <div id="token-usage" class="token-usage" aria-label="Claudeトークン使用状況"></div>
   </div>
-  <div id="mr-status-filter" role="group" aria-label="MRステータスでの絞り込み"></div>
+  <div class="header-bottom">
+    <div id="mr-status-filter" role="group" aria-label="MRステータスでの絞り込み"></div>
+    <button type="button" id="deploy-button" class="header-deploy-button">Deploy</button>
+    <span id="deploy-status" class="header-deploy-status" role="status"></span>
+  </div>
 </header>
 
 <main id="issue-view">
@@ -28,7 +32,6 @@
       <button type="button" class="expander" aria-expanded="true" aria-label="開閉"></button>
       <h2 id="repo-heading" class="title-heading">Repo</h2>
     </div>
-    <p id="deploy-status" class="title-status empty" role="status"></p>
     <p id="issue-list-placeholder" class="empty">左の一覧からリポジトリを選択してください。</p>
     <div id="issue-panel" hidden>
       <h3 class="section-heading section-heading-with-filter">
@@ -94,6 +97,15 @@
   </div>
   <div class="image-editor-body">
     <canvas id="image-editor-canvas" class="image-editor-canvas"></canvas>
+  </div>
+</dialog>
+
+<dialog id="deploy-dialog" class="deploy-dialog" aria-label="デプロイの確認">
+  <p class="deploy-dialog-message">選択したリポジトリをデプロイしますか？</p>
+  <ul id="deploy-dialog-list" class="deploy-dialog-list"></ul>
+  <div class="deploy-dialog-actions">
+    <button type="button" id="deploy-dialog-cancel" class="subtask-action-button">キャンセル</button>
+    <button type="button" id="deploy-dialog-confirm" class="subtask-action-button primary">Deploy</button>
   </div>
 </dialog>
 
