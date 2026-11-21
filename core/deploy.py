@@ -1,7 +1,7 @@
 """デプロイ（リポジトリごとに定義した手順を実行する）
 
 手順は対象リポジトリの.claude-tower/deploy.jsonに定義する。
-定義が無いリポジトリはデプロイできない。
+定義が無いリポジトリは、手順を実行せずマージ済MRをDeployedにする。
 再起動の手順は、他の手順が全て成功した後にまとめて要求する。
 サーバー再起動後も結果を参照できるよう、制御ディレクトリにファイルで残す。
 """
@@ -13,7 +13,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from core.config import settings
-from core.deploy_tracking import mark_deployed
+from core.deploy_tracking import mark_all_merged_deployed, mark_deployed
 from core.git_client import GitClientError, pull_latest
 from core.supervisor_control import COMMAND_RESTART_SERVER, COMMAND_RESTART_WORKERS, request_command
 
@@ -168,6 +168,15 @@ def run_deploy(project_id: int, repo_path: str, branch: str, steps: list[dict]) 
     _write_result(project_id, {"status": STATUS_DONE, "restarts": restarts})
     for command in restarts:
         request_command(command)
+
+
+def finish_without_steps(project_id: int) -> None:
+    """デプロイ未定義のリポジトリのデプロイ
+
+    手順は実行せず、マージ済MRを全てDeployedにして完了とする。
+    """
+    mark_deployed_safely(lambda: mark_all_merged_deployed(project_id))
+    _write_result(project_id, {"status": STATUS_DONE, "restarts": [], "skipped": True})
 
 
 def mark_deployed_safely(mark: Callable[[], list[int]]) -> None:

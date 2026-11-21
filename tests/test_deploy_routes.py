@@ -47,8 +47,13 @@ def test_projects_report_whether_deploy_defined(repo):
     assert projects.get_projects()[0]["deploy_defined"] is True
 
 
-def test_deploy_rejected_when_not_defined(repo):
-    assert _status_code(lambda: deploy.deploy_project(1)) == 409
+def test_deploy_without_definition_only_marks_deployed(repo, monkeypatch):
+    finished = []
+    monkeypatch.setattr(deploy, "finish_without_steps", finished.append)
+    monkeypatch.setattr(deploy, "start_deploy", lambda *args: pytest.fail("not called"))
+
+    assert deploy.deploy_project(1) == {"accepted": True, "restarts": [], "skipped": True}
+    assert finished == [1]
 
 
 def test_deploy_rejected_when_definition_invalid(repo):

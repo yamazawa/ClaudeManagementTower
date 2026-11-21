@@ -6,6 +6,8 @@ from core.deploy import (
     DeployAlreadyRunning,
     DeployError,
     DeployNotDefined,
+    finish_without_steps,
+    is_deploy_defined,
     load_steps,
     pull_branch,
     read_result,
@@ -41,8 +43,12 @@ def deploy_project(project_id: int) -> dict:
     """リポジトリに定義したデプロイ手順を別スレッドで開始する
 
     再起動を含む手順はrun_all.py経由で起動している場合のみ実行できる。
+    デプロイ未定義のリポジトリは、手順を実行せずマージ済MRをDeployedにする。
     """
     repo_path, branch = _get_project(project_id)
+    if not is_deploy_defined(repo_path):
+        finish_without_steps(project_id)
+        return {"accepted": True, "restarts": [], "skipped": True}
     steps = _load_steps_or_error(repo_path)
     restarts = restart_commands(steps)
     if restarts and not is_supervised():
