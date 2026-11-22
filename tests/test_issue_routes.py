@@ -1,3 +1,5 @@
+from datetime import datetime
+
 import pytest
 from fastapi import HTTPException
 from sqlalchemy.orm import sessionmaker
@@ -55,6 +57,28 @@ def test_get_issues_defaults_to_open(session_factory, monkeypatch):
     projects.get_issues(1)
 
     assert calls == [("owner/repo", "open")]
+
+
+def test_get_issues_closed_today_lists_issues_closed_since_midnight(
+    session_factory, monkeypatch
+):
+    calls = []
+
+    def fake(repo, since):
+        calls.append((repo, since))
+        return [{"number": 8, "state": "CLOSED"}]
+
+    monkeypatch.setattr(projects, "list_issues_closed_since", fake)
+    monkeypatch.setattr(projects, "list_issues", lambda repo, state: pytest.fail("not used"))
+
+    issues = projects.get_issues(1, "closed_today")
+
+    [(repo, since)] = calls
+    assert repo == "owner/repo"
+    assert since.tzinfo is not None
+    assert (since.hour, since.minute, since.second, since.microsecond) == (0, 0, 0, 0)
+    assert since.date() == datetime.now().astimezone().date()
+    assert [i["number"] for i in issues] == [8]
 
 
 def _add_subtasks(session_factory, issue_number, states):
