@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>サブタスク報告: Claude参照ルールー①</title>
+<style>
+body{font-family:sans-serif;max-width:960px;margin:2em auto;line-height:1.6;color:#222}
+h1{font-size:1.4em;border-bottom:2px solid #444}
+h2{font-size:1.15em;margin-top:1.6em;border-left:4px solid #2a6;padding-left:.5em}
+table{border-collapse:collapse;width:100%}
+th,td{border:1px solid #bbb;padding:4px 8px;text-align:left;vertical-align:top}
+th{background:#eee}
+.ok{color:#fff;background:#2a6;padding:2px 8px;border-radius:4px}
+code{background:#f3f3f3;padding:0 3px}
+</style>
+</head>
+<body>
+<h1>サブタスク報告: Claude参照ルールー①</h1>
+
+<h2>1. 対象</h2>
+<table>
+<tr><th>Issue</th><td>未採番（サブタスクID: issue-new-616156df）</td></tr>
+<tr><th>サブタスク</th><td>ワークツリー外でもReadできるようにルールを修正する</td></tr>
+<tr><th>ブランチ</th><td><code>issue-new-616156df-subtask-1</code></td></tr>
+</table>
+
+<h2>2. 実装結果</h2>
+<p><span class="ok">成功</span></p>
+<p>読み取り専用ツール（Read・Glob・Grep・LS・NotebookRead）はworktree外のパスでも許可するようにした。</p>
+<p>Bash/PowerShellと書き込み系ツール（Write・Edit等）は、引き続きworktree内に制限される。</p>
+
+<h2>3. 変更内容</h2>
+<table>
+<tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
+<tr><td>1</td><td><code>core/claude_client.py</code></td><td><code>READ_ONLY_TOOL_NAMES</code>を追加した。<code>restrict_to_worktree</code>で該当ツールはパス検査せず許可する。</td></tr>
+<tr><td>2</td><td><code>tests/test_claude_client.py</code></td><td>worktree外のRead・Glob・Grep許可とEdit拒否のテストを追加した。</td></tr>
+<tr><td>3</td><td><code>CLAUDE.md</code></td><td>worktree外の参照が許可されている旨を追記した。</td></tr>
+<tr><td>4</td><td><code>IMPLEMENTATION_PLAN.md</code></td><td>8章に参照許可の方針と残存リスクを追記した。</td></tr>
+<tr><td>5</td><td><code>README.md</code></td><td>安全対策の一覧に書き込み系ツールの制限と参照許可を追記した。</td></tr>
+</table>
+
+<h2>4. 自律判断した事項</h2>
+<table>
+<tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
+<tr><td>1</td><td>「Read」はRead・Glob・Grep・LS・NotebookReadの読み取り専用ツールと解釈した。</td><td>ファイル参照にはGlob・Grepも併用するため、Readだけでは実用上不足する。</td></tr>
+<tr><td>2</td><td>Bash/PowerShellでのworktree外参照（cat等）は許可しない。</td><td>コマンド文字列から読み取り専用かを安全に判定できないため。</td></tr>
+<tr><td>3</td><td>機密ファイル（認証情報等）の除外リストは設けなかった。</td><td>指示はReadの全面許可であり、シンプルさを優先した。残存リスクとして記録した。</td></tr>
+<tr><td>4</td><td>コミットはコード＋テストとドキュメントの2つに分けた。</td><td>ガイドラインのコミット分割ルールに従った。</td></tr>
+</table>
+
+<h2>5. テスト</h2>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code> を実行した。</p>
+<p>結果: 300 passed（追加3件を含む）。</p>
+<p>実際のエージェント実行での動作確認は未実施（テストリポジトリでの実機確認は人間に依頼する）。</p>
+
+<h2>6. 残課題・リスク・レビュー観点</h2>
+<ul>
+<li>worktree外の機密ファイル（<code>~/.ssh</code>、<code>gh</code>認証情報等）も読み取り可能になる。必要なら除外リストを検討する。</li>
+<li>既存のパス判定は<code>startswith</code>による前方一致のため、worktree名を接頭辞に持つ別フォルダへの書き込みを許可してしまう可能性がある（今回の対象外、既存課題）。</li>
+<li>レビュー時は<code>READ_ONLY_TOOL_NAMES</code>の対象ツールが妥当か確認してほしい。</li>
+<li>CLI実行ダイアログ側も同じ<code>restrict_to_worktree</code>を使う場合、同様に参照許可される点を確認してほしい。</li>
+</ul>
+</body>
+</html>
