@@ -10,7 +10,7 @@ from sqlalchemy import text
 from sqlalchemy.orm import sessionmaker
 
 from core.db import SessionLocal, engine
-from core.models import IdeaJob, Project
+from core.models import IdeaJob, Project, Worker
 
 
 class IdeaJobStatus:
@@ -117,12 +117,16 @@ def claim_next_idea_job(worker_id: int, bind=engine, session_factory: sessionmak
     return {"idea_job_id": row.id, "project_id": row.project_id}
 
 
-def heartbeat_idea_job(idea_job_id: int, session_factory: sessionmaker = SessionLocal) -> None:
+def heartbeat_idea_job(idea_job_id: int, worker_id: int, session_factory: sessionmaker = SessionLocal) -> None:
+    now = datetime.now(timezone.utc)
     with session_factory() as session:
         job = session.get(IdeaJob, idea_job_id)
+        worker = session.get(Worker, worker_id)
         if job is not None:
-            job.heartbeat_at = datetime.now(timezone.utc)
-            session.commit()
+            job.heartbeat_at = now
+        if worker is not None:
+            worker.heartbeat_at = now
+        session.commit()
 
 
 def finish_idea_job(
