@@ -4,10 +4,10 @@
 <meta charset="utf-8">
 <title>サブタスク実行レポート - アイデアマンー①</title>
 <style>
-body{font-family:sans-serif;margin:2em;line-height:1.6;color:#222}
+body{font-family:sans-serif;margin:2em;line-height:1.6;color:#222;max-width:1100px}
 h1{font-size:1.4em}h2{font-size:1.1em;border-bottom:1px solid #ccc;margin-top:1.6em}
-table{border-collapse:collapse}td,th{border:1px solid #bbb;padding:4px 8px;text-align:left}
-.fail{color:#b00;font-weight:bold}code{background:#f3f3f3;padding:0 3px}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid #bbb;padding:4px 8px;text-align:left;vertical-align:top}
+th{background:#f0f3f8}.ok{color:#13795b;font-weight:bold}code{background:#f3f3f3;padding:0 3px}
 </style>
 </head>
 <body>
@@ -15,36 +15,69 @@ table{border-collapse:collapse}td,th{border:1px solid #bbb;padding:4px 8px;text-
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#178 アイデアマン（本文・コメントなし）</td></tr>
-<tr><th>サブタスク</th><td>アイデアマンー①</td></tr>
+<tr><th>Issue</th><td>#178 アイデアマン</td></tr>
+<tr><th>サブタスク</th><td>アイデアマンー①（PR #179）</td></tr>
 <tr><th>ブランチ</th><td>issue-new-8c80b423-subtask-1</td></tr>
+<tr><th>設計書</th><td>Input\アイデアマン_設計案.html（v0.1）</td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
-<p class="fail">失敗（未着手）</p>
-<p>設計書を読めなかったため、実装は行っていません。</p>
+<p class="ok">一部成功</p>
+<p>設計案9章のPhase I（ideasテーブル）とPhase II（読み取り専用のアイデア出しジョブ）を実装しました。</p>
+<p>あわせて、投入・一覧・却下のAPIを追加しました。</p>
+<p>Phase III（提案一覧画面）とPhase IV（承認時のIssue・サブタスク作成）は、後続サブタスクの範囲として未着手です。</p>
 
 <h2>3. 実施した変更</h2>
+<table>
+<tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
+<tr><td>1</td><td>core/models.py</td><td><code>IdeaJob</code>・<code>Idea</code>モデルを追加</td></tr>
+<tr><td>2</td><td>core/ideas.py（新規）</td><td>状態・分類の定数、応答JSONの解釈、保存、一覧、却下</td></tr>
+<tr><td>3</td><td>core/idea_queue.py（新規）</td><td>アイデア出しジョブの投入・取得・心拍・完了・心拍途絶の回収</td></tr>
+<tr><td>4</td><td>core/claude_client.py</td><td>アイデアマン用ポリシー、読み取り専用の許可確認と実行関数を追加。応答の集約処理を共通化</td></tr>
+<tr><td>5</td><td>core/idea_context.py（新規）</td><td>Open Issue・失敗した実行・レポート要約・既存提案を含む指示文の組み立て</td></tr>
+<tr><td>6</td><td>core/config.py</td><td><code>idea_max_proposals</code>（5）・<code>idea_history_limit</code>（10）を追加</td></tr>
+<tr><td>7</td><td>worker/idea_runner.py（新規）・worker/main.py</td><td>実装ジョブが無い時にアイデア出しジョブを実行</td></tr>
+<tr><td>8</td><td>app/routes/ideas.py（新規）・app/main.py</td><td>API 4本を追加</td></tr>
+<tr><td>9</td><td>IMPLEMENTATION_PLAN.md</td><td>9章に採用方式と人間の確認が必要な事項を追記</td></tr>
+<tr><td>10</td><td>tests/test_ideas.py ほか4ファイル</td><td>新規テストを追加</td></tr>
+</table>
+<p>追加したAPIは次のとおりです。</p>
 <ul>
-<li><code>.claude-tower/report.html</code>（本レポート）の追加のみ。</li>
-<li>アプリのコードは変更していません。</li>
+<li><code>POST /api/projects/{id}/ideas/run</code>：ジョブを投入する（実行中なら409を返す）</li>
+<li><code>GET /api/projects/{id}/ideas?tab=pending|approved|rejected|all</code>：提案一覧</li>
+<li><code>GET /api/projects/{id}/idea-jobs/latest</code>：最新ジョブの状態</li>
+<li><code>POST /api/ideas/{id}/reject</code>：却下する（理由を記録）</li>
 </ul>
 
 <h2>4. 自律判断した事項</h2>
 <table>
-<tr><th>No.</th><th>判断</th><th>理由</th></tr>
-<tr><td>1</td><td>設計書を読まずに作業を止めた</td><td>指示された設計書 <code>Input\アイデアマン_設計案.html</code> は本体リポジトリ側にあり、worktree外です。Readツールが「worktree外への操作を拒否」と返しました。シェル経由で読むと操作範囲制限を迂回することになるため、行いませんでした。</td></tr>
-<tr><td>2</td><td>推測での実装はしなかった</td><td>設計書はgit管理外でmasterにもありません。Issue #178の本文も空です。仕様の手がかりがないため、推測で実装すると手戻りが大きくなります。</td></tr>
+<tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
+<tr><td>1</td><td>①の範囲をPhase I・IIとAPIまでとした</td><td>サブタスク名が「ー①」なので、段階的に進める前提にしました。画面と承認は後続に回しました。</td></tr>
+<tr><td>2</td><td><code>execution_jobs</code>を流用せず<code>idea_jobs</code>を新設した</td><td>DBは<code>create_all</code>のみで既存テーブルに列を追加できません。また<code>subtask_id</code>が必須です。</td></tr>
+<tr><td>3</td><td>既存ワーカーが実装ジョブを優先し、空き時にアイデア出しを取得する</td><td>設計案2章の「ワーカープールに相乗り」に合わせました。ユーザーの実装作業を妨げないためです。</td></tr>
+<tr><td>4</td><td>worktreeを割り当てず、<code>repo_path</code>を読み取り専用で参照する</td><td>書き込みをしないためブランチは不要です。割り当て機構を変えずに済みます。</td></tr>
+<tr><td>5</td><td>ツールをRead・Glob・Grepのみに絞った</td><td>シェルを許すと読み取り専用を確実に担保できません。<code>tools</code>指定と<code>can_use_tool</code>の二重で制限しています。</td></tr>
+<tr><td>6</td><td>Open Issue・実行履歴は管理塔側で集めて指示文に含める</td><td>No.5の制限で、Claudeはghコマンドを実行できないためです。</td></tr>
+<tr><td>7</td><td>提案は最終応答のJSON配列で受け取る</td><td>ファイル書き込みが禁止なのでレポートファイル方式は使えません。解釈できなければ失敗として応答を残します。</td></tr>
+<tr><td>8</td><td>却下APIは①に含めた</td><td>アプリ内のDB更新のみでGitHubへの書き込みがなく、安全なためです。</td></tr>
+<tr><td>9</td><td>PRレビューコメントの参照は見送った</td><td>MVPの必須ではなく、取得量の設計が必要なため後続に回しました。</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<p>未実施です（コード変更なし）。</p>
-
-<h2>6. 残課題・対応依頼</h2>
-<p>以下のいずれかで設計書をworktreeから参照できるようにしてから、再実行してください。</p>
 <ul>
-<li><code>Input/アイデアマン_設計案.html</code> をmasterにコミットする（公開リポジトリのため、機密情報が含まれないことを確認してから）。</li>
-<li>設計書の要点をIssue #178の本文、またはサブタスクの指示に記載する。</li>
+<li><code>./.venv/Scripts/python.exe -m pytest -q</code>：338件成功（既存297件＋新規41件）</li>
+<li>一時DBでFastAPIを起動し、API呼び出しを確認：投入202、重複投入409、最新ジョブqueued、一覧空、未知IDの却下404</li>
+<li>実際のClaude実行（テストリポジトリでの1回実行）は未実施です。ワーカー再起動が必要で、デプロイ後に人間が確認する必要があります。</li>
+</ul>
+
+<h2>6. 残課題・リスク・レビュー観点</h2>
+<ul>
+<li>Phase IIの完了条件（テストリポジトリで1回実行し、提案が保存される）は未確認です。</li>
+<li>デプロイ後に<code>POST /api/projects/{id}/ideas/run</code>を呼び、<code>idea-jobs/latest</code>がsucceededになるか確認してください。</li>
+<li>Claudeの応答がJSON形式に従わない場合は失敗になります。失敗が続く場合は<code>output_format</code>（構造化出力）への切り替えを検討します。</li>
+<li>読み取り専用の担保（<code>core/claude_client.py</code>の<code>restrict_to_read_only</code>・<code>run_read_only_claude</code>）を重点的にレビューしてください。</li>
+<li>アイデア出しジョブ実行中のワーカーは<code>current_job_id</code>が空のbusyになります。稼働状況パネルでの表示はPhase IIIで調整予定です。</li>
+<li>設計案10章No.1・No.2（対象リポジトリ・サブタスク提案の承認要否）は、人間の確認事項としてIMPLEMENTATION_PLAN.md 9章に記録しました。</li>
 </ul>
 </body>
 </html>
