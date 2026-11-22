@@ -40,6 +40,10 @@
 - `git worktree add`はリポジトリ単位で`filelock`による排他を行う（共有Gitメタデータの同時変更を避けるため。Phase 8実装済み）。
 - 各ワーカーはジョブ実行中、別スレッドで`heartbeat_interval_seconds`ごとにjob/workerのheartbeat_atを更新する。ポーリングのたびに`stale_timeout_seconds`を超えて更新のないrunningジョブを`needs_attention`にする。要確認ジョブは自動再実行しない（Phase 8実装・ワーカー強制終了での実機確認済み）。
 - Webサーバーはリクエスト処理中にClaude Codeを直接起動して待機しない。
+- リポジトリ一覧のCLIボタンから開くCLI実行ダイアログは、リポジトリの`repo_path`でClaudeを実行する。\
+発言はDBの`cli_sessions`・`cli_messages`に保持し、応答はWebサーバー内の別スレッドで実行する。\
+画面は発言一覧をポーリングして表示し、`resume`でセッションを引き継いで会話を続ける。\
+操作範囲は`restrict_to_worktree`で`repo_path`内に制限する。
 - 「マージして最新化」は別スレッドで実行し、結果を制御ディレクトリの`sync-self-result.json`に残す。画面は結果をポーリングして完了を待つ（Issue #69）。
 - 競合したPRはベースブランチをPRブランチへmergeで取り込み、Claudeが競合を解消してからマージする。rebaseは履歴の書き換えとforce pushが必要になるため採用しない（Issue #69）。
 - MRのマージはDBの`merge_jobs`に待ち行列として登録し、Webサーバー内の単一スレッドで1件ずつ順に処理する。\
