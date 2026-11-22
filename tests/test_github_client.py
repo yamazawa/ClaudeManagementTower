@@ -1,5 +1,6 @@
 import json
 import subprocess
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -11,6 +12,7 @@ from core.github_client import (
     edit_pr_title,
     get_pr_mergeable,
     list_issues,
+    list_issues_closed_since,
     list_open_pull_requests,
     merge_pull_request,
 )
@@ -134,6 +136,32 @@ def test_list_issues_defaults_to_open(monkeypatch):
     list_issues("owner/repo")
 
     assert calls[0][calls[0].index("--state") + 1] == "open"
+
+
+def test_list_issues_closed_since_searches_closed_date(monkeypatch):
+    calls = []
+
+    def run(args, **kwargs):
+        calls.append(args)
+        stdout = json.dumps([{"number": 4, "title": "t", "state": "CLOSED"}])
+        return subprocess.CompletedProcess(args, 0, stdout=stdout, stderr="")
+
+    monkeypatch.setattr(github_client.subprocess, "run", run)
+    since = datetime(2026, 11, 22, tzinfo=timezone(timedelta(hours=9)))
+
+    result = list_issues_closed_since("owner/repo", since)
+
+    assert result == [{"number": 4, "title": "t", "state": "CLOSED"}]
+    assert calls == [
+        [
+            "gh", "issue", "list",
+            "--repo", "owner/repo",
+            "--state", "closed",
+            "--search", "closed:>=2026-11-22T00:00:00+09:00",
+            "--limit", str(github_client.ISSUE_LIST_LIMIT),
+            "--json", "number,title,state,url",
+        ]
+    ]
 
 
 def test_merge_pull_request_runs_gh_pr_merge(monkeypatch):

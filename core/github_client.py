@@ -1,5 +1,6 @@
 import json
 import subprocess
+from datetime import datetime
 
 GH_TIMEOUT_SECONDS = 60
 ISSUE_LIST_LIMIT = 200
@@ -34,6 +35,24 @@ def list_issues(repo: str, state: str = "open") -> list[dict]:
             "issue", "list",
             "--repo", repo,
             "--state", state,
+            "--limit", str(ISSUE_LIST_LIMIT),
+            "--json", "number,title,state,url",
+        ]
+    )
+    return json.loads(output)
+
+
+def list_issues_closed_since(repo: str, since: datetime) -> list[dict]:
+    """指定日時以降にクローズされたIssue一覧
+
+    sinceはタイムゾーン付きで指定する。
+    """
+    output = _run_gh(
+        [
+            "issue", "list",
+            "--repo", repo,
+            "--state", "closed",
+            "--search", f"closed:>={since.isoformat(timespec='seconds')}",
             "--limit", str(ISSUE_LIST_LIMIT),
             "--json", "number,title,state,url",
         ]
