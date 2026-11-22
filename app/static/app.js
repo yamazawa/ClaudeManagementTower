@@ -401,6 +401,7 @@ const PROJECT_COUNT_TOOLTIP = "OpenなIssueの未解決MR数 / 解決済MR数";
 const PROJECT_COUNT_FILTERED_TOOLTIP = "OpenなIssueで、選択中のステータスのMR数";
 const PROJECT_LIST_NO_PROJECT_TEXT = "リポジトリが登録されていません。";
 const PROJECT_LIST_NO_MATCH_TEXT = "選択中のステータスのMRを持つリポジトリはありません。";
+const PROJECT_CLI_BUTTON_TOOLTIP = "このリポジトリでClaudeと対話する";
 
 /**
  * ヘッダーのMRステータスフィルタの初期化
@@ -730,7 +731,8 @@ function renderProjectItems(listEl) {
 /**
  * リポジトリ一覧の1行
  *
- * 「表示名 MR数」を並べる。
+ * 「表示名 MR数 CLIボタン」を並べる。
+ * CLIボタンはリポジトリを選択せずにCLI実行ダイアログを開く。
  */
 function renderProjectItem(project) {
   const li = document.createElement("li");
@@ -738,8 +740,13 @@ function renderProjectItem(project) {
   li.dataset.projectId = project.id;
   li.innerHTML =
     `<span class="project-name" title="${escapeAttr(project.display_name)}">${escapeHtml(project.display_name)}</span>` +
-    `<span class="project-count"></span>`;
+    `<span class="project-count"></span>` +
+    `<button type="button" class="subtask-action-button project-cli-button" title="${PROJECT_CLI_BUTTON_TOOLTIP}">CLI</button>`;
   li.addEventListener("click", () => selectProject(project));
+  li.querySelector(".project-cli-button").addEventListener("click", (event) => {
+    event.stopPropagation();
+    openCliDialog(project);
+  });
   return li;
 }
 
