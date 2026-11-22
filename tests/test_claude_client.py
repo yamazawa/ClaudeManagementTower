@@ -63,6 +63,23 @@ def test_denies_edit_outside_worktree(tmp_path):
     assert isinstance(result, PermissionResultDeny)
 
 
+def test_allows_read_outside_worktree(tmp_path):
+    result = _check(str(tmp_path), "Read", {"file_path": "C:/git/DevGuidelines/CommonGuideLine.md"})
+    assert isinstance(result, PermissionResultAllow)
+
+
+def test_allows_glob_and_grep_outside_worktree(tmp_path):
+    glob_result = _check(str(tmp_path), "Glob", {"pattern": "*.md", "path": "C:/git/DevGuidelines"})
+    grep_result = _check(str(tmp_path), "Grep", {"pattern": "x", "path": "C:/git/DevGuidelines"})
+    assert isinstance(glob_result, PermissionResultAllow)
+    assert isinstance(grep_result, PermissionResultAllow)
+
+
+def test_denies_edit_tool_outside_worktree(tmp_path):
+    result = _check(str(tmp_path), "Edit", {"file_path": "C:/git/ClaudeManagementTower/core/config.py"})
+    assert isinstance(result, PermissionResultDeny)
+
+
 def test_max_buffer_size_covers_multiple_attachments():
     assert MAX_BUFFER_SIZE >= MAX_ATTACHMENT_BYTES * 10 * 4 // 3
 
