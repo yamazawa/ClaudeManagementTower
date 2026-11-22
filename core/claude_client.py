@@ -20,6 +20,9 @@ MAX_BUFFER_SIZE = int(MAX_ATTACHMENT_BYTES * MAX_BUFFER_ATTACHMENT_COUNT * MAX_B
 
 SHELL_TOOL_NAMES = {"Bash", "PowerShell"}
 
+# worktree外でも参照を許可する読み取り専用ツール
+READ_ONLY_TOOL_NAMES = {"Read", "Glob", "Grep", "LS", "NotebookRead"}
+
 DANGEROUS_COMMAND_PATTERNS = [
     re.compile(r"push[^|&;\n]*(--force\b|-f\b)", re.IGNORECASE),
     re.compile(r"reset\s+--hard", re.IGNORECASE),
@@ -102,6 +105,9 @@ def restrict_to_worktree(worktree: str) -> Callable:
                 return PermissionResultDeny(message=f"危険な操作のため拒否: {command}")
             if _command_escapes_worktree(command, worktree_abs):
                 return PermissionResultDeny(message=f"worktree外を操作する可能性があるため拒否: {command}")
+            return PermissionResultAllow(updated_input=tool_input)
+
+        if tool_name in READ_ONLY_TOOL_NAMES:
             return PermissionResultAllow(updated_input=tool_input)
 
         path = tool_input.get("file_path") or tool_input.get("path")
