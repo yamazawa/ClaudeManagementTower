@@ -13,6 +13,7 @@ from core.db import SessionLocal, init_db
 from core.execution_events import record_event
 from core.git_client import append_instruction_history, push_branch
 from core.github_client import mark_pr_ready
+from core.idea_queue import claim_next_idea_job, recover_stale_idea_jobs
 from core.lifecycle import LifecycleState
 from core.job_queue import (
     claim_next_job,
@@ -27,6 +28,7 @@ from core.job_queue import (
 from core.models import ExecutionJob, Project, Subtask
 from core.rate_limits import record_rate_limit
 from core.reports import save_report
+from worker.idea_runner import process_idea_job
 
 
 def _previous_session_id(subtask_id: int, current_job_id: int) -> str | None:
@@ -129,6 +131,10 @@ def _cleanup_stale_records() -> None:
     if recovered:
         print(f"[worker] 要確認にしたジョブ: {recovered}")
 
+    recovered_ideas = recover_stale_idea_jobs(settings.job_stale_timeout_seconds)
+    if recovered_ideas:
+        print(f"[worker] 要確認にしたアイデア出しジョブ: {recovered_ideas}")
+
     removed_workers = cleanup_stale_workers(settings.worker_offline_timeout_seconds)
     if removed_workers:
         print(f"[worker] 削除したオフラインワーカー行: {removed_workers}")
@@ -146,11 +152,25 @@ def run_loop(worker_id: int) -> None:
             return
         _cleanup_stale_records()
 
-        job = claim_next_job(worker_id)
-        if job is None:
+        if not _process_next_job(worker_id):
             time.sleep(settings.worker_poll_interval_seconds)
-            continue
+
+
+def _process_next_job(worker_id: int) -> bool:
+    """待機中のジョブを1件実行する
+
+    実装のジョブを優先し、無ければアイデア出しジョブを実行する。
+    実行するジョブが無ければFalseを返す。
+    """
+    job = claim_next_job(worker_id)
+    if job is not None:
         process_job(job, worker_id)
+        return True
+    idea_job = claim_next_idea_job(worker_id)
+    if idea_job is not None:
+        process_idea_job(idea_job, worker_id)
+        return True
+    return False
 
 
 def main() -> None:

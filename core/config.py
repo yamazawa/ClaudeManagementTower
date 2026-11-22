@@ -22,6 +22,8 @@ class Settings(BaseSettings):
     self_repo: str = "yamazawa/ClaudeManagementTower"
     claude_credentials_path: str = ""
     claude_usage_refresh_interval_seconds: float = 300.0
+    idea_max_proposals: int = 5
+    idea_history_limit: int = 10
 
 
 settings = Settings()

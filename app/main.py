@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routes import cli, deploy, jobs, merges, mr_statuses, projects, subtasks, system, workers
+from app.routes import cli, deploy, ideas, jobs, merges, mr_statuses, projects, subtasks, system, workers
 from core.cli_session import recover_interrupted_sessions
 from core.claude_usage import start_refresh_loop as start_usage_refresh_loop
 from core.config import settings
@@ -42,6 +42,7 @@ app.include_router(merges.router)
 app.include_router(mr_statuses.router)
 app.include_router(system.router)
 app.include_router(cli.router)
+app.include_router(ideas.router)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 

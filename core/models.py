@@ -135,6 +135,54 @@ class Report(Base):
     created_at: Mapped[datetime] = mapped_column(default=_now)
 
 
+class IdeaJob(Base):
+    """アイデアマンのアイデア出しジョブ
+
+    実行ジョブと同じワーカープールで処理する。
+    対象リポジトリを読み取り専用で調査し、提案をideasに保存する。
+    """
+
+    __tablename__ = "idea_jobs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"))
+    status: Mapped[str]
+    queued_at: Mapped[datetime] = mapped_column(default=_now)
+    started_at: Mapped[datetime | None] = mapped_column(default=None)
+    ended_at: Mapped[datetime | None] = mapped_column(default=None)
+    worker_id: Mapped[int | None] = mapped_column(default=None)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(default=None)
+    claude_session_id: Mapped[str | None] = mapped_column(default=None)
+    result_summary: Mapped[str | None] = mapped_column(default=None)
+    error_message: Mapped[str | None] = mapped_column(default=None)
+
+
+class Idea(Base):
+    """アイデアマンの提案
+
+    GitHubへは書き込まず、人間が承認するまでアプリ内に保留する。
+    """
+
+    __tablename__ = "ideas"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"))
+    source_job_id: Mapped[int] = mapped_column(ForeignKey("idea_jobs.id"))
+    category: Mapped[str]
+    title: Mapped[str]
+    summary: Mapped[str]
+    detail: Mapped[str]
+    rationale: Mapped[str]
+    related_files: Mapped[str]
+    related_issue_number: Mapped[int | None] = mapped_column(default=None)
+    status: Mapped[str]
+    reject_reason: Mapped[str | None] = mapped_column(default=None)
+    created_issue_number: Mapped[int | None] = mapped_column(default=None)
+    created_subtask_id: Mapped[int | None] = mapped_column(default=None)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+    decided_at: Mapped[datetime | None] = mapped_column(default=None)
+
+
 class RateLimitSnapshot(Base):
     """Claudeのレート制限の最新状況
 
