@@ -78,3 +78,54 @@ def test_run_claude_passes_max_buffer_size(monkeypatch, tmp_path):
     monkeypatch.setattr(claude_client, "query", fake_query)
     asyncio.run(claude_client.run_claude("prompt", str(tmp_path)))
     assert captured["options"].max_buffer_size == MAX_BUFFER_SIZE
+
+
+def _check_read_only(root, tool_name, tool_input):
+    can_use_tool = claude_client.restrict_to_read_only(root)
+    return asyncio.run(can_use_tool(tool_name, tool_input, {}))
+
+
+def test_read_only_allows_read_inside_root(tmp_path):
+    result = _check_read_only(str(tmp_path), "Read", {"file_path": str(tmp_path / "a.py")})
+    assert isinstance(result, PermissionResultAllow)
+
+
+def test_read_only_allows_grep_without_path(tmp_path):
+    assert isinstance(_check_read_only(str(tmp_path), "Grep", {"pattern": "x"}), PermissionResultAllow)
+
+
+def test_read_only_denies_read_outside_root(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    result = _check_read_only(str(root), "Read", {"file_path": str(tmp_path / "secret.txt")})
+    assert isinstance(result, PermissionResultDeny)
+
+
+def test_read_only_denies_write_and_shell_tools(tmp_path):
+    denied_tools = [
+        ("Write", {"file_path": str(tmp_path / "a.py"), "content": "x"}),
+        ("Edit", {"file_path": str(tmp_path / "a.py")}),
+        ("Bash", {"command": "git status"}),
+        ("PowerShell", {"command": "Get-ChildItem"}),
+        ("WebFetch", {"url": "https://example.com"}),
+    ]
+    for tool_name, tool_input in denied_tools:
+        result = _check_read_only(str(tmp_path), tool_name, tool_input)
+        assert isinstance(result, PermissionResultDeny), tool_name
+
+
+def test_run_read_only_claude_limits_tools(monkeypatch, tmp_path):
+    captured = {}
+
+    async def fake_query(prompt, options):
+        captured["options"] = options
+        return
+        yield
+
+    monkeypatch.setattr(claude_client, "query", fake_query)
+    asyncio.run(claude_client.run_read_only_claude("prompt", str(tmp_path), "policy"))
+
+    options = captured["options"]
+    assert options.tools == claude_client.READ_ONLY_TOOL_NAMES
+    assert options.permission_mode == "default"
+    assert options.system_prompt["append"] == "policy"

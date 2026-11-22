@@ -92,6 +92,78 @@ CLI_DIALOG_POLICY_PROMPT = """
 """
 
 
+IDEA_MAN_POLICY_PROMPT = """
+あなたはClaude管理塔のアイデアマンです。
+対象：指定リポジトリのコード・ドキュメント・過去の実行履歴。
+1. コードの変更・コミット・push・GitHubへの書き込み操作は行わない（読み取り専用）。
+2. 既存のOpen Issue一覧を確認し、重複する提案は作らない。
+3. 1回の実行で提案する件数は指示された上限件数までとする。
+4. 各提案には、対象ファイル・行・観測した事象など根拠を明記する。
+5. 機密情報・個人情報を提案の本文に記載しない。
+6. 提案はあくまで案であり、Issue・PRの作成はこのジョブの中では行わない。
+"""
+
+# アイデアマンが使えるツール（読み取り専用）
+READ_ONLY_TOOL_NAMES = ["Read", "Glob", "Grep"]
+
+
+def _is_inside(path: str, root_abs: str) -> bool:
+    return os.path.abspath(path).lower().startswith(root_abs.lower())
+
+
+def restrict_to_read_only(root: str) -> Callable:
+    """読み取り専用ツールを、対象フォルダ内に限って許可する
+
+    シェル・ファイル変更・Web取得などは全て拒否する。
+    """
+    root_abs = os.path.abspath(root)
+
+    async def can_use_tool(tool_name, tool_input, context):
+        if tool_name not in READ_ONLY_TOOL_NAMES:
+            return PermissionResultDeny(message=f"読み取り専用のため拒否: {tool_name}")
+        path = tool_input.get("file_path") or tool_input.get("path")
+        if path and not _is_inside(path, root_abs):
+            return PermissionResultDeny(message=f"対象フォルダ外の参照を拒否: {path}")
+        return PermissionResultAllow(updated_input=tool_input)
+
+    return can_use_tool
+
+
+async def run_read_only_claude(
+    prompt: str,
+    root: str,
+    policy_prompt: str,
+    on_message: Callable[[object], None] | None = None,
+) -> tuple[str | None, str | None]:
+    """読み取り専用でClaudeを実行する
+
+    使えるツールを読み取り系に絞り、許可確認でも読み取り以外を拒否する。
+    """
+    options = ClaudeAgentOptions(
+        cwd=root,
+        tools=READ_ONLY_TOOL_NAMES,
+        can_use_tool=restrict_to_read_only(root),
+        permission_mode="default",
+        max_buffer_size=MAX_BUFFER_SIZE,
+        system_prompt={"type": "preset", "preset": "claude_code", "append": policy_prompt},
+    )
+    return await _collect_result(query(prompt=prompt, options=options), on_message)
+
+
+async def _collect_result(messages, on_message) -> tuple[str | None, str | None]:
+    session_id = None
+    result_text = None
+    async for message in messages:
+        if on_message is not None:
+            on_message(message)
+        cls = type(message).__name__
+        if cls == "SystemMessage" and message.subtype == "init":
+            session_id = message.data.get("session_id")
+        if cls == "ResultMessage":
+            result_text = message.result
+    return session_id, result_text
+
+
 def restrict_to_worktree(worktree: str) -> Callable:
     worktree_abs = os.path.abspath(worktree)
 
