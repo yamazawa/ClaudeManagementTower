@@ -573,14 +573,14 @@ async function renderRateLimits() {
 /**
  * レート制限枠1つ分の表示HTMLを作る
  *
- * 使用率が未受信の場合は--と表示する。
- * リセット時刻を受信している場合は併記する。
+ * 使用率・リセット時刻が未受信の場合は--と表示する。
  */
 function formatRateLimit(label, limit) {
   const hasUtilization = limit && limit.utilization != null;
   const percent = hasUtilization ? `${Math.round(limit.utilization * 100)}%` : RATE_LIMIT_UNKNOWN_TEXT;
   const statusClass = (limit && RATE_LIMIT_STATUS_CLASSES[limit.status]) || "";
-  const reset = limit && limit.resets_at ? `<span class="token-usage-reset">${formatResetTime(limit.resets_at)}</span>` : "";
+  const resetText = limit && limit.resets_at ? formatResetTime(limit.resets_at) : RATE_LIMIT_UNKNOWN_TEXT;
+  const reset = `<span class="token-usage-reset">${resetText}</span>`;
   return `<span class="token-usage-item ${statusClass}"><span class="token-usage-label">${label}</span>${percent}${reset}</span>`;
 }
 

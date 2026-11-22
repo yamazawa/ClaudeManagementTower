@@ -53,14 +53,28 @@ def _to_dict(snapshot: RateLimitSnapshot | None) -> dict | None:
     }
 
 
-def _merge_usage(snapshot: dict | None, usage_window: dict | None) -> dict | None:
+def _future_resets_at(resets_at: int | None, now: float) -> int | None:
+    """リセット時刻が未来の場合のみ返す
+
+    過ぎたリセット時刻は前の枠の値のため表示しない。
+    """
+    return resets_at if resets_at is not None and resets_at > now else None
+
+
+def _merge_usage(snapshot: dict | None, usage_window: dict | None, now: float) -> dict | None:
     """SDK通知の状況に使用率APIの値を重ねる
 
     使用率・リセット時刻は使用率APIを優先し、状態はSDK通知の値を使う。
+    使用率APIにリセット時刻が無い場合は、SDK通知の未来のリセット時刻で補う。
     """
+    if snapshot is not None:
+        snapshot = {**snapshot, "resets_at": _future_resets_at(snapshot["resets_at"], now)}
     if usage_window is None:
         return snapshot
-    return {**(snapshot or {"status": None, "updated_at": None}), **usage_window}
+    merged = {**(snapshot or {"status": None, "updated_at": None, "resets_at": None}), **usage_window}
+    if usage_window["resets_at"] is None:
+        merged["resets_at"] = snapshot["resets_at"] if snapshot else None
+    return merged
 
 
 def get_rate_limits(
@@ -72,11 +86,13 @@ def get_rate_limits(
     どちらの取得元にも無い枠はNoneとする。
     """
     usage = usage_getter() or {}
+    now = datetime.now(timezone.utc).timestamp()
     with session_factory() as session:
         return {
             rate_limit_type: _merge_usage(
                 _to_dict(session.get(RateLimitSnapshot, rate_limit_type)),
                 normalize_window(usage.get(rate_limit_type)),
+                now,
             )
             for rate_limit_type in DISPLAY_TYPES
         }
