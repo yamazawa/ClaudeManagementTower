@@ -203,14 +203,4 @@ async def run_claude(
             "append": policy_prompt,
         },
     )
-    session_id = None
-    result_text = None
-    async for message in query(prompt=prompt, options=options):
-        if on_message is not None:
-            on_message(message)
-        cls = type(message).__name__
-        if cls == "SystemMessage" and message.subtype == "init":
-            session_id = message.data.get("session_id")
-        if cls == "ResultMessage":
-            result_text = message.result
-    return session_id, result_text
+    return await _collect_result(query(prompt=prompt, options=options), on_message)
