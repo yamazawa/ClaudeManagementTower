@@ -5,6 +5,10 @@ from core.db import init_db, make_engine
 from core.rate_limits import get_rate_limits, record_rate_limit
 
 
+# 2100-01-01T00:00:00Z（未来のリセット時刻）
+FUTURE = 4102444800
+
+
 def _no_usage():
     return None
 
@@ -23,14 +27,14 @@ def test_get_rate_limits_returns_none_when_not_received(tmp_path):
 
 def test_record_rate_limit_overwrites_same_type(tmp_path):
     factory = _session_factory(tmp_path)
-    record_rate_limit(RateLimitInfo(status="allowed", rate_limit_type="five_hour", utilization=0.2, resets_at=100), factory)
-    record_rate_limit(RateLimitInfo(status="allowed_warning", rate_limit_type="five_hour", utilization=0.8, resets_at=200), factory)
+    record_rate_limit(RateLimitInfo(status="allowed", rate_limit_type="five_hour", utilization=0.2, resets_at=FUTURE), factory)
+    record_rate_limit(RateLimitInfo(status="allowed_warning", rate_limit_type="five_hour", utilization=0.8, resets_at=FUTURE + 100), factory)
 
     five_hour = get_rate_limits(factory, _no_usage)["five_hour"]
 
     assert five_hour["status"] == "allowed_warning"
     assert five_hour["utilization"] == 0.8
-    assert five_hour["resets_at"] == 200
+    assert five_hour["resets_at"] == FUTURE + 100
 
 
 def test_record_rate_limit_keeps_types_separately(tmp_path):
@@ -71,3 +75,23 @@ def test_get_rate_limits_uses_usage_api_without_event(tmp_path):
     seven_day = get_rate_limits(factory, lambda: usage)["seven_day"]
 
     assert seven_day == {"status": None, "updated_at": None, "utilization": 0.12, "resets_at": None}
+
+
+def test_get_rate_limits_falls_back_to_event_resets_at(tmp_path):
+    factory = _session_factory(tmp_path)
+    record_rate_limit(RateLimitInfo(status="allowed", rate_limit_type="five_hour", utilization=0.1, resets_at=FUTURE), factory)
+    usage = {"five_hour": {"utilization": 0.0, "resets_at": None}}
+
+    five_hour = get_rate_limits(factory, lambda: usage)["five_hour"]
+
+    assert five_hour["utilization"] == 0.0
+    assert five_hour["resets_at"] == FUTURE
+
+
+def test_get_rate_limits_hides_past_event_resets_at(tmp_path):
+    factory = _session_factory(tmp_path)
+    record_rate_limit(RateLimitInfo(status="allowed", rate_limit_type="five_hour", utilization=0.1, resets_at=100), factory)
+    usage = {"five_hour": {"utilization": 0.0, "resets_at": None}}
+
+    assert get_rate_limits(factory, lambda: usage)["five_hour"]["resets_at"] is None
+    assert get_rate_limits(factory, _no_usage)["five_hour"]["resets_at"] is None
