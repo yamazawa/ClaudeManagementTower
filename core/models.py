@@ -97,6 +97,34 @@ class ExecutionEvent(Base):
     created_at: Mapped[datetime] = mapped_column(default=_now)
 
 
+class CliSession(Base):
+    """リポジトリ表示のCLI実行ダイアログでの対話
+
+    1対話を1行とし、Claudeのセッションを引き継いで続けて会話する。
+    """
+
+    __tablename__ = "cli_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"))
+    status: Mapped[str]
+    claude_session_id: Mapped[str | None] = mapped_column(default=None)
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+    updated_at: Mapped[datetime] = mapped_column(default=_now, onupdate=_now)
+
+
+class CliMessage(Base):
+    """CLI実行ダイアログに表示する発言"""
+
+    __tablename__ = "cli_messages"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    cli_session_id: Mapped[int] = mapped_column(ForeignKey("cli_sessions.id"))
+    role: Mapped[str]
+    content: Mapped[str]
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+
+
 class Report(Base):
     __tablename__ = "reports"
 
