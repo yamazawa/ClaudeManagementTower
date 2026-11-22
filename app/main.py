@@ -5,7 +5,8 @@ from fastapi import FastAPI
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routes import deploy, jobs, merges, mr_statuses, projects, subtasks, system, workers
+from app.routes import cli, deploy, jobs, merges, mr_statuses, projects, subtasks, system, workers
+from core.cli_session import recover_interrupted_sessions
 from core.claude_usage import start_refresh_loop as start_usage_refresh_loop
 from core.config import settings
 from core.db import ensure_default_project, init_db
@@ -20,6 +21,7 @@ BOOT_ID = uuid.uuid4().hex
 async def lifespan(app: FastAPI):
     init_db()
     ensure_default_project()
+    recover_interrupted_sessions()
     stop_pr_sync = start_sync_loop(settings.pr_sync_interval_seconds)
     stop_merge_loop = start_merge_loop()
     stop_usage_refresh = start_usage_refresh_loop(settings.claude_usage_refresh_interval_seconds)
@@ -39,6 +41,7 @@ app.include_router(workers.router)
 app.include_router(merges.router)
 app.include_router(mr_statuses.router)
 app.include_router(system.router)
+app.include_router(cli.router)
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
 
