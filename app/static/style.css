@@ -287,8 +287,8 @@ Issue名・入力欄・作成ボタンは折り返さず1行に並べる。
   gap: 6px;
 }
 
-/* リポジトリ一覧のCLIボタン */
-.project-cli-button {
+/* リポジトリ一覧のIdeaボタン・CLIボタン */
+.project-dialog-button {
   flex: none;
 }
 
