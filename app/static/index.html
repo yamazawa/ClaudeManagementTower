@@ -116,7 +116,22 @@
   </div>
 </dialog>
 
+<dialog id="cli-dialog" class="cli-dialog" aria-label="CLI実行">
+  <div class="cli-dialog-header">
+    <span id="cli-dialog-title" class="cli-dialog-title"></span>
+    <span id="cli-dialog-status" class="cli-dialog-status" role="status"></span>
+    <button type="button" id="cli-dialog-new" class="subtask-action-button">新しい会話</button>
+    <button type="button" id="cli-dialog-close" class="subtask-action-button">閉じる</button>
+  </div>
+  <div id="cli-dialog-log" class="cli-dialog-log" aria-live="polite"></div>
+  <form id="cli-dialog-form" class="cli-dialog-form">
+    <textarea id="cli-dialog-input" rows="3" placeholder="Claudeへの指示（Ctrl+Enterで送信）"></textarea>
+    <button type="submit" id="cli-dialog-send" class="subtask-action-button primary">送信</button>
+  </form>
+</dialog>
+
 <script src="/static/image_editor.js"></script>
+<script src="/static/cli_dialog.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>
