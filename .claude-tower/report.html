@@ -2,12 +2,12 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>サブタスク実行レポート - アイデアマンー①</title>
+<title>サブタスク実行レポート - アイデアマンー②</title>
 <style>
 body{font-family:sans-serif;margin:2em;line-height:1.6;color:#222;max-width:1100px}
 h1{font-size:1.4em}h2{font-size:1.1em;border-bottom:1px solid #ccc;margin-top:1.6em}
 table{border-collapse:collapse;width:100%}td,th{border:1px solid #bbb;padding:4px 8px;text-align:left;vertical-align:top}
-th{background:#f0f3f8}.ok{color:#13795b;font-weight:bold}code{background:#f3f3f3;padding:0 3px}
+th{background:#f0f3f8}.ok{color:#13795b;font-weight:bold}.warn{color:#a4650a;font-weight:bold}code{background:#f3f3f3;padding:0 3px}
 </style>
 </head>
 <body>
@@ -16,68 +16,69 @@ th{background:#f0f3f8}.ok{color:#13795b;font-weight:bold}code{background:#f3f3f3
 <h2>1. 対象</h2>
 <table>
 <tr><th>Issue</th><td>#178 アイデアマン</td></tr>
-<tr><th>サブタスク</th><td>アイデアマンー①（PR #179）</td></tr>
-<tr><th>ブランチ</th><td>issue-new-8c80b423-subtask-1</td></tr>
-<tr><th>設計書</th><td>Input\アイデアマン_設計案.html（v0.1）</td></tr>
+<tr><th>サブタスク</th><td>アイデアマンー②（PR #182、Draft）</td></tr>
+<tr><th>ブランチ</th><td>issue-178-subtask-2（base: master）</td></tr>
+<tr><th>設計書</th><td>Input\アイデアマン_設計案.html（v0.1、リポジトリ未登録のため本体側のファイルを参照）</td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
-<p class="ok">一部成功</p>
-<p>設計案9章のPhase I（ideasテーブル）とPhase II（読み取り専用のアイデア出しジョブ）を実装しました。</p>
-<p>あわせて、投入・一覧・却下のAPIを追加しました。</p>
-<p>Phase III（提案一覧画面）とPhase IV（承認時のIssue・サブタスク作成）は、後続サブタスクの範囲として未着手です。</p>
+<p class="ok">成功（実機での画面確認・GitHub反映確認は未実施）</p>
+<p>設計案9章のPhase III（提案一覧画面・承認／却下UI）を実装しました。</p>
+<p>Phase IV（承認時のIssue作成・サブタスク作成）を実装しました。</p>
+<p>自動テストは全件成功しています。</p>
 
 <h2>3. 実施した変更</h2>
 <table>
 <tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td>core/models.py</td><td><code>IdeaJob</code>・<code>Idea</code>モデルを追加</td></tr>
-<tr><td>2</td><td>core/ideas.py（新規）</td><td>状態・分類の定数、応答JSONの解釈、保存、一覧、却下</td></tr>
-<tr><td>3</td><td>core/idea_queue.py（新規）</td><td>アイデア出しジョブの投入・取得・心拍・完了・心拍途絶の回収</td></tr>
-<tr><td>4</td><td>core/claude_client.py</td><td>アイデアマン用ポリシー、読み取り専用の許可確認と実行関数を追加。応答の集約処理を共通化</td></tr>
-<tr><td>5</td><td>core/idea_context.py（新規）</td><td>Open Issue・失敗した実行・レポート要約・既存提案を含む指示文の組み立て</td></tr>
-<tr><td>6</td><td>core/config.py</td><td><code>idea_max_proposals</code>（5）・<code>idea_history_limit</code>（10）を追加</td></tr>
-<tr><td>7</td><td>worker/idea_runner.py（新規）・worker/main.py</td><td>実装ジョブが無い時にアイデア出しジョブを実行</td></tr>
-<tr><td>8</td><td>app/routes/ideas.py（新規）・app/main.py</td><td>API 4本を追加</td></tr>
-<tr><td>9</td><td>IMPLEMENTATION_PLAN.md</td><td>9章に採用方式と人間の確認が必要な事項を追記</td></tr>
-<tr><td>10</td><td>tests/test_ideas.py ほか4ファイル</td><td>新規テストを追加</td></tr>
+<tr><td>1</td><td>core/idea_approval.py（新規）</td><td>承認の種類、承認処理中への状態遷移（二重承認防止）、失敗時の差し戻し、Issue本文・サブタスク指示の組み立て</td></tr>
+<tr><td>2</td><td>app/routes/ideas.py</td><td><code>POST /api/ideas/{id}/approve</code>を追加。既存の<code>create_issue</code>・<code>create_subtask</code>・<code>execute_subtask</code>を呼び出す</td></tr>
+<tr><td>3</td><td>app/static/idea_dialog.js（新規）</td><td>提案一覧ダイアログ。タブ（未処理／承認済み／却下済み）、提案カード、承認・却下、アイデア出し実行と状況表示</td></tr>
+<tr><td>4</td><td>app/static/index.html・style.css</td><td>ダイアログのマークアップとスタイル（スマホ幅では縦積み）</td></tr>
+<tr><td>5</td><td>app/static/app.js</td><td>リポジトリ一覧の各行にIdeaボタンを追加。ダイアログを開くボタンの処理を共通化</td></tr>
+<tr><td>6</td><td>IMPLEMENTATION_PLAN.md</td><td>9章に採用方式No.10〜16と残存リスクを追記</td></tr>
+<tr><td>7</td><td>tests/test_idea_approval.py（新規）・tests/test_idea_routes.py</td><td>状態遷移・本文組み立て・承認APIのテスト</td></tr>
 </table>
-<p>追加したAPIは次のとおりです。</p>
-<ul>
-<li><code>POST /api/projects/{id}/ideas/run</code>：ジョブを投入する（実行中なら409を返す）</li>
-<li><code>GET /api/projects/{id}/ideas?tab=pending|approved|rejected|all</code>：提案一覧</li>
-<li><code>GET /api/projects/{id}/idea-jobs/latest</code>：最新ジョブの状態</li>
-<li><code>POST /api/ideas/{id}/reject</code>：却下する（理由を記録）</li>
-</ul>
+<p>コミットは状態遷移／承認API／ダイアログ／Ideaボタン／実装計画の5つに分けています。</p>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>①の範囲をPhase I・IIとAPIまでとした</td><td>サブタスク名が「ー①」なので、段階的に進める前提にしました。画面と承認は後続に回しました。</td></tr>
-<tr><td>2</td><td><code>execution_jobs</code>を流用せず<code>idea_jobs</code>を新設した</td><td>DBは<code>create_all</code>のみで既存テーブルに列を追加できません。また<code>subtask_id</code>が必須です。</td></tr>
-<tr><td>3</td><td>既存ワーカーが実装ジョブを優先し、空き時にアイデア出しを取得する</td><td>設計案2章の「ワーカープールに相乗り」に合わせました。ユーザーの実装作業を妨げないためです。</td></tr>
-<tr><td>4</td><td>worktreeを割り当てず、<code>repo_path</code>を読み取り専用で参照する</td><td>書き込みをしないためブランチは不要です。割り当て機構を変えずに済みます。</td></tr>
-<tr><td>5</td><td>ツールをRead・Glob・Grepのみに絞った</td><td>シェルを許すと読み取り専用を確実に担保できません。<code>tools</code>指定と<code>can_use_tool</code>の二重で制限しています。</td></tr>
-<tr><td>6</td><td>Open Issue・実行履歴は管理塔側で集めて指示文に含める</td><td>No.5の制限で、Claudeはghコマンドを実行できないためです。</td></tr>
-<tr><td>7</td><td>提案は最終応答のJSON配列で受け取る</td><td>ファイル書き込みが禁止なのでレポートファイル方式は使えません。解釈できなければ失敗として応答を残します。</td></tr>
-<tr><td>8</td><td>却下APIは①に含めた</td><td>アプリ内のDB更新のみでGitHubへの書き込みがなく、安全なためです。</td></tr>
-<tr><td>9</td><td>PRレビューコメントの参照は見送った</td><td>MVPの必須ではなく、取得量の設計が必要なため後続に回しました。</td></tr>
+<tr><td>1</td><td>提案一覧は新規ペインではなく、リポジトリ一覧のIdeaボタンから開くダイアログにした</td><td>既存4ペイン構成を崩さず、CLIボタンと同じ操作で提供できるため（UI設計ルール「共通操作」）</td></tr>
+<tr><td>2</td><td>承認APIの<code>mode</code>は<code>issue_only</code>／<code>with_subtask</code>の2種とした</td><td>設計案5章の「Issueのみ作成」「Issue作成＋初回サブタスク」に対応させた</td></tr>
+<tr><td>3</td><td>「サブタスクも作成」では作成後に実行ジョブを投入する</td><td>設計案5章で「実装着手」「実行ジョブ投入」まで既存パイプラインを呼ぶと明記されているため。画面では確認ダイアログで「実装を開始」と明示する</td></tr>
+<tr><td>4</td><td>既存Issue配下の提案はIssueを作らずサブタスクのみ作成し、Issueのみの承認は409で拒否する</td><td>設計案4章の<code>related_issue_number</code>の意味に従った</td></tr>
+<tr><td>5</td><td>承認開始時に状態条件付きの更新で<code>approved_*</code>にする</td><td>連打・複数端末からの二重Issue作成を防ぐため</td></tr>
+<tr><td>6</td><td>Issue作成失敗は未処理に戻し、サブタスク作成失敗はIssue作成済みに戻す。Issue作成済みの提案は承認済みタブから「サブタスクを作成」で再実行できる</td><td>取り消せないIssueを重複作成しないため</td></tr>
+<tr><td>7</td><td>Issue名は提案タイトルをそのまま使い、<code>[SPn]タスクn</code>形式は強制しない</td><td>提案側はスプリント番号を知らず、既存のIssue作成画面も形式を強制していないため</td></tr>
+<tr><td>8</td><td>Issue本文に「アイデアマンの提案（ID: n）から作成」を付ける</td><td>GitHub上で起点を追えるようにするため</td></tr>
+<tr><td>9</td><td>承認はGitHubへ即時反映されるため、実行前にconfirmで確認する</td><td>既存のIssueクローズ等と同じ確認方式に合わせた</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<ul>
-<li><code>./.venv/Scripts/python.exe -m pytest -q</code>：338件成功（既存297件＋新規41件）</li>
-<li>一時DBでFastAPIを起動し、API呼び出しを確認：投入202、重複投入409、最新ジョブqueued、一覧空、未知IDの却下404</li>
-<li>実際のClaude実行（テストリポジトリでの1回実行）は未実施です。ワーカー再起動が必要で、デプロイ後に人間が確認する必要があります。</li>
-</ul>
+<table>
+<tr><th>テスト</th><th>結果</th></tr>
+<tr><td><code>./.venv/Scripts/python.exe -m pytest -q</code>（全体）</td><td class="ok">359 passed</td></tr>
+<tr><td>追加分：tests/test_idea_approval.py（11件）、tests/test_idea_routes.py（承認API 7件＋登録確認）</td><td class="ok">成功</td></tr>
+<tr><td><code>node --check</code>（idea_dialog.js・app.js）</td><td class="ok">構文エラーなし</td></tr>
+<tr><td>TestClientでの静的ファイル配信・index.htmlのダイアログ有無・不正modeの422</td><td class="ok">成功</td></tr>
+<tr><td>ブラウザでの画面操作確認</td><td class="warn">未実施（ブラウザ操作手段が無く、人間の使用中の画面と競合し得るため）</td></tr>
+<tr><td>実GitHubでのIssue・Draft PR作成確認（設計案Phase IVの完了条件）</td><td class="warn">未実施（公開リポジトリへ即時反映されるため。テストリポジトリでの人間による確認を推奨）</td></tr>
+</table>
 
-<h2>6. 残課題・リスク・レビュー観点</h2>
+<h2>6. 残課題・リスク・確認ポイント</h2>
 <ul>
-<li>Phase IIの完了条件（テストリポジトリで1回実行し、提案が保存される）は未確認です。</li>
-<li>デプロイ後に<code>POST /api/projects/{id}/ideas/run</code>を呼び、<code>idea-jobs/latest</code>がsucceededになるか確認してください。</li>
-<li>Claudeの応答がJSON形式に従わない場合は失敗になります。失敗が続く場合は<code>output_format</code>（構造化出力）への切り替えを検討します。</li>
-<li>読み取り専用の担保（<code>core/claude_client.py</code>の<code>restrict_to_read_only</code>・<code>run_read_only_claude</code>）を重点的にレビューしてください。</li>
-<li>アイデア出しジョブ実行中のワーカーは<code>current_job_id</code>が空のbusyになります。稼働状況パネルでの表示はPhase IIIで調整予定です。</li>
-<li>設計案10章No.1・No.2（対象リポジトリ・サブタスク提案の承認要否）は、人間の確認事項としてIMPLEMENTATION_PLAN.md 9章に記録しました。</li>
+<li>承認操作中にサーバーが停止すると、提案が承認処理中（Issue作成中／サブタスク作成中）のまま残る。画面から戻す手段は無い。</li>
+<li>承認中はGitHub・git操作の完了まで応答を待つため、数十秒かかる場合がある。</li>
+<li>提案本文はClaudeの出力をそのままIssue本文に使う。公開リポジトリへ反映する前に、内容をカードで確認してから承認する運用とする。</li>
+<li>直近のPRレビューコメントの参照（設計案3章）は前回から引き続き未対応。</li>
+<li>設計案HTMLがリポジトリに未登録。必要ならInput\へ追加する。</li>
+</ul>
+<p>レビュー時の確認ポイント：</p>
+<ul>
+<li>claude-tower-test-repoで「Issueを作成」「サブタスクも作成」「既存Issue配下のサブタスクを作成」「却下」を一通り操作する。</li>
+<li>サブタスク作成直後に実行ジョブが投入される挙動が意図どおりか（自動で実装開始してよいか）。</li>
+<li>スマホ幅での提案カードの表示崩れが無いか。</li>
+<li>app/routes/ideas.pyがapp/routes/subtasks.pyのルート関数を直接呼ぶ構成でよいか。</li>
 </ul>
 </body>
 </html>
