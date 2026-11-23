@@ -1,65 +1,39 @@
-# サブタスク: [IdeaMan] 実装ジョブの状態表示を日本語・色分けにし、失敗理由を表示するー①
+# サブタスク: [IdeaMan] Issue選択時のGitHub問い合わせを省き、DB上のMR一覧のみで表示するー①
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-実装ジョブの状態表示を日本語・色分けにし、失敗理由を表示する
+Issue選択時のGitHub問い合わせを省き、DB上のMR一覧のみで表示する
 
 ## 概要
 
-MR内容ペインの実装ジョブの状態が「状態: failed」のように英語のまま、色分けなしで表示される。状態を日本語にして色分けし、失敗した場合はその理由を画面に出す。
+Issueを選択するたびにgh issue viewを実行しているが、画面はIssue本文を使っていない。Issue一覧で取得済みの値とDB上のMR一覧で表示し、選択時の待ち時間をなくす。
 
 ## 詳細
 
-・ジョブ状態（queued/running/succeeded/failed/needs_attention等）の表示文言を定数にまとめ、日本語で表示する。
-・.job-statusに状態ごとのクラスを付け、実行中はスピナー、失敗・要確認は警告色、成功はアクセント色にする。
-・GET /api/jobs/{id} と _latest_job_summary の返却値に error_message を追加する。
-・失敗時は状態の下に error_message を表示し、長い文は末尾を省略してツールチップで全文を出す。
+- Issue選択時は、Issue一覧で取得済みのnumber・title・state・urlと、既存のDB専用API（/issues/{number}/subtasks）でIssue内容を組み立てる。
+- 対象はselectIssue、fetchIssueSelection、refreshIssueDetail（ジョブ完了時）、openCreatedIssueAndSubtaskとする。
+- Issue一覧に無い番号（fetchUnlistedIssue）は、従来どおり詳細APIで取得する。
+- 詳細API（get_issue_detail）は残すが、画面の通常操作では呼ばないようにする。
+- 効果は、Issue切り替え時に出る「更新中…」の時間の短縮を、手動で計測して確認する。
 
 ## 根拠
 
-app.js:1812とapp.js:2258で job.status の値をそのまま「状態: ${job.status}」として出している。ガイドラインの「Enum定義は日本語にせず、表示はConverterで変換する」に合っていない。.job-status（style.css:954-957）には状態ごとの見た目の指定がない。ExecutionJobにはerror_message列がある（core/models.py:66）が、app/routes/jobs.py:20-30とapp/routes/projects.py:50の返却値に含まれず、MR内容ペインで失敗理由が見えない。アイデアマンのダイアログでは error_message をツールチップに出している（idea_dialog.js:166）ので、画面ごとに表示が揃っていない。最近の実行でも「JSON message exceeded maximum buffer size」「TLS handshake timeout」などの失敗が続いており、理由が画面で見えると原因を追いやすい。
+- app/routes/projects.py:243-249 のget_issue_detailは、毎回get_issue（gh issue view）を実行している。
+- core/github_client.py:114-118 のget_issueはbodyを取得しているが、app.jsでIssueの.bodyを参照している箇所は無い（grepで確認）。
+- 画面で使っているtitle・state・urlは、Issue一覧API（gh issue list --json number,title,state,url）の結果にすでにある。
+- app.js:1506-1515 のselectIssueは、詳細取得が終わるまで画面をブロックして「更新中…」を表示する。
+- app.js:2350 ではジョブ完了のたびにrefreshIssueDetailでgh問い合わせが発生している。
+- MR一覧は、GitHubに問い合わせないAPI（projects.py:286-291）が既にある。
 
 ## 関連ファイル
 
-- app/static/app.js:1805
-- app/static/app.js:2258
-- app/static/style.css:954
-- app/routes/jobs.py:20
-- app/routes/projects.py:40
-- core/models.py:66
-- app/static/idea_dialog.js:166
-## 実行指示（2026-11-23 06:44:20 UTC）
-
-アイデアマンの提案を実装する。
-
-## 提案タイトル
-
-実装ジョブの状態表示を日本語・色分けにし、失敗理由を表示する
-
-## 概要
-
-MR内容ペインの実装ジョブの状態が「状態: failed」のように英語のまま、色分けなしで表示される。状態を日本語にして色分けし、失敗した場合はその理由を画面に出す。
-
-## 詳細
-
-・ジョブ状態（queued/running/succeeded/failed/needs_attention等）の表示文言を定数にまとめ、日本語で表示する。
-・.job-statusに状態ごとのクラスを付け、実行中はスピナー、失敗・要確認は警告色、成功はアクセント色にする。
-・GET /api/jobs/{id} と _latest_job_summary の返却値に error_message を追加する。
-・失敗時は状態の下に error_message を表示し、長い文は末尾を省略してツールチップで全文を出す。
-
-## 根拠
-
-app.js:1812とapp.js:2258で job.status の値をそのまま「状態: ${job.status}」として出している。ガイドラインの「Enum定義は日本語にせず、表示はConverterで変換する」に合っていない。.job-status（style.css:954-957）には状態ごとの見た目の指定がない。ExecutionJobにはerror_message列がある（core/models.py:66）が、app/routes/jobs.py:20-30とapp/routes/projects.py:50の返却値に含まれず、MR内容ペインで失敗理由が見えない。アイデアマンのダイアログでは error_message をツールチップに出している（idea_dialog.js:166）ので、画面ごとに表示が揃っていない。最近の実行でも「JSON message exceeded maximum buffer size」「TLS handshake timeout」などの失敗が続いており、理由が画面で見えると原因を追いやすい。
-
-## 関連ファイル
-
-- app/static/app.js:1805
-- app/static/app.js:2258
-- app/static/style.css:954
-- app/routes/jobs.py:20
-- app/routes/projects.py:40
-- core/models.py:66
-- app/static/idea_dialog.js:166
-
+- app/routes/projects.py:243
+- core/github_client.py:114
+- app/static/app.js:1124
+- app/static/app.js:1506
+- app/static/app.js:1549
+- app/static/app.js:1558
+- app/static/app.js:2175
+- app/static/app.js:2350
