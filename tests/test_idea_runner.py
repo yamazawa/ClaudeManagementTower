@@ -72,6 +72,14 @@ def test_process_idea_job_saves_proposals(session_factory, tmp_path):
         assert [i.title for i in session.query(Idea).order_by(Idea.id)] == ["a", "b"]
 
 
+def test_process_idea_job_passes_focus_to_prompt(session_factory):
+    runner, calls = _runner("```json\n[]\n```")
+
+    idea_runner.process_idea_job({"idea_job_id": 1, "project_id": 1, "focus": "性能"}, 1, claude_runner=runner)
+
+    assert "# 重視する観点（依頼者の指定）\n性能" in calls[0][0]
+
+
 def test_process_idea_job_fails_on_unparsable_result(session_factory):
     runner, _ = _runner("提案はありません")
 

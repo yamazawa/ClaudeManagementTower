@@ -19,6 +19,13 @@ FAILED_JOB_STATES = ("failed", "needs_attention")
 EXCERPT_MAX_LENGTH = 500
 NONE_TEXT = "（なし）"
 ISSUE_FETCH_FAILED_TEXT = "（取得に失敗したため不明。重複に注意する）"
+FOCUS_SECTION_FORMAT = """
+# 重視する観点（依頼者の指定）
+{focus}
+
+上記の観点に沿った提案を優先する。
+観点に合う提案が無い場合は、無理に件数を埋めない。
+"""
 
 OUTPUT_FORMAT_TEXT = """
 # 出力形式
@@ -109,14 +116,22 @@ def _history_sections(session, project_id: int, limit: int) -> list[str]:
     ]
 
 
+def _focus_sections(focus: str) -> list[str]:
+    return [FOCUS_SECTION_FORMAT.format(focus=focus.strip()).strip()] if focus.strip() else []
+
+
 def build_idea_prompt(
     project_id: int,
     max_proposals: int,
     history_limit: int,
+    focus: str = "",
     session_factory: sessionmaker = SessionLocal,
     issue_lister: Callable[[str], list[dict]] = list_issues,
 ) -> str:
-    """アイデア出しの指示文を組み立てる"""
+    """アイデア出しの指示文を組み立てる
+
+    観点の指定があれば、調査の依頼の直後に含める。
+    """
     with session_factory() as session:
         project = session.get(Project, project_id)
         history = _history_sections(session, project_id, history_limit)
@@ -124,6 +139,10 @@ def build_idea_prompt(
         f"リポジトリ {project.github_repo} のコード・ドキュメントを調査し、"
         f"改善提案（Issue案・サブタスク案）を最大{max_proposals}件出してください。"
     )
-    sections = [header, "# Open Issue一覧（重複させない）\n" + _open_issue_lines(project.github_repo, issue_lister)]
+    sections = [
+        header,
+        *_focus_sections(focus),
+        "# Open Issue一覧（重複させない）\n" + _open_issue_lines(project.github_repo, issue_lister),
+    ]
     output_format = OUTPUT_FORMAT_TEXT.format(categories=json.dumps(list(IdeaCategory.ALL)))
     return "\n\n".join([*sections, *history, output_format.strip()])

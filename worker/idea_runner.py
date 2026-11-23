@@ -54,8 +54,8 @@ def _with_heartbeat(idea_job_id: int, worker_id: int, action: Callable[[], None]
         thread.join()
 
 
-def _execute(idea_job_id: int, project_id: int, claude_runner: Callable) -> None:
-    prompt = build_idea_prompt(project_id, settings.idea_max_proposals, settings.idea_history_limit)
+def _execute(idea_job_id: int, project_id: int, focus: str, claude_runner: Callable) -> None:
+    prompt = build_idea_prompt(project_id, settings.idea_max_proposals, settings.idea_history_limit, focus)
     session_id, result_text = asyncio.run(claude_runner(prompt, _repo_path(project_id)))
     try:
         proposals = parse_proposals(result_text or "", settings.idea_max_proposals)
@@ -77,8 +77,9 @@ def process_idea_job(job: dict, worker_id: int, claude_runner: Callable = _run_c
     idea_job_id = job["idea_job_id"]
     print(f"[worker] idea job {idea_job_id} (project {job['project_id']}) を実行開始")
     set_worker_state(worker_id, state="busy", current_job_id=None)
+    focus = job.get("focus", "")
     try:
-        _with_heartbeat(idea_job_id, worker_id, lambda: _execute(idea_job_id, job["project_id"], claude_runner))
+        _with_heartbeat(idea_job_id, worker_id, lambda: _execute(idea_job_id, job["project_id"], focus, claude_runner))
     except Exception as exc:  # noqa: BLE001
         status = IdeaJobStatus.RATE_LIMITED if is_rate_limit_error(str(exc)) else IdeaJobStatus.FAILED
         finish_idea_job(idea_job_id, status, error_message=str(exc))

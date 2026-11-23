@@ -46,12 +46,13 @@ def test_enqueue_allowed_after_finish(db):
 
 def test_claim_returns_oldest_queued_job_once(db):
     engine, factory = db
-    first = idea_queue.enqueue_idea_job(1, session_factory=factory)
+    first = idea_queue.enqueue_idea_job(1, " テスト不足 \n", session_factory=factory)
     idea_queue.enqueue_idea_job(2, session_factory=factory)
 
     claimed = idea_queue.claim_next_idea_job(7, bind=engine, session_factory=factory)
 
-    assert claimed == {"idea_job_id": first["id"], "project_id": 1}
+    assert first["focus"] == "テスト不足"
+    assert claimed == {"idea_job_id": first["id"], "project_id": 1, "focus": "テスト不足"}
     with factory() as session:
         job = session.get(IdeaJob, first["id"])
         assert job.status == IdeaJobStatus.RUNNING

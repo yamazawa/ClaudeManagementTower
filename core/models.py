@@ -140,6 +140,7 @@ class IdeaJob(Base):
 
     実行ジョブと同じワーカープールで処理する。
     対象リポジトリを読み取り専用で調査し、提案をideasに保存する。
+    focusは依頼時に人間が指定した、アイデアを出してほしい観点（空なら指定なし）。
     """
 
     __tablename__ = "idea_jobs"
@@ -147,6 +148,7 @@ class IdeaJob(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"))
     status: Mapped[str]
+    focus: Mapped[str] = mapped_column(default="")
     queued_at: Mapped[datetime] = mapped_column(default=_now)
     started_at: Mapped[datetime | None] = mapped_column(default=None)
     ended_at: Mapped[datetime | None] = mapped_column(default=None)
