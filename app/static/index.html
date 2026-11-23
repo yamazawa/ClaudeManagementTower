@@ -33,24 +33,67 @@
       <h2 id="repo-heading" class="title-heading">Repo</h2>
     </div>
     <p id="issue-list-placeholder" class="empty">左の一覧からリポジトリを選択してください。</p>
-    <div id="issue-panel" hidden>
-      <div id="issue-create-block" class="create-block">
-        <h3 class="section-heading section-heading-top">Issue作成</h3>
-        <form id="issue-create-form">
-          <input type="text" name="title" placeholder="タイトル" required />
-          <button type="submit">Create</button>
-          <p id="issue-create-status" class="empty"></p>
-        </form>
+    <div id="repo-panel" hidden>
+      <div id="repo-item-tabs" class="repo-item-tabs" role="tablist" aria-label="リポジトリの項目">
+        <button type="button" class="repo-item-tab" role="tab" data-kind="issue" aria-selected="true">Issue</button>
+        <button type="button" class="repo-item-tab" role="tab" data-kind="cli" aria-selected="false">CLI</button>
+        <button type="button" class="repo-item-tab" role="tab" data-kind="idea" aria-selected="false">Idea</button>
       </div>
-      <h3 class="section-heading section-heading-with-filter">
-        Issue一覧
-        <select id="issue-filter" class="heading-filter" aria-label="Issue一覧の表示フィルタ">
-          <option value="open" selected>Open</option>
-          <option value="closed_today">Close（Today）</option>
-          <option value="closed">Close</option>
-        </select>
-      </h3>
-      <ul id="issue-list-items"></ul>
+      <div id="issue-panel" class="repo-item-panel" data-kind="issue" role="tabpanel">
+        <div id="issue-create-block" class="create-block">
+          <h3 class="section-heading section-heading-top">Issue作成</h3>
+          <form id="issue-create-form">
+            <input type="text" name="title" placeholder="タイトル" required />
+            <button type="submit">Create</button>
+            <p id="issue-create-status" class="empty"></p>
+          </form>
+        </div>
+        <h3 class="section-heading section-heading-with-filter">
+          Issue一覧
+          <select id="issue-filter" class="heading-filter" aria-label="Issue一覧の表示フィルタ">
+            <option value="open" selected>Open</option>
+            <option value="closed_today">Close（Today）</option>
+            <option value="closed">Close</option>
+          </select>
+        </h3>
+        <ul id="issue-list-items"></ul>
+      </div>
+      <div id="cli-panel" class="repo-item-panel" data-kind="cli" role="tabpanel" hidden>
+        <div class="create-block">
+          <h3 class="section-heading section-heading-top">CLI作成</h3>
+          <form id="cli-create-form" class="repo-item-create-form">
+            <input type="text" name="title" placeholder="タイトル" maxlength="200" required />
+            <button type="submit">Create</button>
+            <p id="cli-create-status" class="repo-item-create-status empty"></p>
+          </form>
+        </div>
+        <h3 class="section-heading section-heading-with-filter">
+          CLI一覧
+          <select id="cli-filter" class="heading-filter" aria-label="CLI一覧の表示フィルタ">
+            <option value="open" selected>Open</option>
+            <option value="closed">Close</option>
+          </select>
+        </h3>
+        <ul id="cli-list-items" class="repo-item-list"></ul>
+      </div>
+      <div id="idea-panel" class="repo-item-panel" data-kind="idea" role="tabpanel" hidden>
+        <div class="create-block">
+          <h3 class="section-heading section-heading-top">Idea作成</h3>
+          <form id="idea-create-form" class="repo-item-create-form">
+            <input type="text" name="title" placeholder="タイトル" maxlength="200" required />
+            <button type="submit">Create</button>
+            <p id="idea-create-status" class="repo-item-create-status empty"></p>
+          </form>
+        </div>
+        <h3 class="section-heading section-heading-with-filter">
+          Idea一覧
+          <select id="idea-filter" class="heading-filter" aria-label="Idea一覧の表示フィルタ">
+            <option value="open" selected>Open</option>
+            <option value="closed">Close</option>
+          </select>
+        </h3>
+        <ul id="idea-list-items" class="repo-item-list"></ul>
+      </div>
     </div>
   </section>
   <section id="subtask-list" aria-label="Issue内容">
@@ -90,6 +133,16 @@
       <p class="empty">MRを選択してください。</p>
     </div>
   </section>
+  <section id="repo-item-detail" aria-label="CLI・Ideaの内容" hidden>
+    <div class="section-title-row">
+      <button type="button" class="expander" aria-expanded="true" aria-label="開閉"></button>
+      <h2 id="repo-item-heading" class="title-heading"></h2>
+    </div>
+    <div id="repo-item-detail-body">
+      <p id="repo-item-title-status" class="title-status empty"></p>
+      <div id="repo-item-view"></div>
+    </div>
+  </section>
 </main>
 
 <div id="selection-busy" class="selection-busy" role="status" aria-live="polite" hidden>
@@ -121,38 +174,10 @@
   </div>
 </dialog>
 
-<dialog id="cli-dialog" class="cli-dialog" aria-label="CLI実行">
-  <div class="cli-dialog-header">
-    <span id="cli-dialog-title" class="cli-dialog-title"></span>
-    <span id="cli-dialog-status" class="cli-dialog-status" role="status"></span>
-    <button type="button" id="cli-dialog-new" class="subtask-action-button">新しい会話</button>
-    <button type="button" id="cli-dialog-close" class="subtask-action-button">閉じる</button>
-  </div>
-  <div id="cli-dialog-log" class="cli-dialog-log" aria-live="polite"></div>
-  <form id="cli-dialog-form" class="cli-dialog-form">
-    <textarea id="cli-dialog-input" rows="3" placeholder="Claudeへの指示（Ctrl+Enterで送信）"></textarea>
-    <button type="submit" id="cli-dialog-send" class="subtask-action-button primary">送信</button>
-  </form>
-</dialog>
-
-<dialog id="idea-dialog" class="cli-dialog idea-dialog" aria-label="提案一覧（アイデアマン）">
-  <div class="cli-dialog-header">
-    <span id="idea-dialog-title" class="cli-dialog-title"></span>
-    <span id="idea-dialog-job" class="cli-dialog-status" role="status"></span>
-    <label class="idea-dialog-execute"><input type="checkbox" id="idea-dialog-execute" checked />そのまま実装に進む</label>
-    <button type="button" id="idea-dialog-run" class="subtask-action-button primary">アイデア出し実行</button>
-    <button type="button" id="idea-dialog-close" class="subtask-action-button">閉じる</button>
-  </div>
-  <textarea id="idea-dialog-focus" class="idea-dialog-focus" rows="2" maxlength="1000" aria-label="アイデアを出してほしい観点"
-    placeholder="アイデアを出してほしい観点（任意）　例：テスト不足の箇所、エラー処理の抜け漏れ"></textarea>
-  <div id="idea-dialog-tabs" class="idea-dialog-tabs" role="group" aria-label="提案の状態"></div>
-  <p id="idea-dialog-message" class="idea-dialog-message" role="status"></p>
-  <div id="idea-dialog-list" class="cli-dialog-log idea-dialog-list" aria-live="polite"></div>
-</dialog>
-
 <script src="/static/image_editor.js"></script>
-<script src="/static/cli_dialog.js"></script>
-<script src="/static/idea_dialog.js"></script>
+<script src="/static/cli_view.js"></script>
+<script src="/static/idea_view.js"></script>
+<script src="/static/repo_items.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>
