@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実行レポート: 実装ジョブの状態表示を日本語・色分けにし、失敗理由を表示するー①</title>
+<title>実行レポート: Issue選択時のGitHub問い合わせを省き、DB上のMR一覧のみで表示するー①</title>
 <style>
 body { font-family: sans-serif; margin: 24px; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; }
@@ -15,59 +15,60 @@ code { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; }
 </style>
 </head>
 <body>
-<h1>実行レポート: 実装ジョブの状態表示を日本語・色分けにし、失敗理由を表示するー①</h1>
+<h1>実行レポート: Issue選択時のGitHub問い合わせを省き、DB上のMR一覧のみで表示するー①</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#205 [IdeaMan] 実装ジョブの状態表示を日本語・色分けにし、失敗理由を表示する</td></tr>
-<tr><th>サブタスク</th><td>実装ジョブの状態表示を日本語・色分けにし、失敗理由を表示するー①（PR #206）</td></tr>
-<tr><th>ブランチ</th><td><code>issue-205-4e188e4b-subtask-1</code>（base: <code>master</code>）</td></tr>
+<tr><th>Issue</th><td>#212 [IdeaMan] Issue選択時のGitHub問い合わせを省き、DB上のMR一覧のみで表示する</td></tr>
+<tr><th>サブタスク</th><td>Issue選択時のGitHub問い合わせを省き、DB上のMR一覧のみで表示するー①（PR #213）</td></tr>
+<tr><th>ブランチ</th><td><code>issue-212-9cc11bbb-subtask-1</code>（base: <code>master</code>）</td></tr>
 </table>
 
 <h2>2. 実装結果の要約</h2>
-<p class="ok">成功</p>
+<p class="ok">成功（効果の手動計測は未実施）</p>
 <ul>
-<li>MR内容ペインのジョブ状態を日本語で表示するようにした。</li>
-<li>実行待ち・実行中はスピナー、失敗・要確認・利用上限は警告色、完了はアクセント色にした。</li>
-<li>APIが<code>error_message</code>を返すようにし、失敗時は状態の下に理由を表示するようにした（長い文は省略し、ツールチップで全文を出す）。</li>
-<li>これまで<code>ExecutionJob.error_message</code>はどこからも書き込まれていなかった。そのため、ワーカー側で失敗理由を保存する処理も追加した。</li>
+<li>Issue一覧で取得済みのnumber・title・state・urlと、DB専用API（<code>/issues/{number}/subtasks</code>）でIssue内容を組み立てるようにした。</li>
+<li>対象は<code>selectIssue</code>・<code>fetchIssueSelection</code>・<code>refreshIssueDetail</code>・<code>openCreatedIssueAndSubtask</code>の4箇所。</li>
+<li>Issue一覧に無い番号（<code>fetchUnlistedIssue</code>・一覧外の<code>selectIssue</code>）は、従来どおり詳細APIで取得する。</li>
+<li>詳細API（<code>get_issue_detail</code>）はサーバー側に残した。</li>
 </ul>
 
 <h2>3. 実施した変更と主な変更ファイル</h2>
 <table>
 <tr><th>No.</th><th>コミット</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td><code>#205 [ジョブ状態表示] 実装ジョブの失敗理由を記録</code></td><td><code>core/job_queue.py</code>, <code>worker/main.py</code>, <code>tests/test_job_queue.py</code>, <code>tests/test_worker_main.py</code></td><td><code>finish_job</code>に<code>error_message</code>引数を追加した。例外の内容とDraft解除の失敗理由を保存するようにした。ハートビートが途絶えたジョブには<code>STALE_JOB_ERROR_MESSAGE</code>を保存する。利用上限から再投入するときは理由を消す。<code>_finalize_success</code>は(状態, 失敗理由)を返すようにした。</td></tr>
-<tr><td>2</td><td><code>#205 [ジョブ状態表示] ジョブAPIで失敗理由を返す</code></td><td><code>app/routes/jobs.py</code>, <code>app/routes/projects.py</code>, <code>tests/test_job_routes.py</code>（新規）</td><td><code>GET /api/jobs/{id}</code>と<code>_latest_job_summary</code>の返却値に<code>error_message</code>を追加した。</td></tr>
-<tr><td>3</td><td><code>#205 [ジョブ状態表示] ジョブ状態を日本語・色分けで表示</code></td><td><code>app/static/app.js</code>, <code>app/static/style.css</code></td><td><code>JOB_STATUS</code>・<code>JOB_STATUS_LABELS</code>・<code>JOB_STATUS_CLASSES</code>の定数を追加した。<code>renderJobStatus</code>・<code>setJobStatusText</code>を追加した。<code>.job-status-active/success/warning</code>のスタイルを追加した。</td></tr>
-<tr><td>4</td><td><code>#205 [ジョブ状態表示] 失敗時に失敗理由を表示</code></td><td><code>app/static/app.js</code>, <code>app/static/style.css</code></td><td>警告色の状態で<code>error_message</code>がある場合、<code>.job-status-error</code>を状態の下に表示する（1行で省略し、title属性に全文を入れる）。</td></tr>
+<tr><td>1</td><td><code>#212 [Issue選択高速化] Issue選択時のgh問い合わせを省略</code></td><td><code>app/static/app.js</code></td><td>
+<code>listedIssues</code>（一覧表示中のIssueの番号→概要のMap）と<code>currentIssueUrl</code>を追加した。<br>
+<code>fetchIssueContent</code>（概要＋DB上のMR一覧で内容を組み立て）・<code>toIssueSummary</code>・<code>fetchIssueSubtasks</code>を追加した。<br>
+<code>refreshSubtaskStates</code>のMR一覧取得を<code>fetchIssueSubtasks</code>に共通化した。<br>
+Issue名の変更時に<code>listedIssues</code>のタイトルも更新するようにした。</td></tr>
+<tr><td>2</td><td>（本レポート）</td><td><code>.claude-tower/report.html</code></td><td>実行レポートを更新。</td></tr>
 </table>
 
 <h2>4. 自律判断した事項・採用理由・前提</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>ワーカー側で<code>error_message</code>を保存する処理を追加した（提案の詳細にはない）。</td><td>列はあるのに誰も書き込んでおらず、APIで返すだけでは常に空になるため。</td></tr>
-<tr><td>2</td><td>Draft解除に失敗した場合（<code>needs_attention</code>）とハートビートが途絶えた場合にも理由を保存した。</td><td>「要確認」でも理由が見えるようにするため。ハートビート途絶の文言は<code>core/job_queue.py</code>の定数にまとめた。</td></tr>
-<tr><td>3</td><td><code>rate_limited</code>も警告色にし、理由を表示する。ラベルは「利用上限で中断（上限リセット後に自動で再実行）」にした。</td><td>中断状態ではあるが、自動で再投入されることが分かるようにするため。</td></tr>
-<tr><td>4</td><td>実行開始前の「実行待ち...」はスピナー付き、「実行を開始できませんでした」は警告色にした。入力を促す文言は従来どおり薄い色にした。</td><td>状態欄の見た目を揃えるため。前回のジョブの色が残らないよう、毎回クラスを付け直す。</td></tr>
-<tr><td>5</td><td>スピナーは既存の<code>selection-busy-spin</code>のアニメーションを流用し、サイズは<code>--job-status-spinner-size</code>に切り出した。</td><td>既存の見た目と揃え、あとで調整しやすくするため。</td></tr>
-<tr><td>6</td><td>表示文言は、既存の<code>MR_STATUS_LABELS</code>などと同じく<code>app.js</code>の定数にまとめた。</td><td>このプロジェクトには、フロント文言用のリソースファイルがないため。</td></tr>
-<tr><td>7</td><td>今回のサブタスク（①）で提案の内容をすべて実装した。</td><td>提案の詳細が1PRで実装できる規模だったため。</td></tr>
+<tr><td>1</td><td>一覧の取得値は<code>renderIssueItem</code>で<code>listedIssues</code>に登録する。</td><td>通常の一覧描画と、作成直後に一覧へ補う行（<code>supplementCreatedIssue</code>）の両方を1箇所で拾えるため。</td></tr>
+<tr><td>2</td><td>Issue名の変更時に<code>listedIssues</code>のタイトルも書き換える。</td><td>一覧の再取得まで古いタイトルで選択されるのを防ぐため。閉じる・再開は一覧を再取得するため対応不要。</td></tr>
+<tr><td>3</td><td><code>refreshIssueDetail</code>は表示中の値（<code>currentIssueTitle</code>・<code>currentIssueState</code>・<code>currentIssueUrl</code>）を使う。</td><td>作成直後でフィルタにより一覧に無いIssueを表示中の場合もあるため。見出しの値は既に名前変更・開閉に追従している。</td></tr>
+<tr><td>4</td><td><code>openCreatedIssueAndSubtask</code>は作成APIの応答（number・url・title）にstate=OPENを補って使う。</td><td>作成APIは<code>{number, url, title}</code>を返し、作成直後は必ずOpenのため。</td></tr>
+<tr><td>5</td><td><code>fetchIssueSubtasks</code>は応答がエラーの場合に例外を投げる。</td><td>エラー本文をMR一覧として描画しないため。<code>runSelectionRequest</code>は<code>finally</code>で更新中表示を解除する。<code>refreshSubtaskStates</code>の呼び出し元は既に<code>catch</code>している。</td></tr>
+<tr><td>6</td><td>一覧に無い番号を<code>selectIssue</code>した場合は詳細APIにフォールバックする。</td><td>通常操作では発生しないが、一覧の再描画とのずれに備えるため。</td></tr>
+<tr><td>7</td><td>コミットは1つにまとめた。</td><td>呼び出し元の切り替えと補助関数の追加が相互依存しており、分けると途中のコミットが不整合になるため。</td></tr>
 </table>
 
 <h2>5. 実行したテストと結果</h2>
 <ul>
-<li><code>node --check app/static/app.js</code>: 構文エラーなし。</li>
-<li><code>./.venv/Scripts/python.exe -m pytest -q</code>: 428 passed（新規・更新したテストを含む）。</li>
-<li>JSの自動テストがないため、ブラウザでの動作確認はしていない（人間の確認が必要）。</li>
+<li><code>node --check app/static/app.js</code>：構文エラーなし。</li>
+<li><code>./.venv/Scripts/python.exe -m pytest -q</code>：447 passed。</li>
+<li>JSの自動テストが無いため、ブラウザでの動作確認と「更新中…」時間の手動計測は未実施（人間の確認が必要）。</li>
 </ul>
 
 <h2>6. 残課題、リスク、レビュー時の確認ポイント</h2>
 <ul>
-<li>MR内容ペインで以下を確認してほしい：実行中はスピナー、完了はアクセント色、失敗・要確認は警告色で表示されること。</li>
-<li>失敗理由の長い文が1行で省略され、ホバーで全文が出ること（ペインの幅によっては省略されない可能性がある）。</li>
-<li>この変更より前に失敗したジョブは<code>error_message</code>が空のため、理由は表示されない。</li>
-<li>例外メッセージをそのまま画面に出すため、内容が長い場合やローカルのパスを含む場合がある（ローカル画面への表示のみ）。</li>
-<li>ワーカーの変更は、ワーカーを再起動するまで反映されない。</li>
+<li>Issue切り替え時の「更新中…」の時間が短くなることを、手動で計測して確認してほしい。</li>
+<li>Issue選択・リポジトリ切り替え・フィルタ変更・Issue作成直後・ジョブ完了時に、見出し（タイトル・GitHubリンク・Close/ReOpen）が正しく表示されること。</li>
+<li>GitHub側でタイトルや状態が変わっても、一覧の再取得（定期更新など）までは画面に反映されない。従来は選択時に最新化されていた。</li>
+<li>Issue名の変更直後に別Issue→元Issueと選択し直した場合も、新しいタイトルが表示されること。</li>
 </ul>
 </body>
 </html>
