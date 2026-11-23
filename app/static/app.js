@@ -469,6 +469,8 @@ let allProjects = [];
 // リポジトリIDごとのOpenなIssue番号（取得前のリポジトリは含めない）
 const openIssueNumbersByProject = new Map();
 const OPEN_ISSUES_POLL_MS = 60000;
+// リポジトリとフィルタの組ごとに最後に取得したIssue一覧（キーはissueListCacheKeyの値）
+const issueListCache = new Map();
 // リポジトリ一覧のMR数で解決済とみなす表示ステータス（それ以外は未解決とする）
 const MR_STATUS_RESOLVED = [MR_STATUS.merged, MR_STATUS.deploying, MR_STATUS.deployed];
 const PROJECT_COUNT_TOOLTIP = "OpenなIssueの未解決MR数 / 解決済MR数";
@@ -827,6 +829,7 @@ function renderProjectItem(project) {
  * 全リポジトリのOpenなIssue番号の定期取得
  *
  * GitHubへの問い合わせを伴うため、MR状態の集計より長い間隔で取得する。
+ * 取得したOpen一覧は、リポジトリ切り替え時の表示用にも保持する。
  */
 async function pollOpenIssues() {
   await Promise.all(allProjects.map((project) => refreshOpenIssueNumbers(project.id)));
@@ -836,7 +839,9 @@ async function pollOpenIssues() {
 
 async function refreshOpenIssueNumbers(projectId) {
   try {
-    setOpenIssueNumbers(projectId, await fetchProjectIssues(projectId, "open"));
+    const issues = await fetchProjectIssues(projectId, "open");
+    setOpenIssueNumbers(projectId, issues);
+    cacheIssueList(stateIssueListCacheKey(projectId, "open"), issues);
   } catch (error) {
     // サーバー再起動中などで取得に失敗した場合は前回の値のまま表示する
   }
@@ -1097,7 +1102,10 @@ async function reloadIssues({ blocking = true } = {}) {
  * Issue一覧と、一覧の更新後に選択するIssueの内容を取得する
  */
 async function fetchIssueListWithSelection() {
-  const issues = await fetchIssueList();
+  return withIssueSelection(await fetchIssueList());
+}
+
+async function withIssueSelection(issues) {
   const target = await fetchIssueSelection(issues);
   return { issues, target };
 }
@@ -1108,15 +1116,41 @@ async function fetchIssueListWithSelection() {
  * フィルタに該当するIssueを返す。
  * MRステータスフィルタの選択中は、Open・Closeを問わず該当Issueを返す。
  * Openを取得した場合は、リポジトリ一覧のMR数の集計に使う値も更新する。
+ * 取得した一覧は、リポジトリ切り替え時にすぐ表示するため保持する。
  */
 async function fetchIssueList() {
   lastMatchedIssueKey = matchedIssueKey();
   const projectId = currentProjectId;
+  const cacheKey = issueListCacheKey();
   const filtered = isMrStatusFilterActive();
   const state = document.getElementById("issue-filter").value;
   const issues = filtered ? await fetchIssuesByMrStatus() : await fetchIssues(state);
   if (!filtered && state === "open") setOpenIssueNumbers(projectId, issues);
+  cacheIssueList(cacheKey, issues);
   return issues;
+}
+
+/**
+ * 表示中のリポジトリとフィルタに対応する、Issue一覧の保持キー
+ *
+ * MRステータスフィルタの選択中は、絞り込み対象のIssue番号の組ごとに分ける。
+ */
+function issueListCacheKey() {
+  if (isMrStatusFilterActive()) return `mr:${matchedIssueKey()}`;
+  return stateIssueListCacheKey(currentProjectId, document.getElementById("issue-filter").value);
+}
+
+function stateIssueListCacheKey(projectId, state) {
+  return `state:${projectId}:${state}`;
+}
+
+/**
+ * 取得したIssue一覧を保持する
+ *
+ * 取得失敗時の応答（配列でない値）は保持しない。
+ */
+function cacheIssueList(cacheKey, issues) {
+  if (Array.isArray(issues)) issueListCache.set(cacheKey, issues);
 }
 
 /**
