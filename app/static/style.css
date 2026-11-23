@@ -486,6 +486,41 @@ Issue名・入力欄・作成ボタンは折り返さず1行に並べる。
   background: var(--surface);
 }
 
+/* CLIの添付（送信前の添付欄・発言内の添付ファイル名） */
+.cli-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.cli-attachments:empty {
+  display: none;
+}
+
+.cli-message .cli-attachments {
+  margin-top: 6px;
+}
+
+.cli-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  white-space: nowrap;
+}
+
+.cli-attachment-remove {
+  padding: 0 2px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
 /* Ideaタブの項目の提案一覧 */
 .idea-tabs {
   display: flex;

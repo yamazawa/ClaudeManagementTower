@@ -1,8 +1,12 @@
+import asyncio
+
 import pytest
 from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock, ToolUseBlock
 from sqlalchemy.orm import sessionmaker
 
+from core import cli_attachments as cli_attachments
 from core import cli_session
+from core.attachments import AttachmentError
 from core.cli_session import CliMessageRole, CliSessionStatus
 from core.db import init_db, make_engine
 from core.models import CliSession, Project
@@ -52,6 +56,19 @@ def test_message_entries_extracts_text_and_tool_use():
 def test_message_entries_shows_result_only_on_error():
     assert cli_session.message_entries(_result(False)) == []
     assert cli_session.message_entries(_result(True, "失敗")) == [(CliMessageRole.ERROR, "失敗")]
+
+
+def test_run_claude_for_dialog_passes_dialog_denied_tools(monkeypatch):
+    captured = {}
+
+    async def fake_run_claude(prompt, worktree, **kwargs):
+        captured.update(kwargs)
+        return "s", "done"
+
+    monkeypatch.setattr(cli_session, "run_claude", fake_run_claude)
+    asyncio.run(cli_session._run_claude_for_dialog("hi", "repo", None, None))
+    assert captured["denied_tools"] == cli_session.CLI_DIALOG_DENIED_TOOLS
+    assert "AskUserQuestion" in captured["denied_tools"]
 
 
 def test_create_session_rejects_unknown_project(session_factory):
@@ -114,6 +131,51 @@ def test_claim_turn_records_user_message_and_rejects_while_running(session_facto
     assert [(m["role"], m["content"]) for m in state["messages"]] == [(CliMessageRole.USER, "こんにちは")]
     with pytest.raises(cli_session.CliSessionBusy):
         cli_session._claim_turn(session_id, "続き", session_factory)
+
+
+def test_claim_turn_records_attachment_names_without_paths(session_factory):
+    session_id = cli_session.create_session(1, "調査", session_factory=session_factory)["id"]
+    attachment = {"id": "S1", "filename": "画面.png", "path": "C:/x/S1/画面.png", "is_image": True}
+
+    cli_session._claim_turn(session_id, "S1を見て", session_factory, [attachment])
+
+    state = cli_session.get_session(session_id, session_factory=session_factory)
+    assert state["messages"][0]["attachments"] == [{"id": "S1", "filename": "画面.png", "is_image": True}]
+
+
+def test_send_message_rejects_unknown_attachment_without_recording(session_factory, tmp_path, monkeypatch):
+    monkeypatch.setattr(cli_attachments.settings, "worktree_base_dir", str(tmp_path))
+    session_id = cli_session.create_session(1, "調査", session_factory=session_factory)["id"]
+
+    with pytest.raises(AttachmentError):
+        cli_session.send_message(session_id, "S1を見て", ["S1"], session_factory=session_factory)
+
+    state = cli_session.get_session(session_id, session_factory=session_factory)
+    assert (state["status"], state["messages"]) == (CliSessionStatus.IDLE, [])
+
+
+def test_send_message_passes_prompt_with_attachment_table(session_factory, tmp_path, monkeypatch):
+    monkeypatch.setattr(cli_attachments.settings, "worktree_base_dir", str(tmp_path))
+    session_id = cli_session.create_session(1, "調査", session_factory=session_factory)["id"]
+    cli_attachments.save_cli_attachment(session_id, "a.png", b"1")
+    started = []
+
+    class FakeThread:
+        def __init__(self, target, args, daemon):
+            started.append(args)
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(cli_session.threading, "Thread", FakeThread)
+
+    cli_session.send_message(session_id, "S1を見て", ["S1"], session_factory=session_factory)
+
+    prompt = started[0][1]
+    assert prompt.startswith("S1を見て\n")
+    assert str(tmp_path / "cli-attachments" / str(session_id) / "S1" / "a.png") in prompt
+    state = cli_session.get_session(session_id, session_factory=session_factory)
+    assert state["messages"][0]["content"] == "S1を見て"
 
 
 def test_run_turn_records_reply_and_keeps_claude_session(session_factory):
