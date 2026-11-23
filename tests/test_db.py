@@ -15,6 +15,20 @@ def test_init_db_adds_missing_columns_to_existing_table(tmp_path):
 
     with engine.connect() as conn:
         assert conn.exec_driver_sql("SELECT focus FROM idea_jobs WHERE id = 1").scalar() == ""
+        assert conn.exec_driver_sql("SELECT idea_session_id FROM idea_jobs WHERE id = 1").scalar() is None
+
+
+def test_init_db_adds_title_and_state_to_existing_cli_sessions(tmp_path):
+    engine = make_engine(str(tmp_path / "test.db"))
+    with engine.begin() as conn:
+        conn.exec_driver_sql("CREATE TABLE cli_sessions (id INTEGER PRIMARY KEY, project_id INTEGER, status VARCHAR)")
+        conn.exec_driver_sql("INSERT INTO cli_sessions (id, project_id, status) VALUES (1, 1, 'idle')")
+
+    init_db(bind=engine)
+
+    with engine.connect() as conn:
+        row = conn.exec_driver_sql("SELECT title, state FROM cli_sessions WHERE id = 1").one()
+    assert tuple(row) == ("", "open")
 
 
 def test_write_and_read_project(tmp_path):

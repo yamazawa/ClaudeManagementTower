@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実行レポート: 待機中の表示ー②</title>
+<title>実行レポート: style.cssの色の変数化と重複指定の統合ー①</title>
 <style>
 body { font-family: sans-serif; margin: 24px; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; }
@@ -15,49 +15,59 @@ code { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; }
 </style>
 </head>
 <body>
-<h1>実行レポート: 待機中の表示ー②</h1>
+<h1>実行レポート: style.cssの色の変数化と重複指定の統合ー①</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#196 待機中の表示</td></tr>
-<tr><th>サブタスク</th><td>待機中の表示ー②（Issue作成時・MR作成時の「作成中」で待機中メッセージを出す）</td></tr>
-<tr><th>ブランチ</th><td><code>issue-196-subtask-2</code>（base: <code>master</code>）</td></tr>
+<tr><th>Issue</th><td>#201 [IdeaMan] style.cssに直接書かれた色を変数にまとめ、重複した指定を統合する</td></tr>
+<tr><th>サブタスク</th><td>ー①（提案内容の全項目）</td></tr>
+<tr><th>ブランチ</th><td><code>issue-201-47a6fd12-subtask-1</code>（PR #202、base: <code>master</code>）</td></tr>
 </table>
 
 <h2>2. 実装結果の要約</h2>
 <p class="ok">成功</p>
 <ul>
-<li>Issue作成フォーム（IssueとMRを同時作成）で、作成したIssueとMRを開くまで更新中オーバーレイを表示するようにした。</li>
-<li>MR作成フォームは前サブタスク（PR #197）で対応済みのため、コードの変更は不要だった。</li>
+<li>提案にあった色を:rootの変数にまとめた。</li>
+<li>重複していた指定2か所を1つにまとめた。</li>
+<li>見た目は変えていない。スクリーンショットでの確認は人間が行う。</li>
 </ul>
 
 <h2>3. 実施した変更と主な変更ファイル</h2>
 <table>
-<tr><th>No.</th><th>コミット</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td><code>#196 [待機中の表示] Issue作成中に更新中を表示</code></td><td><code>app/static/app.js</code></td><td><code>onSubmitIssueForm</code>の処理を<code>runBusyAction</code>で囲った。作成と画面反映の処理は<code>createAndOpenIssue</code>に切り出した。<code>createIssueWithSubtask</code>のコメントから「操作を妨げない」を削除した。</td></tr>
+<tr><th>No.</th><th>ファイル</th><th>行</th><th>変更</th><th>変更理由</th></tr>
+<tr><td>1</td><td>app/static/style.css</td><td>9-15</td><td>:rootに変数7個を追加（<code>--surface</code>・<code>--header-bg</code>・<code>--token-usage-*</code>4個・<code>--image-editor-selected</code>）</td><td>提案の対象色を1か所にまとめるため</td></tr>
+<tr><td>2</td><td>app/static/style.css</td><td>47他</td><td>直接書いていたヘッダー背景、<code>background: #fff</code>（11か所）、トークン使用状況の色4種、お絵かきツールの選択色を変数参照に置き換え</td><td>同上</td></tr>
+<tr><td>3</td><td>app/static/style.css</td><td>596-607</td><td><code>.mr-status-filter-segments .mr-status-filter-button</code>の2つの指定を1つにまとめた</td><td>同じ対象への指定が分かれていたため</td></tr>
+<tr><td>4</td><td>app/static/style.css</td><td>884-908</td><td><code>.issue-item</code>/<code>.subtask-row</code>の2つの指定を1つにまとめた。上書きで効いていた値（flex-start・center・13.5px）を採用し、説明コメントも実際のレイアウトに合わせた</td><td>どちらの値が効いているのか分かりにくかったため</td></tr>
 </table>
+<p>コミット（3件）:</p>
+<ul>
+<li>#201 [スタイル整理] 直書きの色を:rootの変数にまとめる</li>
+<li>#201 [スタイル整理] ステータスボタンの重複指定を統合</li>
+<li>#201 [スタイル整理] Issue・MR一覧行の重複指定を統合</li>
+</ul>
 
 <h2>4. 自律判断した事項・採用理由・前提</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>前サブタスクの「Issue作成は操作を妨げない」方針を撤回し、画面をブロックする。</td><td>今回の指示で明示的に待機表示を求められたため。</td></tr>
-<tr><td>2</td><td>「MR作成時」はIssue作成時に自動で行うMR作成（状態欄「IssueとMRを作成中...」）と解釈した。</td><td>MR作成フォームはmasterで既に<code>runBusyAction</code>で囲われているため。</td></tr>
-<tr><td>3</td><td>MR自動作成中のMR作成ボタン無効化（<code>setAutoMrCreatingIssue</code>）は残した。</td><td>オーバーレイ中は押せないが、防御として残しても害がないため。</td></tr>
+<tr><td>1</td><td><code>#fff</code>は<code>background</code>の指定だけを<code>--surface</code>にし、文字色の<code>color: #fff</code>はそのまま残した</td><td>提案の範囲が「白背景」だったため。背景と文字色では役割が違うので、同じ変数を使い回さない</td></tr>
+<tr><td>2</td><td><code>rgba(...)</code>の半透明色は対象外にした</td><td>提案に含まれていなかったため</td></tr>
+<tr><td>3</td><td>統合後の値は、後に書かれて実際に効いていた値に揃えた</td><td>見た目を変えないため。間にある:hover/.activeの指定は背景と枠線しか変えないので、ルールを移動しても結果は変わらない</td></tr>
+<tr><td>4</td><td><code>image_editor.js:10</code>のペンの色<code>"#e01e1e"</code>は変更していない</td><td>JSからはCSSの値を参照していないため。変数化するとJS側の変更が必要になり、範囲が広がる</td></tr>
 </table>
 
 <h2>5. 実行したテストと結果</h2>
 <ul>
-<li><code>node --check app/static/app.js</code>: 構文エラーなし。</li>
-<li><code>./.venv/Scripts/python.exe -m pytest -q</code>: 425 passed。</li>
-<li>JSの自動テストは存在しないため、ブラウザでの動作確認は未実施（人間による確認を依頼）。</li>
+<li><code>./.venv/Scripts/python.exe -m pytest -q</code>：425件成功</li>
+<li>style.css内の<code>var(--*)</code>参照が、すべて:rootで定義されていることを確認した（未定義は0件）</li>
+<li>画面での見た目の確認は実施していない。提案のとおり、変更前後のスクリーンショット比較は人間が行う</li>
 </ul>
 
-<h2>6. 残課題、リスク、レビュー時の確認ポイント</h2>
+<h2>6. 残課題・リスク・レビュー時の確認ポイント</h2>
 <ul>
-<li>Issue作成で、更新中表示が出て、作成したMRの指示欄が開いた時点で消えることを確認してほしい。</li>
-<li>MR作成フォームで更新中が出ない場合、ブラウザが古い<code>app.js</code>をキャッシュしている可能性がある。強制再読み込みで確認してほしい。</li>
-<li>キャッシュが原因でない場合は、再現手順を教えてほしい（今回のコードからは原因を特定できなかった）。</li>
-<li>Issue作成中（GitHubへのIssue・PR作成で数秒）は、ヘッダー以外の操作がブロックされる。</li>
+<li>変更前後のスクリーンショットで、ヘッダー・トークン使用状況・Issue/MR一覧の行・ステータスフィルタ・お絵かきダイアログの見た目が変わっていないか確認する。</li>
+<li>文字色の<code>color: #fff</code>（6か所）と<code>rgba</code>の色は直接書いたまま残っている。必要なら別タスクで変数にする。</li>
+<li>お絵かきのペンの色（JS）と、選択中のボタンの色（CSS変数）は別々に定義されている。片方だけ変えると色がずれる。</li>
 </ul>
 </body>
 </html>
