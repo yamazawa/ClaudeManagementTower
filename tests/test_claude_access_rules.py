@@ -19,6 +19,20 @@ def test_is_inside_is_case_insensitive_on_windows(tmp_path):
     assert is_inside(str(tmp_path / "Repo" / "A.py").upper(), str(tmp_path / "repo"))
 
 
+def test_is_inside_handles_root_with_trailing_separator(tmp_path):
+    assert is_inside(str(tmp_path / "repo" / "a.py"), str(tmp_path / "repo") + "\\")
+    assert not is_inside(str(tmp_path / "repo-other"), str(tmp_path / "repo") + "\\")
+
+
+def test_is_inside_resolves_parent_reference(tmp_path):
+    assert not is_inside(str(tmp_path / "repo" / ".." / "secret.txt"), str(tmp_path / "repo"))
+
+
+def test_is_inside_returns_false_for_other_drive(tmp_path):
+    other_drive = "Z:\\" if not str(tmp_path).upper().startswith("Z:") else "Y:\\"
+    assert not is_inside(other_drive + "a.py", str(tmp_path))
+
+
 def test_is_blocked_path_matches_any_component():
     assert is_blocked_path("C:/git/repo/.ssh/known_hosts")
     assert is_blocked_path("C:\\git\\repo\\certs\\SERVER.PEM")
