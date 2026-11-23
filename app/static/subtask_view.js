@@ -62,17 +62,6 @@ function isSubtaskDetailShown() {
 }
 
 /**
- * POST操作の実行
- *
- * 成功時は応答本文、失敗時はエラー文言を返す。
- */
-async function postAction(url) {
-  const response = await fetch(url, { method: "POST" });
-  const body = await response.json().catch(() => ({}));
-  return response.ok ? { body } : { error: body.detail || response.statusText };
-}
-
-/**
  * Issueの閉じる・再開ボタンの表示を切り替える
  *
  * クローズ済の場合は再開ボタンにする。

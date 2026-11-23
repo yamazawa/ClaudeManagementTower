@@ -338,22 +338,6 @@ async function createIssueWithSubtask(projectId, title, statusEl) {
 }
 
 /**
- * JSONをPOSTする
- *
- * 成功時は応答本文、失敗時はエラー文言を返す。
- */
-async function postJson(url, payload) {
-  const response = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  }).catch(() => null);
-  if (!response) return { error: "サーバーに接続できませんでした" };
-  const body = await response.json().catch(() => ({}));
-  return response.ok ? { body } : { error: body.detail || response.statusText };
-}
-
-/**
  * Issue作成に失敗した場合に、並行して作成したMRをクローズする
  *
  * MR作成も失敗していた場合は何もしない。

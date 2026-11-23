@@ -461,3 +461,34 @@ async function patchTitle(url, title) {
   if (response.ok) return { error: null, body };
   return { error: body.detail || response.statusText, body };
 }
+
+/**
+ * JSONをPOSTする
+ *
+ * 成功時は応答本文、失敗時はエラー文言を返す。
+ */
+async function postJson(url, payload) {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  }).catch(() => null);
+  if (!response) return { error: "サーバーに接続できませんでした" };
+  const body = await response.json().catch(() => ({}));
+  return response.ok ? { body } : { error: body.detail || response.statusText };
+}
+
+/**
+ * POST操作の実行
+ *
+ * 成功時は応答本文、失敗時はエラー文言を返す。
+ */
+async function postAction(url) {
+  const response = await fetch(url, { method: "POST" });
+  const body = await response.json().catch(() => ({}));
+  return response.ok ? { body } : { error: body.detail || response.statusText };
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

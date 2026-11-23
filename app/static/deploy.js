@@ -17,10 +17,6 @@ const DEPLOY_SKIPPED_TEXT = "デプロイ未定義のためMRをDeployedにし�
 // ヘッダーのDeployでデプロイ実行中か
 let deployRunning = false;
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 async function fetchBootId() {
   try {
     const response = await fetch("/health");
