@@ -157,6 +157,7 @@ const JOB_STATUS_CLASSES = {
   [JOB_STATUS.needsAttention]: JOB_STATUS_CLASS.warning,
   [JOB_STATUS.rateLimited]: JOB_STATUS_CLASS.warning,
 };
+const JOB_STATUS_ERROR_CLASS = "job-status-error";
 
 // 実行中とみなすジョブの状態（実行中はMRの操作ボタンを無効化する）
 const ACTIVE_JOB_STATUSES = [JOB_STATUS.queued, JOB_STATUS.running];
@@ -1911,10 +1912,17 @@ function isJobActive(job) {
  * 実装ジョブの状態表示
  *
  * 状態を日本語で表示し、状態ごとの見た目のクラスを付ける。
+ * 失敗理由がある場合は状態の下に表示し、ツールチップに全文を出す。
  */
 function renderJobStatus(statusEl, job) {
   const label = JOB_STATUS_LABELS[job.status] || job.status;
   setJobStatusText(statusEl, `${JOB_STATUS_PREFIX}${label}`, JOB_STATUS_CLASSES[job.status]);
+  if (JOB_STATUS_CLASSES[job.status] !== JOB_STATUS_CLASS.warning || !job.error_message) return;
+  const errorEl = document.createElement("span");
+  errorEl.className = JOB_STATUS_ERROR_CLASS;
+  errorEl.textContent = job.error_message;
+  errorEl.title = job.error_message;
+  statusEl.appendChild(errorEl);
 }
 
 /**
