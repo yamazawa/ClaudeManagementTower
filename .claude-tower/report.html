@@ -2,83 +2,71 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実装レポート #235 サブタスク1</title>
+<title>実行レポート #229</title>
 <style>
-body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
-h1 { font-size: 1.4em; }
-h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; padding-bottom: .2em; margin-top: 1.6em; }
-table { border-collapse: collapse; margin: .5em 0; }
-th, td { border: 1px solid #bbb; padding: .3em .6em; text-align: left; vertical-align: top; }
-th { background: #f0f0f0; }
-.ok { color: #fff; background: #2a7a2a; padding: .1em .6em; border-radius: 4px; }
-code { background: #f4f4f4; padding: 0 .3em; }
+body{font-family:sans-serif;margin:1.5em;line-height:1.6;color:#222}
+h1{font-size:1.4em}h2{font-size:1.15em;border-bottom:1px solid #ccc;margin-top:1.5em}
+table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:4px 8px;text-align:left;vertical-align:top}
+th{background:#f3f3f3}.ok{color:#1a7f37;font-weight:bold}code{background:#f5f5f5;padding:0 3px}
 </style>
 </head>
 <body>
-<h1>実装レポート</h1>
+<h1>実行レポート</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#235 [IdeaMan] app.jsを機能単位のファイルに分割する</td></tr>
-<tr><th>サブタスク</th><td>app.jsを機能単位のファイルに分割するー①</td></tr>
-<tr><th>ブランチ</th><td><code>issue-235-bcd325ef-subtask-1</code></td></tr>
+<tr><th>Issue</th><td>#229 [IdeaMan] サブタスク作成が途中で失敗したとき、作成済みのworktree・ブランチを後始末する</td></tr>
+<tr><th>サブタスク</th><td>①</td></tr>
+<tr><th>ブランチ</th><td><code>issue-229-f3c51d9d-subtask-1</code></td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
-<p><span class="ok">成功</span>（ブラウザでの実機確認は未実施）</p>
-<p>app.js（2484行）を、共通・機能単位の8ファイルに分割した。</p>
-<p>関数・定数は移動のみで、処理内容は変えていない。</p>
+<p class="ok">成功</p>
+<p>Draft PR作成前に失敗した場合、完了した段階を強制なしの操作で取り消すようにした。<br>
+消せずに残ったものは、名前・パスをエラーメッセージに含めて返す。</p>
 
 <h2>3. 変更内容</h2>
 <table>
-<tr><th>No.</th><th>コミット</th><th>内容</th></tr>
-<tr><td>1</td><td>機能単位のファイルへ関数を移動</td><td>提案の区切りでapp.jsから各ファイルへ移動し、index.htmlのscriptタグを依存順に追加した。</td></tr>
-<tr><td>2</td><td>共通処理をcommon.jsに集約</td><td>postJson・postAction・sleepをcommon.jsへ移動した。</td></tr>
-<tr><td>3</td><td>Issue内容の処理をIssueのファイルへ移動</td><td>MRのファイルに混ざっていたIssueの選択・内容表示・開閉・タイトル編集を移動した。<br>renderTitleNumberはcommon.jsへ移動した。</td></tr>
-<tr><td>4</td><td>issue_list.jsをissue_view.jsへ改名</td><td>Issue内容を含むため、subtask_view.jsと名前を揃えた。</td></tr>
-<tr><td>5</td><td>コメントの参照先ファイル名を更新</td><td>style.css・core/lifecycle.py・core/mr_status.pyのapp.js参照を移動先に合わせた。</td></tr>
-</table>
-
-<p>分割後のファイル構成（index.htmlの読み込み順）</p>
-<table>
-<tr><th>ファイル</th><th>行数</th><th>内容</th></tr>
-<tr><td><code>common.js</code></td><td>504</td><td>共有状態・状態定義・画面ブロック・タイトル編集・escapeHtml・postJson等</td></tr>
-<tr><td><code>mr_status_filter.js</code></td><td>209</td><td>MRステータスフィルタ・レート制限表示</td></tr>
-<tr><td><code>deploy.js</code></td><td>172</td><td>Deployボタン・確認ダイアログ・デプロイ実行</td></tr>
-<tr><td><code>issue_view.js</code></td><td>458</td><td>Issue一覧・Issue内容・Issue一覧のMR数</td></tr>
-<tr><td><code>subtask_view.js</code></td><td>450</td><td>MR一覧・MR内容・MR状態のポーリング・MR操作</td></tr>
-<tr><td><code>attachment.js</code></td><td>136</td><td>添付ファイル</td></tr>
-<tr><td><code>job_runner.js</code></td><td>89</td><td>実装ジョブの実行・レポート表示</td></tr>
-<tr><td><code>app.js</code></td><td>510</td><td>リポジトリ一覧・Issue/MR作成フォーム・画面の初期化（最後に読み込む）</td></tr>
+<tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
+<tr><td>1</td><td>core/git_client.py</td><td>worktree削除・ローカル/リモートブランチ削除・ジャンクション解除・未コミット指示ファイル除去の関数を追加</td></tr>
+<tr><td>2</td><td>core/subtask_rollback.py（新規）</td><td>完了段階のEnumと、段階に応じた取り消し処理・結果文言を追加</td></tr>
+<tr><td>3</td><td>app/routes/subtasks.py</td><td>_push_draft_prで完了段階を記録し、失敗時に後始末して例外を投げ直す</td></tr>
+<tr><td>4</td><td>tests/test_subtask_rollback.py（新規）</td><td>一時gitリポジトリでの後始末テスト、ジャンクション先保護のテスト</td></tr>
+<tr><td>5</td><td>tests/test_subtask_routes.py</td><td>段階ごとの失敗時に後始末へ渡す完了段階を検証するテスト</td></tr>
+<tr><td>6</td><td>IMPLEMENTATION_PLAN.md</td><td>5章No.7の状況を「一部対応」に更新</td></tr>
 </table>
 
 <h2>4. 自律判断した事項</h2>
 <table>
-<tr><th>No.</th><th>ファイル</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>app/static/app.js</td><td>リポジトリ一覧・Issue/MR作成フォーム・初期化処理はapp.jsに残した。</td><td>提案の区切りに含まれないため。<br>初期化処理は全ファイルの読み込み後に実行する必要があり、app.jsを最後に読み込む形にした。</td></tr>
-<tr><td>2</td><td>app/static/common.js</td><td>共有状態・状態定義（LIFECYCLE・MR_STATUS等）もcommon.jsに置いた。</td><td>複数ファイルから参照され、app.jsの定数を読み込み時に参照するファイルがあるため先に読み込む必要がある。</td></tr>
-<tr><td>3</td><td>app/static/issue_view.js</td><td>提案ではMR一覧・詳細側に入るIssue内容の処理を、Issueのファイルへ移した。</td><td>renderSubtaskList〜renderSubtaskActionsの範囲にIssueの処理が混在していたため。</td></tr>
-<tr><td>4</td><td>app/static/subtask_view.js</td><td>MR操作（onClickSubtaskAction等）とMR状態ポーリングはMRのファイルに含めた。</td><td>MR内容の操作ボタンと一体のため。</td></tr>
-<tr><td>5</td><td>app/static/*.js</td><td>新規ファイルの先頭に、cli_view.jsと同形式の説明コメントを付けた。</td><td>既存の機能別ファイルの形式に合わせた。</td></tr>
+<tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
+<tr><td>1</td><td>取り消し順をworktree→ローカルブランチ→リモートブランチとし、厳密な逆順にしない</td><td><code>git branch -d</code>は上流ブランチで取り込み済みかを判定する。先にリモートを消すと追跡ブランチが消え、-dが拒否されるため。</td></tr>
+<tr><td>2</td><td><code>--force</code>・<code>-D</code>は使わない</td><td>3章No.2の方針に従う。</td></tr>
+<tr><td>3</td><td>push前の失敗では、指示コミットを持つローカルブランチが残る</td><td>未pushコミットは-dで削除できないため。残存物としてエラーメッセージで報告する。</td></tr>
+<tr><td>4</td><td>worktree削除前に<code>.venv</code>ジャンクションを<code>cmd /c rmdir</code>で外す</td><td>削除処理がジャンクション先の本体の仮想環境を辿って消す事故を防ぐため。</td></tr>
+<tr><td>5</td><td>コミット前に失敗した場合、自分が作った指示ファイルだけを<code>git rm --cached</code>と削除で取り除く</td><td>強制なしの<code>git worktree remove</code>が、未コミット変更で拒否されるのを避けるため。</td></tr>
+<tr><td>6</td><td>リモートブランチの削除はpush成功時のみ行う</td><td>push失敗時はリモートに無い前提とした。</td></tr>
+<tr><td>7</td><td>後始末後は元の例外型でメッセージを付け直して投げ直す</td><td>呼び出し側のHTTP 500変換をそのまま使えるため。</td></tr>
+<tr><td>8</td><td>後始末処理は新規モジュールcore/subtask_rollback.pyに分離</td><td>routesファイルの肥大化を避け、1クラス1責務に寄せるため。</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<table>
-<tr><th>No.</th><th>テスト</th><th>結果</th></tr>
-<tr><td>1</td><td><code>pytest -q</code></td><td>509 passed</td></tr>
-<tr><td>2</td><td>全JSの構文チェック（<code>node --check</code>）</td><td>エラーなし</td></tr>
-<tr><td>3</td><td>移動前後で、空行・追加した説明コメントを除く行の集合が一致することを確認</td><td>一致</td></tr>
-<tr><td>4</td><td>Node上でDOMをスタブ化し、index.htmlの順に全スクリプトを読み込む確認（変更前後で比較）</td><td>変更前・変更後ともエラーなし。<br>読み込み順を崩すとReferenceErrorを検出することも確認した。</td></tr>
-<tr><td>5</td><td>FastAPI TestClientで、index.htmlが読み込む全scriptが200で返ることを確認</td><td>全て200</td></tr>
-</table>
-<p>ブラウザでの実機確認は、ガイドラインに従い人間に依頼する。</p>
-
-<h2>6. 残課題・確認ポイント</h2>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code></p>
+<p class="ok">520 passed</p>
 <ul>
-<li>ブラウザで、リポジトリ選択・Issue/MR表示・MR作成・実装実行・添付・デプロイ・MRステータスフィルタが従来通り動くか確認してほしい。</li>
-<li>app.jsにはリポジトリ一覧とIssue/MR作成フォームが残っている（約510行）。<br>必要なら後続サブタスクで更に分割する。</li>
-<li>各ファイルはグローバルスコープを共有する通常のscriptのため、ファイル間の依存は読み込み順に依存する。<br>読み込み時に他ファイルの定数を参照する場合は、index.htmlの順序に注意が必要。</li>
-<li>ブラウザキャッシュに旧app.jsが残ると、common.jsとの定数の二重宣言でエラーになり得るため、確認時は強制再読み込みしてほしい。</li>
+<li>一時リポジトリ（bare origin＋clone）で、worktree作成直後・push後の失敗からの全削除を確認</li>
+<li>push前の失敗でローカルブランチが残り、報告されることを確認</li>
+<li>worktreeに想定外の変更がある場合、強制削除せず残存物として報告されることを確認</li>
+<li>ジャンクションを外しても、リンク先のファイルが残ることを確認</li>
+</ul>
+<p>実リポジトリ・GitHubでの実機確認は未実施（自動テストのみ）。</p>
+
+<h2>6. 残課題・リスク・レビュー観点</h2>
+<ul>
+<li>push前の失敗では、ローカルブランチが残る。同じ連番での再作成はブランチ名重複で失敗する。</li>
+<li>pushがタイムアウトしたがリモートには反映済み、というケースではリモートブランチが残る。</li>
+<li>Draft PR作成がタイムアウトしたがPRは作成済み、というケースでは、PRのブランチを削除してしまう可能性がある（PRはクローズ扱いになる）。</li>
+<li>Draft PR作成後のDB保存失敗は取り消さない（自動同期で管理塔外PRとして取り込まれる）。</li>
+<li>レビュー観点：取り消し順の妥当性、<code>git branch -d</code>のみで足りるか、エラーメッセージの文言。</li>
 </ul>
 </body>
 </html>

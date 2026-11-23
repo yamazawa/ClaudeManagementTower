@@ -1,71 +1,75 @@
-# サブタスク: [IdeaMan] app.jsを機能単位のファイルに分割するー①
+# サブタスク: [IdeaMan] サブタスク作成が途中で失敗したとき、作成済みのworktree・ブランチを後始末するー①
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-app.jsを機能単位のファイルに分割する
+サブタスク作成が途中で失敗したとき、作成済みのworktree・ブランチを後始末する
 
 ## 概要
 
-app.jsに、リポジトリ・デプロイ・Issue・MR・添付・ジョブ実行の処理が混在し、2400行を超えている。cli_view.jsやidea_view.jsと同じく、機能単位のファイルに分ける。
+サブタスク作成は、worktree作成・コミット・push・Draft PR作成を順に行う。途中で失敗するとエラーを返すだけで、作成済みのものが残り、人間が手で消す必要がある。
 
 ## 詳細
 
-- 関数群を機能単位で分け、app/static配下に別ファイルとして切り出す。
-- 分け方の案は、デプロイ（openDeployDialog〜waitForDeployResult）、Issue一覧（reloadIssues〜updateIssueItemCounts）、MR一覧・詳細（renderSubtaskList〜renderSubtaskActions）、添付（setupAttachmentForm〜uploadAttachment）、ジョブ実行（executeSubtask〜showReport）、MR状態フィルタ・レート制限（setupMrStatusFilter〜formatResetTime）とする。
-- 共通処理（escapeHtml・postJson・runBusyAction等）は共通ファイルに集める。
-- index.htmlのscriptタグを依存順に並べ直す。
-- 動作は変えず、移動のみのコミットと整理のコミットを分ける。
+- _push_draft_prで、どの段階まで成功したかを記録しながら実行する。
+- 失敗時は、成功した段階を逆順に取り消す。
+  - Draft PR作成前の失敗では、push済みのリモートブランチを削除する。
+  - そのうえで、worktreeとローカルブランチを削除する。
+- 後始末自体が失敗した場合は、残ったもの（ブランチ名・パス）をエラーメッセージに含めて返す。
+- 後始末はforce系の操作を使わない範囲で行い、3章No.2の方針と矛盾しないことを確認する。
+- Draft PR作成後のDB保存失敗は取り消さず、自動同期で管理塔外PRとして取り込まれる現状の動作を、5章No.7に記録する。
+- 5章No.7の状況を更新する。
 
 ## 根拠
 
-app/static/app.jsに関数定義が176個あり、末尾のshowReportは2456行目にある。
-同じファイルに、デプロイ（990〜1098行目）、Issue一覧（1100〜1279行目）、添付（1806〜1929行目）、ジョブ実行（2388〜2456行目）が並んでいる。
-CLI・Ideaは、既にcli_view.js・idea_view.jsとして分かれている（index.html 179〜180行目）。
-#153の実行が、JSONのバッファ上限（1MB）超過で繰り返し失敗している。
-大きなファイルの読み込みも、上限超過の一因になっている可能性がある。
+app/routes/subtasks.py 100〜112行目の_push_draft_prは、create_worktree・commit_subtask_instruction・push_branch・create_draft_prを順に呼ぶ。
+156〜157行目は、例外をHTTP 500に変換するだけで後始末をしない。
+IMPLEMENTATION_PLAN.md 148行目の5章No.7は、「MVPでは未対応。残存したworktree・ブランチの後始末は人間が行う」のままである。
+最近の実行でも、#153⑤がTLSハンドシェイクのタイムアウトで失敗するなど、GitHub側の一時的な失敗が起きている。
 
 ## 関連ファイル
 
-- app/static/app.js:990
-- app/static/app.js:1100
-- app/static/app.js:1806
-- app/static/app.js:2388
-- app/static/index.html:177
-## 実行指示（2026-11-23 12:44:08 UTC）
+- app/routes/subtasks.py:100
+- app/routes/subtasks.py:156
+- core/git_client.py:38
+- core/github_client.py:200
+- IMPLEMENTATION_PLAN.md:148
+## 実行指示（2026-11-23 12:42:30 UTC）
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-app.jsを機能単位のファイルに分割する
+サブタスク作成が途中で失敗したとき、作成済みのworktree・ブランチを後始末する
 
 ## 概要
 
-app.jsに、リポジトリ・デプロイ・Issue・MR・添付・ジョブ実行の処理が混在し、2400行を超えている。cli_view.jsやidea_view.jsと同じく、機能単位のファイルに分ける。
+サブタスク作成は、worktree作成・コミット・push・Draft PR作成を順に行う。途中で失敗するとエラーを返すだけで、作成済みのものが残り、人間が手で消す必要がある。
 
 ## 詳細
 
-- 関数群を機能単位で分け、app/static配下に別ファイルとして切り出す。
-- 分け方の案は、デプロイ（openDeployDialog〜waitForDeployResult）、Issue一覧（reloadIssues〜updateIssueItemCounts）、MR一覧・詳細（renderSubtaskList〜renderSubtaskActions）、添付（setupAttachmentForm〜uploadAttachment）、ジョブ実行（executeSubtask〜showReport）、MR状態フィルタ・レート制限（setupMrStatusFilter〜formatResetTime）とする。
-- 共通処理（escapeHtml・postJson・runBusyAction等）は共通ファイルに集める。
-- index.htmlのscriptタグを依存順に並べ直す。
-- 動作は変えず、移動のみのコミットと整理のコミットを分ける。
+- _push_draft_prで、どの段階まで成功したかを記録しながら実行する。
+- 失敗時は、成功した段階を逆順に取り消す。
+  - Draft PR作成前の失敗では、push済みのリモートブランチを削除する。
+  - そのうえで、worktreeとローカルブランチを削除する。
+- 後始末自体が失敗した場合は、残ったもの（ブランチ名・パス）をエラーメッセージに含めて返す。
+- 後始末はforce系の操作を使わない範囲で行い、3章No.2の方針と矛盾しないことを確認する。
+- Draft PR作成後のDB保存失敗は取り消さず、自動同期で管理塔外PRとして取り込まれる現状の動作を、5章No.7に記録する。
+- 5章No.7の状況を更新する。
 
 ## 根拠
 
-app/static/app.jsに関数定義が176個あり、末尾のshowReportは2456行目にある。
-同じファイルに、デプロイ（990〜1098行目）、Issue一覧（1100〜1279行目）、添付（1806〜1929行目）、ジョブ実行（2388〜2456行目）が並んでいる。
-CLI・Ideaは、既にcli_view.js・idea_view.jsとして分かれている（index.html 179〜180行目）。
-#153の実行が、JSONのバッファ上限（1MB）超過で繰り返し失敗している。
-大きなファイルの読み込みも、上限超過の一因になっている可能性がある。
+app/routes/subtasks.py 100〜112行目の_push_draft_prは、create_worktree・commit_subtask_instruction・push_branch・create_draft_prを順に呼ぶ。
+156〜157行目は、例外をHTTP 500に変換するだけで後始末をしない。
+IMPLEMENTATION_PLAN.md 148行目の5章No.7は、「MVPでは未対応。残存したworktree・ブランチの後始末は人間が行う」のままである。
+最近の実行でも、#153⑤がTLSハンドシェイクのタイムアウトで失敗するなど、GitHub側の一時的な失敗が起きている。
 
 ## 関連ファイル
 
-- app/static/app.js:990
-- app/static/app.js:1100
-- app/static/app.js:1806
-- app/static/app.js:2388
-- app/static/index.html:177
+- app/routes/subtasks.py:100
+- app/routes/subtasks.py:156
+- core/git_client.py:38
+- core/github_client.py:200
+- IMPLEMENTATION_PLAN.md:148
 

@@ -1,3 +1,4 @@
+import os
 import re
 import subprocess
 from datetime import datetime, timezone
@@ -7,6 +8,8 @@ from filelock import FileLock, Timeout
 
 GIT_TIMEOUT_SECONDS = 60
 WORKTREE_LOCK_TIMEOUT_SECONDS = 60
+# サブタスク作成時にコミットする指示ファイル（worktreeからの相対パス）
+SUBTASK_INSTRUCTION_PATH = ".claude-tower/subtask.md"
 
 
 class GitClientError(RuntimeError):
@@ -84,7 +87,7 @@ def commit_subtask_instruction(worktree_path: str, title: str, instruction: str)
         f"# サブタスク: {title}\n\n{instruction}\n",
         encoding="utf-8",
     )
-    _run_git(["add", ".claude-tower/subtask.md"], cwd=worktree_path)
+    _run_git(["add", SUBTASK_INSTRUCTION_PATH], cwd=worktree_path)
     _run_git(["commit", "-m", f"[サブタスク] {title} ― 指示を記録"], cwd=worktree_path)
 
 
@@ -101,6 +104,58 @@ def append_instruction_history(worktree_path: str, instruction: str) -> None:
 
 def push_branch(worktree_path: str, branch_name: str) -> None:
     _run_git(["push", "-u", "origin", branch_name], cwd=worktree_path)
+
+
+def discard_subtask_instruction(worktree_path: str) -> None:
+    """コミット前の指示ファイルを、インデックスと作業ツリーから取り除く
+
+    worktreeを強制なしで削除できる状態に戻すために使う。
+    """
+    _run_git(
+        ["rm", "--cached", "-q", "--ignore-unmatch", SUBTASK_INSTRUCTION_PATH], cwd=worktree_path
+    )
+    instruction_file = Path(worktree_path) / SUBTASK_INSTRUCTION_PATH
+    instruction_file.unlink(missing_ok=True)
+    if instruction_file.parent.is_dir() and not any(instruction_file.parent.iterdir()):
+        instruction_file.parent.rmdir()
+
+
+def remove_worktree(repo_path: str, worktree_path: str) -> None:
+    """worktreeを強制なしで削除する
+
+    .venvのジャンクションを先に外し、本体の仮想環境を巻き込まないようにする。
+    未コミットの変更がある場合、gitが削除を拒否する。
+    """
+    unlink_shared_venv(worktree_path)
+    _run_git(["worktree", "remove", worktree_path], cwd=repo_path)
+
+
+def unlink_shared_venv(worktree_path: str) -> None:
+    """worktree内の.venvジャンクションだけを外す
+
+    rmdirはジャンクションのリンク先を辿らない。
+    """
+    venv_link = Path(worktree_path) / ".venv"
+    if not os.path.isjunction(venv_link):
+        return
+    subprocess.run(
+        ["cmd", "/c", "rmdir", str(venv_link)],
+        capture_output=True,
+        text=True,
+        timeout=GIT_TIMEOUT_SECONDS,
+    )
+
+
+def delete_local_branch(repo_path: str, branch_name: str) -> None:
+    """ローカルブランチを強制なし（-d）で削除する
+
+    上流ブランチまたはHEADに取り込まれていない場合、gitが削除を拒否する。
+    """
+    _run_git(["branch", "-d", branch_name], cwd=repo_path)
+
+
+def delete_remote_branch(repo_path: str, branch_name: str) -> None:
+    _run_git(["push", "origin", "--delete", branch_name], cwd=repo_path)
 
 
 def pull_latest(repo_path: str, branch: str) -> None:
