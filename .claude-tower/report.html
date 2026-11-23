@@ -2,70 +2,65 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>サブタスク実行レポート - 5時間枠の上限中はジョブを取得せず、リセット後に再開するー①</title>
+<title>実行レポート #187 gh CLIの一時的な通信エラーを再試行する</title>
 <style>
-body{font-family:sans-serif;margin:2em;line-height:1.6;color:#222;max-width:1100px}
-h1{font-size:1.4em}h2{font-size:1.1em;border-bottom:1px solid #ccc;margin-top:1.6em}
-table{border-collapse:collapse;width:100%}td,th{border:1px solid #bbb;padding:4px 8px;text-align:left;vertical-align:top}
-th{background:#f0f3f8}.ok{color:#13795b;font-weight:bold}.warn{color:#a4650a;font-weight:bold}code{background:#f3f3f3;padding:0 3px}
+body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
+h1 { font-size: 1.4em; }
+h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; margin-top: 1.6em; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid #ccc; padding: 4px 8px; text-align: left; vertical-align: top; }
+th { background: #f3f3f3; }
+.ok { color: #186a1e; font-weight: bold; }
+code { background: #f5f5f5; padding: 0 3px; }
 </style>
 </head>
 <body>
-<h1>サブタスク実行レポート</h1>
+<h1>実行レポート</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#185 5時間枠の上限中はジョブを取得せず、リセット後に再開する</td></tr>
-<tr><th>サブタスク</th><td>5時間枠の上限中はジョブを取得せず、リセット後に再開するー①（PR #186、Draft）</td></tr>
-<tr><th>ブランチ</th><td>issue-185-subtask-1（base: master）</td></tr>
+<tr><th>Issue</th><td>#187 [SPn]タスクn - gh CLIの一時的な通信エラーを再試行する</td></tr>
+<tr><th>サブタスク</th><td>_run_ghの再試行と、Draft解除失敗時のジョブ要確認化</td></tr>
+<tr><th>ブランチ</th><td>issue-187-subtask-1</td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
-<p class="ok">成功（自動テストは全件成功。ワーカー起動での実機確認は未実施）</p>
-<p>ジョブ取得前に利用上限中かを確認し、上限中は実装・アイデア出しのどちらのジョブも取得しないようにしました。</p>
-<p>「hit your limit」系のエラーで失敗したジョブは、failedと区別して<code>rate_limited</code>にしました。</p>
-<p>実装ジョブは、上限が解除され一定時間が経過した後に自動で待機中へ戻します。</p>
+<p class="ok">成功</p>
+<p>一時的な通信エラー時にgh呼び出しを再試行するようにした。<br>
+Claude実行後のDraft解除に失敗した場合、ジョブをfailedではなくneeds_attentionで終了するようにした。</p>
 
-<h2>3. 実施した変更</h2>
+<h2>3. 変更内容</h2>
 <table>
 <tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td>core/rate_limits.py</td><td><code>blocked_until</code>（rejectedかつ未来のリセット時刻の最大値）と<code>is_rate_limit_error</code>（上限エラー判定）を追加</td></tr>
-<tr><td>2</td><td>core/job_queue.py</td><td><code>STATUS_RATE_LIMITED</code>と<code>requeue_rate_limited_jobs</code>を追加。後続ジョブがあるサブタスクは戻さない</td></tr>
-<tr><td>3</td><td>core/config.py・.env.example</td><td><code>rate_limit_retry_delay_seconds</code>（既定600秒）を追加</td></tr>
-<tr><td>4</td><td>worker/main.py</td><td><code>_process_next_job</code>の先頭で上限判定。上限中でなければ再投入。例外が上限エラーなら<code>rate_limited</code>で終了。<code>_load_subtask_and_project</code>を切り出し</td></tr>
-<tr><td>5</td><td>worker/idea_runner.py・core/idea_queue.py</td><td>アイデア出しジョブの上限失敗を<code>RATE_LIMITED</code>にする</td></tr>
-<tr><td>6</td><td>app/static/idea_dialog.js</td><td>「前回のアイデア出し：利用上限で中断」の表示を追加</td></tr>
-<tr><td>7</td><td>IMPLEMENTATION_PLAN.md</td><td>上限中の待機・再投入方針を追記</td></tr>
-<tr><td>8</td><td>tests/test_rate_limits.py・test_job_queue.py・test_worker_main.py・test_idea_runner.py</td><td>上記のテストを追加。既存の<code>_process_next_job</code>テストは上限判定をスタブ化</td></tr>
+<tr><td>1</td><td>core/github_client.py</td><td>再試行定数（最大試行3回・間隔3秒×試行回数・対象エラー文言）を追加。<br>_run_ghを1回実行（_run_gh_once）と再試行ループに分割。<br>create_issue・create_draft_pr・merge_pull_requestはretryable=False。</td></tr>
+<tr><td>2</td><td>worker/main.py</td><td>_finalize_successがジョブ終了状態を返すよう変更。<br>mark_pr_ready失敗時はerrorイベントを記録しneeds_attentionを返す。</td></tr>
+<tr><td>3</td><td>tests/test_github_client.py</td><td>再試行成功・上限到達・タイムアウト再試行・恒久エラー非再試行・作成系非再試行のテストを追加。</td></tr>
+<tr><td>4</td><td>tests/test_worker_main.py</td><td>Draft解除失敗時needs_attention、成功時resolvedのテストを追加。</td></tr>
+<tr><td>5</td><td>IMPLEMENTATION_PLAN.md</td><td>再試行対象外の操作と、Draft解除失敗時のジョブ状態を追記。</td></tr>
 </table>
+<p>コミット：d2f5058（再試行）、0893d82（要確認化）、e3e7e55（実装計画）</p>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>上限失敗の状態は<code>needs_attention</code>ではなく新設の<code>rate_limited</code>にした</td><td><code>needs_attention</code>は心拍途絶の意味で使用済みで、自動再実行しない方針のため</td></tr>
-<tr><td>2</td><td>実装ジョブは自動で再投入する（画面からの再実行も従来通り可能）</td><td>提案の目的が「リセット後に再開」のため。人手を介さず再開できる</td></tr>
-<tr><td>3</td><td>再投入は「上限中でない」かつ「中断から600秒経過」を条件とした</td><td>上限エラー時に<code>rejected</code>のRateLimitEventが届かない場合でも、3秒毎の失敗ループを避けるため</td></tr>
-<tr><td>4</td><td>同じサブタスクに後続ジョブがあれば再投入しない</td><td>画面から再実行済みの場合に二重実行を防ぐため</td></tr>
-<tr><td>5</td><td>アイデア出しジョブは自動再投入しない</td><td>画面から再実行でき、1プロジェクト1件の制約と重複しやすいため</td></tr>
-<tr><td>6</td><td>判定対象は全ての枠（five_hour以外も）とし、リセット時刻不明の上限は対象外</td><td>7日枠等の上限でも失敗するため。不明時に無期限停止しないため</td></tr>
-<tr><td>7</td><td>上限エラーの判定は例外メッセージのみとし、結果テキストは見ない</td><td>レポート要約等の正常な結果に同じ語句が含まれ得るため誤判定を避けた</td></tr>
-<tr><td>8</td><td>idea_contextの<code>FAILED_JOB_STATES</code>には<code>rate_limited</code>を含めない</td><td>上限失敗はコードの問題ではなく、アイデアマンへの材料として不要なため</td></tr>
-<tr><td>9</td><td>待機ログはリセット時刻が変わった時のみ出力</td><td>ポーリング毎の出力でログが埋まるのを避けるため</td></tr>
+<tr><td>1</td><td>issue create・pr createは「作成済み確認」ではなく再試行対象外にした。</td><td>作成済み確認はタイトル一致等の曖昧な判定が必要で、誤判定時の影響が大きいため。</td></tr>
+<tr><td>2</td><td>pr mergeも再試行対象外にした。</td><td>1回目が成功していた場合、2回目は「マージ済み」エラーになり結果の判定が紛らわしいため。</td></tr>
+<tr><td>3</td><td>gh自体のタイムアウト（60秒）も再試行対象にした。</td><td>再試行対象の操作は冪等なため、二重実行しても問題ないと判断した。</td></tr>
+<tr><td>4</td><td>最大3回・待機3秒→6秒の線形バックオフとした。</td><td>ジョブの所要時間を大きく延ばさず、短時間の通信断を吸収できる値とした。</td></tr>
+<tr><td>5</td><td>Draft解除失敗時はlifecycle_stateをresolvedにしない。</td><td>PRがDraftのままなので、解決済みとして扱うのは不整合なため。</td></tr>
+<tr><td>6</td><td>エラー文言はstderrの部分一致（小文字比較）で判定した。</td><td>ghは終了コードで一時的エラーを区別しないため。</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<p class="ok"><code>./.venv/Scripts/python.exe -m pytest -q</code> : 372 passed</p>
-<p>途中コミット（3048d01）時点でも371 passedを確認済みです。</p>
-<p>ワーカーを起動した実機確認は未実施です（CLAUDE.mdの方針により人間に依頼）。</p>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code>：<span class="ok">368 passed</span></p>
+<p>実際の通信エラーを発生させた実機確認は未実施（再現が難しいため、subprocessのモックで確認）。</p>
 
 <h2>6. 残課題・リスク・確認ポイント</h2>
 <ul>
-<li>実際の上限エラーが例外（ProcessError）で届く前提です。結果メッセージ（is_error）で届く場合は<code>succeeded</code>扱いのままになります。</li>
-<li>上限エラーの文言は#165の実例と「usage limit reached」のみで判定しています。文言が変わると<code>failed</code>になります。</li>
-<li>再投入時に<code>append_instruction_history</code>が再度動くため、subtask.mdに同じ指示が追記され、コミットが1件増えます。</li>
-<li>実装ジョブの状態表示は<code>状態: rate_limited</code>と英語のまま表示されます（既存の表示方式に合わせ、文言化は未対応）。</li>
-<li>上限中もClaudeを使わないため新しいRateLimitEventが届きません。リセット時刻を過ぎると判定は自動で解除されます。</li>
-<li>確認ポイント：<code>worker/main.py</code>の<code>_is_rate_limited</code>、<code>core/job_queue.py</code>の<code>requeue_rate_limited_jobs</code>。</li>
+<li>needs_attentionのジョブでは、画面上でレポートが自動表示されない（app.jsはsucceeded時のみ表示）。必要なら別タスクで対応する。</li>
+<li>needs_attentionになったサブタスクのDraft解除は、人間がGitHub上で手動で行うか、再実行する必要がある。</li>
+<li>再試行対象のエラー文言（GH_TRANSIENT_ERROR_PATTERNS）が十分か確認してほしい。</li>
+<li>Webサーバー側のgh呼び出しも再試行の対象になるため、通信断時はレスポンスが最大約9秒＋gh実行時間だけ遅れる。</li>
 </ul>
 </body>
 </html>

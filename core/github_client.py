@@ -1,5 +1,6 @@
 import json
 import subprocess
+import time
 from datetime import datetime
 
 GH_TIMEOUT_SECONDS = 60
@@ -7,13 +8,40 @@ ISSUE_LIST_LIMIT = 200
 PR_STATE_LIST_LIMIT = 200
 # PR状態の同期と、管理塔外で作成されたPRの取り込みに使う項目
 PR_STATE_FIELDS = "number,isDraft,state,mergedAt,title,headRefName,closingIssuesReferences"
+# 一時的な通信エラー時の再試行（初回を含む最大試行回数と、試行ごとに伸ばす待ち時間）
+GH_MAX_ATTEMPTS = 3
+GH_RETRY_INTERVAL_SECONDS = 3
+# stderrにこれらが含まれる場合は一時的な通信エラーとみなす（小文字で比較）
+GH_TRANSIENT_ERROR_PATTERNS = (
+    "tls handshake timeout",
+    "connection reset",
+    "connection refused",
+    "i/o timeout",
+    "timeout awaiting response headers",
+    "unexpected eof",
+    "http 502",
+    "http 503",
+    "http 504",
+    "502 bad gateway",
+    "503 service unavailable",
+    "504 gateway timeout",
+)
 
 
 class GitHubClientError(RuntimeError):
     pass
 
 
-def _run_gh(args: list[str]) -> str:
+class _TransientGhError(GitHubClientError):
+    pass
+
+
+def is_transient_gh_error(stderr: str) -> bool:
+    lowered = stderr.lower()
+    return any(pattern in lowered for pattern in GH_TRANSIENT_ERROR_PATTERNS)
+
+
+def _run_gh_once(args: list[str]) -> str:
     try:
         result = subprocess.run(
             ["gh", *args],
@@ -23,10 +51,30 @@ def _run_gh(args: list[str]) -> str:
             timeout=GH_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired as exc:
-        raise GitHubClientError(f"gh {' '.join(args)} がタイムアウトしました") from exc
-    if result.returncode != 0:
-        raise GitHubClientError(result.stderr.strip())
-    return result.stdout
+        raise _TransientGhError(f"gh {' '.join(args)} がタイムアウトしました") from exc
+    if result.returncode == 0:
+        return result.stdout
+    stderr = result.stderr.strip()
+    if is_transient_gh_error(stderr):
+        raise _TransientGhError(stderr)
+    raise GitHubClientError(stderr)
+
+
+def _run_gh(args: list[str], retryable: bool = True) -> str:
+    """ghを実行し、標準出力を返す
+
+    retryableの場合、一時的な通信エラーは間隔を空けて再試行する。
+    二重実行で結果が変わる操作（作成・マージ）はretryable=Falseで呼ぶ。
+    """
+    attempts = GH_MAX_ATTEMPTS if retryable else 1
+    for attempt in range(1, attempts + 1):
+        try:
+            return _run_gh_once(args)
+        except _TransientGhError as exc:
+            if attempt == attempts:
+                raise GitHubClientError(str(exc)) from exc
+            time.sleep(GH_RETRY_INTERVAL_SECONDS * attempt)
+    raise AssertionError("unreachable")
 
 
 def list_issues(repo: str, state: str = "open") -> list[dict]:
@@ -68,7 +116,9 @@ def get_issue(repo: str, number: int) -> dict:
 
 
 def create_issue(repo: str, title: str, body: str) -> dict:
-    output = _run_gh(["issue", "create", "--repo", repo, "--title", title, "--body", body])
+    output = _run_gh(
+        ["issue", "create", "--repo", repo, "--title", title, "--body", body], retryable=False
+    )
     url = output.strip()
     number = int(url.rsplit("/", 1)[-1])
     return {"number": number, "url": url}
@@ -119,7 +169,8 @@ def create_draft_pr(repo: str, base: str, head: str, title: str, body: str) -> d
             "--head", head,
             "--title", title,
             "--body", body,
-        ]
+        ],
+        retryable=False,
     )
     url = output.strip()
     number = int(url.rsplit("/", 1)[-1])
@@ -180,4 +231,7 @@ def get_pr_mergeable(repo: str, number: int) -> str:
 
 
 def merge_pull_request(repo: str, number: int) -> None:
-    _run_gh(["pr", "merge", str(number), "--repo", repo, "--merge", "--delete-branch"])
+    _run_gh(
+        ["pr", "merge", str(number), "--repo", repo, "--merge", "--delete-branch"],
+        retryable=False,
+    )

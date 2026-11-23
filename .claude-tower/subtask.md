@@ -1,63 +1,63 @@
-# サブタスク: [SPn]タスクn - 5時間枠の上限中はジョブを取得せず、リセット後に再開するー①
+# サブタスク: [SPn]タスクn - gh CLIの一時的な通信エラーを再試行するー①
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-[SPn]タスクn - 5時間枠の上限中はジョブを取得せず、リセット後に再開する
+[SPn]タスクn - gh CLIの一時的な通信エラーを再試行する
 
 ## 概要
 
-Claudeの利用上限に達していてもワーカーがジョブを取得し、ジョブが即座に失敗しています。上限中は取得を止め、上限で失敗したジョブはリセット後に再投入できるようにします。
+TLS handshake timeoutなどの一時的な通信エラーで、ジョブ全体がfailedになっています。安全な操作に限って、gh呼び出しを再試行します。
 
 ## 詳細
 
-_process_next_jobで、rate_limit_snapshotsの状態が上限（rejected等）でresets_atが未来なら、ジョブを取得せず待機します。
-Claudeの結果が「hit your limit」系のエラーだった場合は、failedと区別する状態（needs_attention等）にします。
-リセット後に自動で再投入するか、画面から再実行を促すかは要検討です。
-アイデア出しジョブ（claim_next_idea_job）にも同じ判定を入れます。
+_run_ghで、stderrが一時的なエラー（TLS handshake timeout、connection reset、HTTP 502/503など）の場合は、間隔を空けて数回再試行します。
+再試行の回数と間隔は定数にまとめます。
+issue create・pr createのように、同じ操作を2回行うと二重に作成される操作は再試行の対象から外すか、作成済みかを確認してから再試行します。
+Claude実行後の後処理（mark_pr_ready）が失敗した場合は、ジョブをfailedではなくneeds_attentionにすることも検討します。
 
 ## 根拠
 
-#165 Issueフィルタの修正ー①が「You've hit your 5-hour limit · resets 10pm (exit code: 1)」でfailedになっています。
-worker/main.py:159-173は、利用上限の状態を確認せずにジョブを取得しています。
-core/rate_limits.py:23-42でstatusとresets_atを保存していますが、画面表示（get_rate_limits）にしか使っていません。
+#153 Issue、MRレイアウト改善ー⑤が「Post https://api.github.com/graphql: net/http: TLS handshake timeout」で失敗しています。
+core/github_client.py:16-29の_run_ghには再試行がなく、エラーをそのまま例外にしています。
+worker/main.py:85のmark_pr_ready（graphqlを使う）はClaude実行後に呼ばれるため、ここで失敗するとジョブ全体がfailedになります（worker/main.py:123-125）。
 
 ## 関連ファイル
 
-- worker/main.py:159
+- core/github_client.py:16
+- worker/main.py:85
+- worker/main.py:96
 - worker/main.py:123
-- core/rate_limits.py:23
-- core/models.py:192
-## 実行指示（2026-11-23 00:58:10 UTC）
+## 実行指示（2026-11-23 00:58:23 UTC）
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-[SPn]タスクn - 5時間枠の上限中はジョブを取得せず、リセット後に再開する
+[SPn]タスクn - gh CLIの一時的な通信エラーを再試行する
 
 ## 概要
 
-Claudeの利用上限に達していてもワーカーがジョブを取得し、ジョブが即座に失敗しています。上限中は取得を止め、上限で失敗したジョブはリセット後に再投入できるようにします。
+TLS handshake timeoutなどの一時的な通信エラーで、ジョブ全体がfailedになっています。安全な操作に限って、gh呼び出しを再試行します。
 
 ## 詳細
 
-_process_next_jobで、rate_limit_snapshotsの状態が上限（rejected等）でresets_atが未来なら、ジョブを取得せず待機します。
-Claudeの結果が「hit your limit」系のエラーだった場合は、failedと区別する状態（needs_attention等）にします。
-リセット後に自動で再投入するか、画面から再実行を促すかは要検討です。
-アイデア出しジョブ（claim_next_idea_job）にも同じ判定を入れます。
+_run_ghで、stderrが一時的なエラー（TLS handshake timeout、connection reset、HTTP 502/503など）の場合は、間隔を空けて数回再試行します。
+再試行の回数と間隔は定数にまとめます。
+issue create・pr createのように、同じ操作を2回行うと二重に作成される操作は再試行の対象から外すか、作成済みかを確認してから再試行します。
+Claude実行後の後処理（mark_pr_ready）が失敗した場合は、ジョブをfailedではなくneeds_attentionにすることも検討します。
 
 ## 根拠
 
-#165 Issueフィルタの修正ー①が「You've hit your 5-hour limit · resets 10pm (exit code: 1)」でfailedになっています。
-worker/main.py:159-173は、利用上限の状態を確認せずにジョブを取得しています。
-core/rate_limits.py:23-42でstatusとresets_atを保存していますが、画面表示（get_rate_limits）にしか使っていません。
+#153 Issue、MRレイアウト改善ー⑤が「Post https://api.github.com/graphql: net/http: TLS handshake timeout」で失敗しています。
+core/github_client.py:16-29の_run_ghには再試行がなく、エラーをそのまま例外にしています。
+worker/main.py:85のmark_pr_ready（graphqlを使う）はClaude実行後に呼ばれるため、ここで失敗するとジョブ全体がfailedになります（worker/main.py:123-125）。
 
 ## 関連ファイル
 
-- worker/main.py:159
+- core/github_client.py:16
+- worker/main.py:85
+- worker/main.py:96
 - worker/main.py:123
-- core/rate_limits.py:23
-- core/models.py:192
 
