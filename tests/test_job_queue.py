@@ -14,6 +14,7 @@ from core.job_queue import (
     parse_worker_pid,
     recover_stale_jobs,
     register_worker,
+    requeue_rate_limited_jobs,
     set_worker_state,
 )
 from core.models import ExecutionJob, Subtask, Worker
@@ -189,3 +190,39 @@ def test_recover_stale_jobs_keeps_recently_heartbeaten_jobs(tmp_path):
     with session_factory() as session:
         reloaded = session.get(ExecutionJob, job["job_id"])
         assert reloaded.status == "running"
+
+
+def _set_job_state(session_factory, job_id: int, status: str, ended_at) -> None:
+    with session_factory() as session:
+        job = session.get(ExecutionJob, job_id)
+        job.status = status
+        job.ended_at = ended_at
+        session.commit()
+
+
+def test_requeue_rate_limited_jobs_after_delay(tmp_path):
+    _, session_factory = _setup(tmp_path)
+    _add_subtask_and_jobs(session_factory, job_count=1)
+    _set_job_state(session_factory, 1, "rate_limited", datetime.now(timezone.utc) - timedelta(seconds=120))
+
+    assert requeue_rate_limited_jobs(60, session_factory=session_factory) == [1]
+    with session_factory() as session:
+        job = session.get(ExecutionJob, 1)
+        assert job.status == "queued"
+        assert job.ended_at is None
+
+
+def test_requeue_rate_limited_jobs_waits_for_delay(tmp_path):
+    _, session_factory = _setup(tmp_path)
+    _add_subtask_and_jobs(session_factory, job_count=1)
+    _set_job_state(session_factory, 1, "rate_limited", datetime.now(timezone.utc))
+
+    assert requeue_rate_limited_jobs(60, session_factory=session_factory) == []
+
+
+def test_requeue_rate_limited_jobs_skips_when_rerun_exists(tmp_path):
+    _, session_factory = _setup(tmp_path)
+    _add_subtask_and_jobs(session_factory, job_count=2)
+    _set_job_state(session_factory, 1, "rate_limited", datetime.now(timezone.utc) - timedelta(seconds=120))
+
+    assert requeue_rate_limited_jobs(60, session_factory=session_factory) == []
