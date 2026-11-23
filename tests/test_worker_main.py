@@ -83,6 +83,92 @@ def test_process_job_marks_failed_on_other_error(monkeypatch):
     assert _run_failing_job(monkeypatch, "boom") == [("failed", "boom")]
 
 
+class _LookupSession:
+    """session.getの結果をモデルごとに差し替えるテスト用セッション"""
+
+    def __init__(self, rows: dict):
+        self._rows = rows
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+    def get(self, model, key):
+        return self._rows.get(model)
+
+    def expunge(self, obj):
+        pass
+
+
+def _run_job_with_rows(monkeypatch, rows: dict) -> list:
+    finished = []
+    monkeypatch.setattr(worker_main, "set_worker_state", lambda *a, **k: True)
+    monkeypatch.setattr(worker_main, "SessionLocal", lambda: _LookupSession(rows))
+    monkeypatch.setattr(worker_main, "record_event", lambda *a, **k: None)
+    monkeypatch.setattr(worker_main, "_run_with_heartbeat", lambda *a: pytest.fail("not expected"))
+    monkeypatch.setattr(
+        worker_main,
+        "finish_job",
+        lambda job_id, status, exit_code, error_message: finished.append((status, error_message)),
+    )
+    worker_main.process_job({"job_id": 1, "subtask_id": 7}, 1)
+    return finished
+
+
+def test_process_job_marks_failed_when_subtask_deleted(monkeypatch):
+    finished = _run_job_with_rows(monkeypatch, {})
+
+    assert finished == [("failed", "サブタスク(id=7)が見つかりません")]
+
+
+def test_process_job_marks_failed_when_project_deleted(monkeypatch):
+    subtask = SimpleNamespace(project_id=3, instruction="指示")
+    finished = _run_job_with_rows(monkeypatch, {worker_main.Subtask: subtask})
+
+    assert finished == [("failed", "プロジェクト(id=3)が見つかりません")]
+
+
+def test_process_job_marks_failed_when_set_worker_state_fails(monkeypatch):
+    finished = []
+
+    def locked(*a, **k):
+        raise RuntimeError("database is locked")
+
+    monkeypatch.setattr(worker_main, "set_worker_state", locked)
+    monkeypatch.setattr(worker_main, "record_event", lambda *a, **k: None)
+    monkeypatch.setattr(
+        worker_main,
+        "finish_job",
+        lambda job_id, status, exit_code, error_message: finished.append((status, error_message)),
+    )
+    worker_main.process_job({"job_id": 1, "subtask_id": 7}, 1)
+
+    assert finished == [("failed", "database is locked")]
+
+
+def test_run_loop_continues_after_transient_db_error(monkeypatch):
+    calls = []
+    sleeps = []
+
+    def cleanup():
+        calls.append("cleanup")
+        if len(calls) == 1:
+            raise RuntimeError("database is locked")
+
+    states = iter([True, True, False])
+    monkeypatch.setattr(worker_main, "set_worker_state", lambda *a, **k: next(states))
+    monkeypatch.setattr(worker_main, "_cleanup_stale_records", cleanup)
+    monkeypatch.setattr(worker_main, "_process_next_job", lambda worker_id: calls.append("job") or True)
+    monkeypatch.setattr(worker_main, "time", SimpleNamespace(sleep=sleeps.append))
+
+    worker_main.run_loop(1)
+
+    assert calls == ["cleanup", "cleanup", "job"]
+    assert sleeps == [worker_main.settings.worker_poll_interval_seconds]
+
+
 @pytest.mark.parametrize(
     ("resets_at", "expected", "requeued"),
     [(None, False, True), (4102444800, True, False)],
