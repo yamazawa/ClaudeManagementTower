@@ -761,6 +761,10 @@ async function init() {
  * リポジトリの選択
  *
  * Issue一覧と先頭Issueの内容を取得してから、MR内容までまとめて表示を切り替える。
+ * 前回取得したIssue一覧を保持している場合は、それをすぐ表示する。
+ * その後、画面をブロックせずに最新の一覧を取得して差し替える。
+ * 保持している一覧が無い場合のみ、画面をブロックして取得する。
+ * 再取得の前に別リポジトリへ切り替えた場合は、再取得しない。
  * 別リポジトリへ切り替えた場合は、前のIssue・MR・CLI・Ideaの選択を外す。
  * 縦長表示ではリポジトリ一覧を閉じ、Issue一覧を開く。
  * 縦長表示では、Issue一覧の表示が1件のみの場合は閉じる。
@@ -772,11 +776,15 @@ async function selectProject(project) {
   }
   const wasIssueSelected = currentIssueNumber !== null;
   currentProjectId = project.id;
-  await runSelectionRequest(fetchIssueListWithSelection, ({ issues, target }) => {
+  const apply = ({ issues, target }) => {
     showProject(project);
     applyIssueList(issues, target);
     if (!wasIssueSelected && issues.length === 1) autoSetSectionExpanded(SECTION_IDS.repo, false);
-  });
+  };
+  const cached = issueListCache.get(issueListCacheKey());
+  if (!cached) return runSelectionRequest(fetchIssueListWithSelection, apply);
+  await runSelectionRequest(() => withIssueSelection(cached), apply, { blocking: false });
+  if (currentProjectId === project.id) await reloadIssues({ blocking: false });
 }
 
 /**
