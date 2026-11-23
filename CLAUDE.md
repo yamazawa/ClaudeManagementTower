@@ -29,8 +29,13 @@ GitHub Issue連動型AI開発タスク管理システム。\
 サブタスクのworktree内では、本体の仮想環境へのジャンクションが\
 `./.venv`に作成されている（worktree作成時に自動設定）。\
 `python`コマンドは使わず、`./.venv/Scripts/python.exe -m pytest -q`で\
-テストを実行する。worktree外の絶対パスは操作制限で拒否されるため使わない。\
-ただしRead・Glob・Grepツールによるworktree外の参照は許可されている。
+テストを実行する。\
+作業は対象worktree内で行うことを基本とする。\
+ガイドライン更新等のため、`C:\git`配下の他リポジトリへの書き込みは許可されている。\
+他のworktreeと管理塔自身のフォルダへの書き込みは拒否される。\
+Read・Glob・Grepツールによるworktree外の参照は許可されている。\
+秘密鍵・`.env`・認証情報ファイル等は、場所を問わず参照・書き込みが拒否される。\
+ルールの詳細は`core/claude_access_rules.py`を参照する。
 
 Claude管理塔の自律実行機能（サブタスク実行経由のGitHub自動操作）について、\
 新規実装・未検証の変更は引き続き `yamazawa/claude-tower-test-repo` で検証する。
