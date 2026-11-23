@@ -89,19 +89,38 @@ def record_subtask_created(idea_id: int, subtask_id: int, session_factory: sessi
     return _update(idea_id, values, session_factory)
 
 
-def release_claim(idea_id: int, session_factory: sessionmaker = SessionLocal) -> dict:
-    """GitHub操作の失敗時に、承認前の状態へ戻す
+CLAIMED_STATES = (IdeaStatus.APPROVED_ISSUE_ONLY, IdeaStatus.APPROVED_WITH_SUBTASK)
+
+
+def _release(idea: Idea) -> None:
+    """承認処理中の提案を承認前の状態へ戻す
 
     Issue作成済みの場合はIssue作成済みに戻し、後からサブタスク作成を再実行できるようにする。
     """
+    created = idea.created_issue_number is not None
+    idea.status = IdeaStatus.ISSUE_CREATED if created else IdeaStatus.PROPOSED
+    if not created:
+        idea.decided_at = None
+
+
+def release_claim(idea_id: int, session_factory: sessionmaker = SessionLocal) -> dict:
+    """GitHub操作の失敗時に、承認前の状態へ戻す"""
     with session_factory() as session:
         idea = session.get(Idea, idea_id)
-        created = idea.created_issue_number is not None
-        idea.status = IdeaStatus.ISSUE_CREATED if created else IdeaStatus.PROPOSED
-        if not created:
-            idea.decided_at = None
+        _release(idea)
         session.commit()
         return to_dict(idea)
+
+
+def recover_interrupted_claims(session_factory: sessionmaker = SessionLocal) -> None:
+    """起動時に、前回起動中に承認処理中だった提案を承認前の状態へ戻す
+
+    戻し方はrelease_claimと同じ規則とする。
+    """
+    with session_factory() as session:
+        for idea in session.query(Idea).filter(Idea.status.in_(CLAIMED_STATES)).all():
+            _release(idea)
+        session.commit()
 
 
 def target_issue_number(idea: dict) -> int | None:

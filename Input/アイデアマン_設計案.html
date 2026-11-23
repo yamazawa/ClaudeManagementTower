@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="ja"><head><meta charset="utf-8"/><meta content="width=device-width,initial-scale=1" name="viewport"/><title>アイデアマン 設計案 v0.1｜Claude管理塔 拡張機能</title><style>:root{--bg:#f4f6fa;--ink:#182235;--muted:#637086;--line:#dce3ec;--accent:#335eea;--soft:#edf2ff;--green:#13795b;--amber:#a4650a}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.8 system-ui,-apple-system,'Segoe UI',sans-serif}header{background:#18243c;color:#fff;padding:48px max(24px,calc((100vw - 1040px)/2))}header h1{font-size:34px;margin:0 0 8px}header p{color:#d6dff0;max-width:820px}.meta{font-size:13px;color:#b8c7e3}.wrap{max-width:1080px;margin:auto;padding:28px 22px 90px}.toc,.section{background:#fff;border:1px solid var(--line);border-radius:14px;padding:25px 30px;margin:18px 0;box-shadow:0 2px 8px #1b2b4c08}h2{font-size:23px;margin:0 0 16px;border-bottom:1px solid var(--line);padding-bottom:12px}h3{font-size:17px;margin:24px 0 8px}p{margin:8px 0 13px}a{color:#2855c9}ul,ol{padding-left:23px}li{margin:5px 0}.pill{display:inline-block;padding:2px 9px;border-radius:99px;background:#e9f5ef;color:#126447;font-size:12px;font-weight:700}.proposal{background:#fff3df;color:#875407}.note{border-left:4px solid var(--accent);background:var(--soft);padding:12px 16px;margin:14px 0;border-radius:0 8px 8px 0}.warn{border-left-color:#c78421;background:#fff7e9}.scroll{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:14px}th,td{border:1px solid var(--line);padding:9px 11px;text-align:left;vertical-align:top}th{background:#f0f3f8}code,pre{font-family:Consolas,'Courier New',monospace}code{background:#edf0f6;padding:1px 5px;border-radius:4px}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#152137;color:#e4ecfa;padding:17px;border-radius:10px;font-size:12px;line-height:1.65}.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.panel{border:1px solid var(--line);border-radius:10px;padding:16px}.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:center}.step{background:#eaf0ff;border:1px solid #c9d7fc;padding:8px 12px;border-radius:8px;font-weight:600}.arrow{color:#7b8aa5}.checklist li{list-style:'☐  ';padding-left:5px}footer{text-align:center;color:var(--muted);font-size:12px;margin-top:25px}@media(max-width:650px){header{padding:30px 20px}header h1{font-size:27px}.toc,.section{padding:19px}.grid{grid-template-columns:1fr}}@media print{body{background:#fff}.section,.toc{box-shadow:none;break-inside:avoid}header{padding:25px}a{color:inherit}}</style></head>
+<body>
+<header><div class="meta">DESIGN PROPOSAL（未確定・レビュー用） · v0.1 · 2026-11-20</div><h1>アイデアマン</h1><p>Claude管理塔 拡張機能 設計案 — 既存コード・実行履歴をClaude自身が調査し、Issue／サブタスク（MR）の種を提案する役割</p><div class="meta">本資料はIMPLEMENTATION_PLAN.mdへの正式な取り込み前の自由設計案。10章の未決定事項について人間の判断を経てから確定する。</div></header>
+<main class="wrap">
+<nav class="toc"><strong>目次</strong><div class="grid">
+<div><a href="#goal">1. 目的とスコープ</a><br/><a href="#arch">2. 既存システムとの関係</a><br/><a href="#input">3. 分析対象（インプット）</a><br/><a href="#data">4. 提案データモデル</a><br/><a href="#approve">5. 承認フロー（安全策）</a></div>
+<div><a href="#ui">6. 実行トリガーと画面仕様</a><br/><a href="#agent">7. Claude実行ポリシー</a><br/><a href="#api">8. データモデル・API追加案</a><br/><a href="#phase">9. 段階的実装案</a><br/><a href="#open">10. 未決定・要確認事項</a></div>
+</div><p class="small" style="font-size:12px;color:var(--muted)">凡例：<span class="pill">既存方針を継承</span>　<span class="pill proposal">本資料の新規提案</span></p></nav>
+
+<section class="section" id="goal"><h2>1. 目的とスコープ</h2>
+<p>現在のClaude管理塔は、人間がGitHub Issueを起票し、Claudeがサブタスク単位で実装する構成になっている。\
+アイデアマンは、この起点を補う役割として、既存コード・過去の実行履歴をClaude自身が調査し、改善提案（Issueの種・サブタスク/MRの種）を見つける機能を指す。</p>
+<div class="note"><strong>基本思想：</strong>「Claudeが自分でコード・運用履歴を観察 → 改善案を提案 → 人間が確認・承認 → 既存の起票・実装パイプラインに乗せる」。アイデアマン自身はIssue・PRを即時には作らず、提案までを担当する。</div>
+<h3>MVPに含む</h3><ul>
+<li>対象リポジトリのソースコード・ドキュメントの調査</li>
+<li>過去の実行履歴（execution_events・reports・失敗ジョブ）の調査</li>
+<li>既存Open Issueとの重複チェック</li>
+<li>調査結果をもとにしたIssue案・サブタスク案の提案、人間承認を経たGitHubへの反映</li>
+</ul>
+<h3>MVPから除外</h3><ul>
+<li>ブラウザ操作による実際のUI動作確認（動的テスト）</li>
+<li>人間の承認を経ないGitHub Issue・PRの自動作成</li>
+<li>定期実行（スケジューラ）。初期は手動トリガーのみ</li>
+</ul>
+</section>
+
+<section class="section" id="arch"><h2>2. 既存システムとの関係</h2>
+<p><span class="pill proposal">新規提案</span> アイデアマンは独立した新システムではなく、既存のワーカープール・ジョブキューに相乗りする新しいジョブ種別として実装する。Claude Agent SDK・worktree・ジョブキューといった既存の実行基盤を再利用し、実装を複雑化させない。</p>
+<pre>既存ワーカープール（WorkerPool）
+  ├─ 実行ジョブ（サブタスク実装） … 既存
+  └─ アイデア出しジョブ（idea_generation） … 新規
+       │ 対象リポジトリを読み取り専用で調査
+       │ 過去のexecution_events・reports・Open Issueも参照
+       ▼
+     ideas テーブルへ提案を保存（GitHubへはまだ何も書かない）
+       │ 人間が画面で確認し、承認 or 却下
+       ▼
+  承認時のみ、既存の「サブタスク作成」「Issue作成」相当のAPIを呼び出す</pre>
+<p>アイデアマンのジョブは原則としてコミット・push・GitHub書き込みAPIを呼ばない。\
+既存の<code>can_use_tool</code>によるworktree外操作の拒否機構はそのまま適用し、読み取り専用である点を実行ポリシー（7章）でも明示する。</p>
+</section>
+
+<section class="section" id="input"><h2>3. 分析対象（インプット）</h2>
+<div class="scroll"><table><tr><th>分類</th><th>内容</th><th>用途</th></tr>
+<tr><td>静的</td><td>ソースコード全体（app/core/worker/tests）</td><td>設計の歪み・重複・未使用コード・肥大化した関数の発見</td></tr>
+<tr><td>静的</td><td>README・CLAUDE.md・IMPLEMENTATION_PLAN.md</td><td>既存方針との整合確認、方針違反の提案を避ける</td></tr>
+<tr><td>動的</td><td>execution_events・reports</td><td>過去のClaudeの自律判断・残課題の傾向からの改善点抽出</td></tr>
+<tr><td>動的</td><td>失敗ジョブ・needs_attentionの履歴</td><td>繰り返し発生している不具合・弱点の特定</td></tr>
+<tr><td>GitHub</td><td>Open Issue一覧</td><td>重複提案の回避</td></tr>
+<tr><td>GitHub</td><td>直近のPRレビューコメント</td><td>人間が繰り返し指摘している観点の特定</td></tr>
+</table></div>
+<div class="note warn"><strong>MVP除外とする項目：</strong>ブラウザでの実際のUI操作・画面確認（動的テスト）はMVPから除外する。\
+claude-in-chrome等のブラウザ操作手段自体は利用可能だが、人間が実際にClaude管理塔を使用中の場合に操作が競合するリスクがあり、対応は後続フェーズの検討事項とする（10章・No.4）。</div>
+</section>
+
+<section class="section" id="data"><h2>4. 提案データモデル</h2>
+<p><span class="pill proposal">新規提案</span> 1件の提案を<code>ideas</code>として保存する。GitHubのIssue・PRそのものではなく、アプリ内の保留データとして扱う。</p>
+<pre>ideas
+  id, project_id, source_job_id,
+  category(bug|feature|refactor|tech_debt|docs),
+  title, summary, detail, rationale, related_files,
+  related_issue_number NULL,
+  status(proposed|approved_issue_only|approved_with_subtask|rejected|issue_created|subtask_created),
+  created_issue_number NULL, created_subtask_id NULL,
+  created_at, decided_at NULL</pre>
+<p><code>related_issue_number</code>は、既存Open Issueの改善案（新規Issueを作らず既存Issue配下にサブタスクを追加する提案）の場合に設定する。\
+<code>rationale</code>には対象ファイル・行・観測した事象など、人間が承認判断をする際の根拠を記録する。</p>
+</section>
+
+<section class="section" id="approve"><h2>5. 承認フロー（安全策）</h2>
+<div class="note warn"><strong>既存リスクとの関係：</strong>IMPLEMENTATION_PLAN.md 8章で「Issue作成にはPRのDraftに相当する保留状態がなく、作成した瞬間に公開リポジトリへ即時反映される」という残存リスクが既に指摘されている。\
+アイデアマンがIssue作成の起点を増やすことで、このリスクが拡大する可能性がある。\
+そのため提案は必ずアプリ内の保留状態（<code>ideas</code>テーブル）に留め、人間の承認を経てから初めてGitHub Issueを作成する。</div>
+<p>一方、サブタスク・Draft PRの作成はGitHub側に既に「Draft」という保留状態があり、マージせずにクローズすれば実質的に取り消せる。\
+そのためアイデアマンの承認モデルは、提案の対象がIssueかサブタスク/PRかで扱いを分ける案とする。</p>
+<div class="scroll"><table><tr><th>提案の対象</th><th>承認の要否</th><th>根拠</th></tr>
+<tr><td>新規Issue提案</td><td>人間の承認が必須</td><td>Issue作成は取り消せない残存リスクが既にある（IMPLEMENTATION_PLAN.md 8章）</td></tr>
+<tr><td>既存Issue配下の新規サブタスク/PR提案</td><td>初期運用では人間の承認が必須。実績を見て緩和を検討</td><td>Draft PRは安全に保留できるが、自己起票での自律実行の実績がまだないため初期は承認制にする</td></tr>
+</table></div>
+<p>承認操作では、人間は提案を「Issueのみ作成」「Issue作成＋初回サブタスク（実装着手）も作成」「却下」のいずれかから選ぶ。\
+「Issue作成＋初回サブタスクも作成」を選んだ場合、既存のサブタスク作成パイプライン（ブランチ作成→初期コミット→Draft PR作成→実行ジョブ投入）をそのまま呼び出す。</p>
+</section>
+
+<section class="section" id="ui"><h2>6. 実行トリガーと画面仕様</h2>
+<p><span class="pill proposal">新規提案</span> 画面に対象プロジェクトごとの「アイデア出し実行」ボタンを設け、手動トリガーでアイデア出しジョブを投入する。\
+実行中は既存ジョブと同様にワーカー1個を占有し、稼働状況パネルに表示する。</p>
+<h3>提案一覧パネル</h3>
+<p>新規パネル「提案一覧（アイデアマン）」を設け、ステータス別（未処理／承認済み／却下済み）にタブ分けする。\
+提案カードには、タイトル・カテゴリ・根拠・関連ファイル・対象Issue（既存Issue配下の場合）を表示し、「Issueを作成」「サブタスクも作成」「却下」の操作を置く。</p>
+<p>スマホでは縦積み表示とし、既存の画面構成（上部一覧・下部詳細）と同じ操作感に合わせる。</p>
+</section>
+
+<section class="section" id="agent"><h2>7. Claude実行ポリシー</h2>
+<p><span class="pill proposal">新規提案</span> 既存の実行ポリシー（設計書9章）に準じつつ、読み取り専用である点を明示したプロンプトとする。</p>
+<pre>あなたはClaude管理塔のアイデアマンです。
+対象：指定リポジトリのコード・ドキュメント・過去の実行履歴。
+1. コードの変更・コミット・push・GitHubへの書き込み操作は行わない（読み取り専用）。
+2. 既存のOpen Issue一覧を確認し、重複する提案は作らない。
+3. 1回の実行で提案する件数は最大{N}件とする。
+4. 各提案には、対象ファイル・行・観測した事象など根拠を明記する。
+5. 機密情報・個人情報を提案の本文に記載しない。
+6. 提案はあくまで案であり、Issue・PRの作成はこのジョブの中では行わない。</pre>
+<p>対象worktreeは既存の割り当て機構を再利用するが、書き込み権限を持たせない読み取り専用の割り当てとする。\
+既存の<code>can_use_tool</code>コールバックで、このジョブ種別に限りファイル変更・Git書き込み操作を拒否する。</p>
+</section>
+
+<section class="section" id="api"><h2>8. データモデル・API追加案</h2>
+<div class="scroll"><table><tr><th>Method</th><th>Endpoint</th><th>用途</th></tr>
+<tr><td>POST</td><td><code>/api/projects/{id}/ideas/run</code></td><td>アイデア出しジョブを投入</td></tr>
+<tr><td>GET</td><td><code>/api/projects/{id}/ideas</code></td><td>提案一覧取得（ステータス別）</td></tr>
+<tr><td>POST</td><td><code>/api/ideas/{id}/approve</code></td><td>承認（Issueのみ／サブタスクも作成）</td></tr>
+<tr><td>POST</td><td><code>/api/ideas/{id}/reject</code></td><td>却下（理由を記録）</td></tr>
+</table></div>
+<p>承認時のIssue作成・サブタスク作成は、既存の<code>/api/subtasks</code>相当の処理をそのまま内部呼び出しする。\
+新しいGitHub操作コードを追加しない方針とする。</p>
+</section>
+
+<section class="section" id="phase"><h2>9. 段階的実装案</h2>
+<div class="scroll"><table><tr><th>Phase</th><th>内容</th><th>完了条件</th></tr>
+<tr><td>I</td><td><code>ideas</code>テーブル追加・マイグレーション</td><td>モデル定義・簡易スクリプトでの読み書き確認</td></tr>
+<tr><td>II</td><td>アイデア出しジョブ種別・読み取り専用プロンプトの実装</td><td>テスト用リポジトリで1回実行し、提案がideasテーブルに保存される</td></tr>
+<tr><td>III</td><td>提案一覧画面・承認/却下UI</td><td>画面で提案を確認・承認・却下できる</td></tr>
+<tr><td>IV</td><td>承認時の既存Issue作成/サブタスク作成APIとの連携</td><td>承認操作でGitHub Issue・Draft PRが実際に作成される</td></tr>
+<tr><td>V（任意）</td><td>定期実行・重複抑制の精度向上</td><td>-</td></tr>
+<tr><td>VI（任意）</td><td>ブラウザ動作確認を含む動的解析</td><td>-</td></tr>
+</table></div>
+<p>新規実装・未検証の変更は、既存方針（CLAUDE.md）に従い<code>claude-tower-test-repo</code>で検証してから本体に適用する。</p>
+</section>
+
+<section class="section" id="open"><h2>10. 未決定・要確認事項</h2>
+<div class="scroll"><table><tr><th>No.</th><th>項目</th><th>論点</th><th>現時点の設計案</th></tr>
+<tr><td>1</td><td>対象リポジトリ</td><td>本体（ClaudeManagementTower）から使うか、テストリポジトリ先行か</td><td>テストリポジトリで先行検証し、本体への解禁は既存の安全対策解禁プロセスに合わせる</td></tr>
+<tr><td>2</td><td>サブタスク/PR提案の承認要否</td><td>Draft PRは保留可能なため自動実行も検討できる</td><td>初期は常に承認制、実績を見て緩和を検討</td></tr>
+<tr><td>3</td><td>実行トリガー</td><td>手動のみか、定期実行も入れるか</td><td>MVPは手動のみ、定期実行はPhase V</td></tr>
+<tr><td>4</td><td>動的なUI動作確認</td><td>claude-in-chrome等でアプリを実際に操作して不具合を見つけるか</td><td>MVP除外、人間使用中の干渉リスクのためPhase VIで検討</td></tr>
+<tr><td>5</td><td>却下理由の記録</td><td>却下時に理由を残し、再提案の抑制に使うか</td><td>再提案抑制のため却下理由を記録する案</td></tr>
+<tr><td>6</td><td>提案件数の上限</td><td>1回の実行で提案し過ぎると確認負荷が高い</td><td>プロンプトで最大件数（例：5件）を指定する案</td></tr>
+</table></div>
+<p>No.1・No.2は本体リポジトリでの自律実行範囲に関わるため、実装前に人間へ確認する（CommonGuideLine.mdの「手戻りのリスクが大きい判断」に該当）。</p>
+</section>
+<footer>アイデアマン 設計案 v0.1 · 未確定 · 単一HTMLファイル / 外部ライブラリ不要</footer>
+</main></body></html>
