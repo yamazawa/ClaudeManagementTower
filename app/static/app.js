@@ -65,8 +65,9 @@ const MR_STATUS_POLL_MS = 3000;
 const MR_STATUS_FILTER_HIDDEN_IDS = ["issue-filter", "subtask-filter", "issue-create-block", "subtask-create-block"];
 
 // MR一覧フィルタの値ごとに表示対象のlifecycle_stateを定義する
-// 未解決はDraft〜Merging、解決済はMerged〜Deployedを表示する
+// 未完了はDraft〜Merging、完了はMerged〜Deployed、全てはCanceledも含め全状態を表示する
 const SUBTASK_FILTER_STATES = {
+  all: Object.values(LIFECYCLE),
   unresolved: [LIFECYCLE.draft, LIFECYCLE.resolved],
   solved: [LIFECYCLE.merged, LIFECYCLE.deployed],
 };
