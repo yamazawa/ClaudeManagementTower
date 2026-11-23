@@ -46,7 +46,8 @@ logger = logging.getLogger(__name__)
 ACTIVE_JOB_STATUSES = ("queued", "running")
 # Issue作成と並行して作るMRのブランチ名の接頭辞（Issue番号の代わりに一意な識別子を続ける）
 PENDING_BRANCH_PREFIX = "issue-new"
-PENDING_BRANCH_ID_LENGTH = 8
+# ブランチ名に含める一意な識別子の長さ
+UNIQUE_BRANCH_ID_LENGTH = 8
 # Issue紐付け前のPR本文
 PENDING_PR_BODY = "Issue紐付け待ち"
 DEFAULT_BRANCH_SLUG = "subtask"
@@ -60,6 +61,8 @@ class CreateSubtaskRequest(BaseModel):
     instruction: str = ""
     # Issue名。Issue作成直後など呼び出し側で既知の場合に指定する。空欄ならGitHubから取得する
     issue_title: str = ""
+    # ブランチ名に連番の代わりに一意な識別子を使うか（作成失敗後の再作成でも重複させない）
+    unique_branch: bool = False
 
 
 def _resolve_issue_title(project: Project, payload: CreateSubtaskRequest) -> str:
@@ -79,9 +82,13 @@ def _create_branch_and_draft_pr(
     instruction: str,
     slug_suffix: int,
     slug_source: str | None = None,
+    unique_branch: bool = False,
 ) -> tuple[str, dict]:
-    slug = slugify(slug_source or title) or DEFAULT_BRANCH_SLUG
-    branch_name = f"issue-{issue_number}-{slug}-{slug_suffix}"
+    if unique_branch:
+        branch_name = _unique_branch_name(f"issue-{issue_number}")
+    else:
+        slug = slugify(slug_source or title) or DEFAULT_BRANCH_SLUG
+        branch_name = f"issue-{issue_number}-{slug}-{slug_suffix}"
     pr = _push_draft_pr(project, branch_name, title, instruction, _related_issue_body(issue_number))
     return branch_name, pr
 
@@ -144,6 +151,7 @@ def create_subtask(payload: CreateSubtaskRequest):
                 payload.instruction,
                 len(existing_titles) + 1,
                 slug_source=suffix,
+                unique_branch=payload.unique_branch,
             )
         except (GitClientError, GitHubClientError) as exc:
             raise HTTPException(status_code=500, detail=str(exc)) from exc
@@ -193,7 +201,7 @@ def create_pending_subtask(payload: CreatePendingSubtaskRequest):
     with SessionLocal() as session:
         project = _get_project_or_404(session, payload.project_id)
     title = compose_mr_title(issue_title, next_default_suffix(issue_title, []))
-    branch_name = _pending_branch_name()
+    branch_name = _unique_branch_name(PENDING_BRANCH_PREFIX)
     try:
         pr = _push_draft_pr(project, branch_name, title, "", PENDING_PR_BODY)
     except (GitClientError, GitHubClientError) as exc:
@@ -206,9 +214,13 @@ def create_pending_subtask(payload: CreatePendingSubtaskRequest):
     }
 
 
-def _pending_branch_name() -> str:
-    pending_id = uuid4().hex[:PENDING_BRANCH_ID_LENGTH]
-    return f"{PENDING_BRANCH_PREFIX}-{pending_id}-{DEFAULT_BRANCH_SLUG}-1"
+def _unique_branch_name(head: str) -> str:
+    """一意な識別子を含むブランチ名
+
+    先頭部分（issue-{Issue番号}またはissue-new）の後ろに識別子を続ける。
+    """
+    unique_id = uuid4().hex[:UNIQUE_BRANCH_ID_LENGTH]
+    return f"{head}-{unique_id}-{DEFAULT_BRANCH_SLUG}-1"
 
 
 def _get_project_or_404(session, project_id: int) -> Project:
