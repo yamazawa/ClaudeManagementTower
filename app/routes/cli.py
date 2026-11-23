@@ -1,17 +1,22 @@
 """CLIタブのAPI
 
 CLIの項目（対話）の一覧・作成・変更と、発言の送信・取得を扱う。
+発言に付ける添付ファイルの保存・取得・削除も扱う。
 """
 
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.routes.repo_items import RepoItemPatch, item_errors
+from core.attachments import AttachmentError
+from core.cli_attachments import delete_cli_attachment, find_cli_attachment_file, save_cli_attachment
 from core.cli_session import (
     CliSessionBusy,
     create_session,
+    ensure_session_open,
     get_session,
     list_sessions,
     send_message,
@@ -29,6 +34,7 @@ class CreateCliSessionRequest(BaseModel):
 
 class SendCliMessageRequest(BaseModel):
     text: str
+    attachment_ids: list[str] = []
 
 
 @router.get("/projects/{project_id}/cli-sessions")
@@ -53,15 +59,18 @@ def post_cli_message(cli_session_id: int, payload: SendCliMessageRequest):
     """発言を受け付ける
 
     Claudeの応答は待たずに返し、画面は発言一覧の取得で応答を確認する。
+    添付ファイルは事前に保存したIDで指定する。
     """
     text = payload.text.strip()
     if not text:
         raise HTTPException(status_code=400, detail="text is empty")
     with item_errors():
         try:
-            send_message(cli_session_id, text)
+            send_message(cli_session_id, text, payload.attachment_ids)
         except CliSessionBusy as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+        except AttachmentError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {"accepted": True}
 
 
@@ -69,3 +78,41 @@ def post_cli_message(cli_session_id: int, payload: SendCliMessageRequest):
 def get_cli_session(cli_session_id: int, after: int = 0):
     with item_errors():
         return get_session(cli_session_id, after_id=after)
+
+
+@router.post("/cli-sessions/{cli_session_id}/attachments")
+async def upload_cli_attachment(cli_session_id: int, file: UploadFile):
+    """発言の添付ファイルを保存する
+
+    Closeの項目には添付できない。
+    IDは項目内でS1、S2…の連番で割り当てる。
+    """
+    with item_errors():
+        ensure_session_open(cli_session_id)
+    try:
+        return save_cli_attachment(cli_session_id, file.filename or "", await file.read())
+    except AttachmentError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@router.get("/cli-sessions/{cli_session_id}/attachments/{attachment_id}/file")
+def get_cli_attachment_file(cli_session_id: int, attachment_id: str):
+    """添付ファイルの内容を返す
+
+    発言一覧での表示に使う。
+    """
+    path = find_cli_attachment_file(cli_session_id, attachment_id)
+    if path is None:
+        raise HTTPException(status_code=404, detail="attachment not found")
+    return FileResponse(path)
+
+
+@router.delete("/cli-sessions/{cli_session_id}/attachments/{attachment_id}")
+def remove_cli_attachment(cli_session_id: int, attachment_id: str):
+    """送信前の添付ファイルを取り消す
+
+    残りの添付のIDは振り直さない。
+    """
+    if not delete_cli_attachment(cli_session_id, attachment_id):
+        raise HTTPException(status_code=404, detail="attachment not found")
+    return {"id": attachment_id}
