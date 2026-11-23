@@ -529,12 +529,14 @@ function updateMrStatusFilterButtons() {
  * MRステータスフィルタの選択を切り替える
  *
  * 選択できるステータスは1つのみとする。
+ * 一覧の再表示後に、画面の一番下までスクロールする。
  */
-function toggleMrStatusFilter(status) {
+async function toggleMrStatusFilter(status) {
   const wasSelected = selectedMrStatuses.has(status);
   selectedMrStatuses.clear();
   if (!wasSelected) selectedMrStatuses.add(status);
-  onMrStatusFilterChanged();
+  await onMrStatusFilterChanged();
+  scrollToPageBottom();
 }
 
 /**
@@ -563,13 +565,15 @@ function isMrStatusFilterActive() {
  * 選択中はIssue一覧・MR一覧の既存フィルタと、Issue作成・MR作成を隠す。
  * リポジトリを選択し直した場合は、Issue一覧の読み込みを選択処理に任せる。
  * MR一覧はIssue一覧の読み込み後に、Issue一覧とまとめて描画し直す。
+ * 再表示（失敗時も含む）の完了を待つPromiseを返す。
  */
-function onMrStatusFilterChanged() {
+async function onMrStatusFilterChanged() {
   updateMrStatusFilterButtons();
   const active = isMrStatusFilterActive();
   MR_STATUS_FILTER_HIDDEN_IDS.forEach((id) => (document.getElementById(id).hidden = active));
   const reselected = refreshProjectCounts();
-  if (currentProjectId !== null && !reselected) reloadIssues().catch(() => {});
+  if (reselected) return reselected;
+  if (currentProjectId !== null) await reloadIssues().catch(() => {});
 }
 
 /**
@@ -912,7 +916,7 @@ function renderProjectItemCount(li) {
  * リポジトリ一覧のMR数・表示有無を更新する
  *
  * MRステータスフィルタの選択中は、該当MRが0件のリポジトリを隠す。
- * リポジトリを選択し直した場合はtrueを返す。
+ * 選択の変更有無はselectFirstVisibleProjectの戻り値で返す。
  */
 function refreshProjectCounts() {
   const items = [...document.querySelectorAll(".project-item")];
@@ -928,7 +932,8 @@ function refreshProjectCounts() {
  * 選択中のリポジトリが表示中の場合は選択し直さない。
  * 未選択の場合は、MRステータスフィルタの選択中のみ先頭を選択する。
  * 表示中のリポジトリが無い場合は選択を外す。
- * 選択を変更した場合はtrueを返す。
+ * 選択を変更しない場合はfalseを返す。
+ * 選び直した場合は選択の完了を待つPromise、選択を外した場合はtrueを返す。
  */
 function selectFirstVisibleProject(items) {
   const visible = items.filter((li) => !li.hidden);
@@ -937,8 +942,7 @@ function selectFirstVisibleProject(items) {
   const [first] = visible;
   if (!first) return clearVisibleProjectSelection();
   const project = allProjects.find((p) => p.id === Number(first.dataset.projectId));
-  selectProject(project).catch(() => {});
-  return true;
+  return selectProject(project).catch(() => {});
 }
 
 function clearVisibleProjectSelection() {
@@ -2256,7 +2260,7 @@ async function linkPendingSubtask(projectId, issueNumber, pendingPromise) {
  * 高速化のため、Issue一覧と作成したIssueの内容を並行して取得する。
  * Issue内容は作成結果とDB上のMR一覧で組み立て、GitHubへは問い合わせない。
  * GitHubの一覧反映が遅れても、作成したIssueを選択する。
- * 縦長表示ではIssue一覧とIssue内容を閉じ、MRの指示内容の入力欄を見せる。
+ * MRの指示内容の入力欄にフォーカスし、画面の一番下までスクロールする。
  * MR作成に失敗した場合はIssueのみ開く。
  */
 async function openCreatedIssueAndSubtask(issue, subtaskId) {
@@ -2267,11 +2271,8 @@ async function openCreatedIssueAndSubtask(issue, subtaskId) {
   const [issues, detail] = fetched;
   applyIssueList(issues, { number: issue.number, detail });
   supplementCreatedIssue(issue);
-  autoSetSectionExpanded(SECTION_IDS.repo, false);
   if (subtaskId === null || issue.number !== currentIssueNumber) return;
-  autoSetSectionExpanded(SECTION_IDS.issue, false);
-  selectSubtask(subtaskId);
-  focusWithScroll(document.getElementById(`instruction-${subtaskId}`));
+  showCreatedSubtask(subtaskId);
 }
 
 /**
@@ -2345,7 +2346,6 @@ async function createSubtask(issueNumber, title, issueTitle = "") {
  *
  * MR一覧を再取得してから、作成したMRを選択する。
  * 表示中のIssueの場合は、GitHubへ問い合わせないDB上のMR一覧のみ再取得する。
- * 縦長表示では指示内容の入力欄を見せるため、Issue内容を閉じる。
  */
 async function openCreatedSubtask(issueNumber, subtaskId) {
   if (issueNumber === currentIssueNumber) {
@@ -2355,20 +2355,25 @@ async function openCreatedSubtask(issueNumber, subtaskId) {
     await selectIssue(issueNumber);
   }
   if (issueNumber !== currentIssueNumber) return;
-  autoSetSectionExpanded(SECTION_IDS.issue, false);
-  selectSubtask(subtaskId);
-  focusWithScroll(document.getElementById(`instruction-${subtaskId}`));
+  showCreatedSubtask(subtaskId);
 }
 
 /**
- * 入力欄にフォーカスし、その位置まで画面をスクロールする
+ * 作成したMRを選択し、指示内容の入力欄を見せる
  *
- * ブラウザ既定のスクロールは最小限で欄が見切れるため、欄を画面中央に寄せる。
+ * 入力欄にフォーカスし、画面の一番下までスクロールする。
  */
-function focusWithScroll(el) {
-  if (!el) return;
-  el.focus({ preventScroll: true });
-  el.scrollIntoView({ block: "center", behavior: "smooth" });
+function showCreatedSubtask(subtaskId) {
+  selectSubtask(subtaskId);
+  document.getElementById(`instruction-${subtaskId}`)?.focus({ preventScroll: true });
+  scrollToPageBottom();
+}
+
+/**
+ * 画面の一番下までスクロールする
+ */
+function scrollToPageBottom() {
+  window.scrollTo({ top: document.documentElement.scrollHeight, behavior: "smooth" });
 }
 
 /**
