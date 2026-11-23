@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実行レポート: 実装ジョブの状態表示を日本語・色分けにし、失敗理由を表示するー①</title>
+<title>実行レポート: Issue一覧の取得結果をサーバー側で短時間キャッシュするー①</title>
 <style>
 body { font-family: sans-serif; margin: 24px; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; }
@@ -12,62 +12,64 @@ th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; vertical-al
 th { background: #f3f3f3; }
 code { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; }
 .ok { color: #1a7f37; font-weight: bold; }
+.warn { color: #9a6700; font-weight: bold; }
 </style>
 </head>
 <body>
-<h1>実行レポート: 実装ジョブの状態表示を日本語・色分けにし、失敗理由を表示するー①</h1>
+<h1>実行レポート: Issue一覧の取得結果をサーバー側で短時間キャッシュするー①</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#205 [IdeaMan] 実装ジョブの状態表示を日本語・色分けにし、失敗理由を表示する</td></tr>
-<tr><th>サブタスク</th><td>実装ジョブの状態表示を日本語・色分けにし、失敗理由を表示するー①（PR #206）</td></tr>
-<tr><th>ブランチ</th><td><code>issue-205-4e188e4b-subtask-1</code>（base: <code>master</code>）</td></tr>
+<tr><th>Issue</th><td>#210 [IdeaMan] Issue一覧の取得結果をサーバー側で短時間キャッシュする</td></tr>
+<tr><th>サブタスク</th><td>Issue一覧の取得結果をサーバー側で短時間キャッシュするー①（Draft PR #211）</td></tr>
+<tr><th>ブランチ</th><td><code>issue-210-974df826-subtask-1</code>（base: <code>master</code>）</td></tr>
 </table>
 
 <h2>2. 実装結果の要約</h2>
 <p class="ok">成功</p>
 <ul>
-<li>MR内容ペインのジョブ状態を日本語で表示するようにした。</li>
-<li>実行待ち・実行中はスピナー、失敗・要確認・利用上限は警告色、完了はアクセント色にした。</li>
-<li>APIが<code>error_message</code>を返すようにし、失敗時は状態の下に理由を表示するようにした（長い文は省略し、ツールチップで全文を出す）。</li>
-<li>これまで<code>ExecutionJob.error_message</code>はどこからも書き込まれていなかった。そのため、ワーカー側で失敗理由を保存する処理も追加した。</li>
+<li><code>list_issues</code>・<code>list_issues_closed_since</code>の結果を(リポジトリ, 種類)ごとにメモリ上で保持するようにした。</li>
+<li>保持時間は<code>issue_list_cache_ttl_seconds</code>で設定する（既定45秒、0以下でキャッシュ無効）。</li>
+<li>Issueの作成・名前変更・Close・ReOpenが成功したら、そのリポジトリのキャッシュを破棄する。</li>
+<li>画面の60秒ごとの定期取得（<code>pollOpenIssues</code>）は同じAPIを呼ぶため、変更なしで同じキャッシュを使う。</li>
 </ul>
+<p class="warn">要確認: 管理塔の外でのIssue変更は、最大で保持時間（45秒）だけ画面への反映が遅れる。この遅れを許容するか判断してほしい。</p>
 
 <h2>3. 実施した変更と主な変更ファイル</h2>
 <table>
 <tr><th>No.</th><th>コミット</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td><code>#205 [ジョブ状態表示] 実装ジョブの失敗理由を記録</code></td><td><code>core/job_queue.py</code>, <code>worker/main.py</code>, <code>tests/test_job_queue.py</code>, <code>tests/test_worker_main.py</code></td><td><code>finish_job</code>に<code>error_message</code>引数を追加した。例外の内容とDraft解除の失敗理由を保存するようにした。ハートビートが途絶えたジョブには<code>STALE_JOB_ERROR_MESSAGE</code>を保存する。利用上限から再投入するときは理由を消す。<code>_finalize_success</code>は(状態, 失敗理由)を返すようにした。</td></tr>
-<tr><td>2</td><td><code>#205 [ジョブ状態表示] ジョブAPIで失敗理由を返す</code></td><td><code>app/routes/jobs.py</code>, <code>app/routes/projects.py</code>, <code>tests/test_job_routes.py</code>（新規）</td><td><code>GET /api/jobs/{id}</code>と<code>_latest_job_summary</code>の返却値に<code>error_message</code>を追加した。</td></tr>
-<tr><td>3</td><td><code>#205 [ジョブ状態表示] ジョブ状態を日本語・色分けで表示</code></td><td><code>app/static/app.js</code>, <code>app/static/style.css</code></td><td><code>JOB_STATUS</code>・<code>JOB_STATUS_LABELS</code>・<code>JOB_STATUS_CLASSES</code>の定数を追加した。<code>renderJobStatus</code>・<code>setJobStatusText</code>を追加した。<code>.job-status-active/success/warning</code>のスタイルを追加した。</td></tr>
-<tr><td>4</td><td><code>#205 [ジョブ状態表示] 失敗時に失敗理由を表示</code></td><td><code>app/static/app.js</code>, <code>app/static/style.css</code></td><td>警告色の状態で<code>error_message</code>がある場合、<code>.job-status-error</code>を状態の下に表示する（1行で省略し、title属性に全文を入れる）。</td></tr>
+<tr><td>1</td><td><code>#210 [Issue一覧キャッシュ] Issue一覧を短時間キャッシュ</code></td><td><code>core/issue_list_cache.py</code>（新規）, <code>core/config.py</code>, <code>core/github_client.py</code></td><td>保持時間付きキャッシュ<code>IssueListCache</code>を追加した（スレッドセーフ、取得失敗は保持しない、返却時に要素を複製）。<code>list_issues</code>・<code>list_issues_closed_since</code>をキャッシュ経由にした。</td></tr>
+<tr><td>2</td><td><code>#210 [Issue一覧キャッシュ] Issue変更時にキャッシュを破棄</code></td><td><code>core/github_client.py</code></td><td><code>create_issue</code>・<code>edit_issue_title</code>・<code>close_issue</code>・<code>reopen_issue</code>の成功後に<code>invalidate_issue_list_cache</code>を呼ぶ。</td></tr>
+<tr><td>3</td><td><code>#210 [Issue一覧キャッシュ] キャッシュの有効期限と破棄のテスト</code></td><td><code>tests/test_issue_list_cache.py</code>（新規）, <code>tests/conftest.py</code>（新規）</td><td>有効期限・キー分離・無効化設定・破棄の動きを確認するテストを追加した。テスト間でキャッシュを持ち越さないよう、conftestで毎回クリアする。</td></tr>
 </table>
 
 <h2>4. 自律判断した事項・採用理由・前提</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>ワーカー側で<code>error_message</code>を保存する処理を追加した（提案の詳細にはない）。</td><td>列はあるのに誰も書き込んでおらず、APIで返すだけでは常に空になるため。</td></tr>
-<tr><td>2</td><td>Draft解除に失敗した場合（<code>needs_attention</code>）とハートビートが途絶えた場合にも理由を保存した。</td><td>「要確認」でも理由が見えるようにするため。ハートビート途絶の文言は<code>core/job_queue.py</code>の定数にまとめた。</td></tr>
-<tr><td>3</td><td><code>rate_limited</code>も警告色にし、理由を表示する。ラベルは「利用上限で中断（上限リセット後に自動で再実行）」にした。</td><td>中断状態ではあるが、自動で再投入されることが分かるようにするため。</td></tr>
-<tr><td>4</td><td>実行開始前の「実行待ち...」はスピナー付き、「実行を開始できませんでした」は警告色にした。入力を促す文言は従来どおり薄い色にした。</td><td>状態欄の見た目を揃えるため。前回のジョブの色が残らないよう、毎回クラスを付け直す。</td></tr>
-<tr><td>5</td><td>スピナーは既存の<code>selection-busy-spin</code>のアニメーションを流用し、サイズは<code>--job-status-spinner-size</code>に切り出した。</td><td>既存の見た目と揃え、あとで調整しやすくするため。</td></tr>
-<tr><td>6</td><td>表示文言は、既存の<code>MR_STATUS_LABELS</code>などと同じく<code>app.js</code>の定数にまとめた。</td><td>このプロジェクトには、フロント文言用のリソースファイルがないため。</td></tr>
-<tr><td>7</td><td>今回のサブタスク（①）で提案の内容をすべて実装した。</td><td>提案の詳細が1PRで実装できる規模だったため。</td></tr>
+<tr><td>1</td><td>保持時間の既定値を45秒にした。</td><td>提案の目安30〜60秒の中間。画面の定期取得（60秒）より短いため、定期取得のたびに最新化される。</td></tr>
+<tr><td>2</td><td>キャッシュをルート層ではなく<code>core/github_client.py</code>に組み込んだ。</td><td>提案どおり。Issue作成はアイデア承認（<code>app/routes/ideas.py</code>）からも行われるため、github_client側で破棄すれば呼び出し元を問わず破棄できる。</td></tr>
+<tr><td>3</td><td><code>closed_since</code>は起点日時をキーに含めた。</td><td>日付が変わったとき、前日の「本日クローズ」一覧を返さないため。</td></tr>
+<tr><td>4</td><td>破棄はリポジトリ単位（全状態）とした。</td><td>Close・ReOpenはopen・closed両方の一覧に影響するため。</td></tr>
+<tr><td>5</td><td>保持時間0以下をキャッシュ無効とした。</td><td>反映遅れを許容しない判断になった場合に、設定だけで元の動きに戻せるようにするため。</td></tr>
+<tr><td>6</td><td>app.jsは変更しなかった。</td><td><code>pollOpenIssues</code>は既に同じ<code>/api/projects/{id}/issues?state=open</code>を呼んでおり、サーバー側のキャッシュが自動的に効くため。</td></tr>
+<tr><td>7</td><td>反映遅れの許容可否は、人間への問い合わせを待たずレポートとPRで確認事項として残した。</td><td>自律実行ワーカーは応答待ちをしない方針のため。</td></tr>
 </table>
 
 <h2>5. 実行したテストと結果</h2>
-<ul>
-<li><code>node --check app/static/app.js</code>: 構文エラーなし。</li>
-<li><code>./.venv/Scripts/python.exe -m pytest -q</code>: 428 passed（新規・更新したテストを含む）。</li>
-<li>JSの自動テストがないため、ブラウザでの動作確認はしていない（人間の確認が必要）。</li>
-</ul>
+<table>
+<tr><th>テスト</th><th>結果</th></tr>
+<tr><td><code>./.venv/Scripts/python.exe -m pytest -q</code>（全体）</td><td class="ok">461 passed</td></tr>
+<tr><td><code>tests/test_issue_list_cache.py</code>（新規14件）</td><td class="ok">全件成功（全体に含む）</td></tr>
+</table>
+<p>サーバーを起動しての画面確認は行っていない（運用中のアプリへの影響を避けるため）。</p>
 
 <h2>6. 残課題、リスク、レビュー時の確認ポイント</h2>
 <ul>
-<li>MR内容ペインで以下を確認してほしい：実行中はスピナー、完了はアクセント色、失敗・要確認は警告色で表示されること。</li>
-<li>失敗理由の長い文が1行で省略され、ホバーで全文が出ること（ペインの幅によっては省略されない可能性がある）。</li>
-<li>この変更より前に失敗したジョブは<code>error_message</code>が空のため、理由は表示されない。</li>
-<li>例外メッセージをそのまま画面に出すため、内容が長い場合やローカルのパスを含む場合がある（ローカル画面への表示のみ）。</li>
-<li>ワーカーの変更は、ワーカーを再起動するまで反映されない。</li>
+<li>管理塔の外（GitHub画面など）でのIssue変更は、最大45秒反映が遅れる。許容できない場合は保持時間を短くするか0にする。</li>
+<li>キャッシュはプロセスごとのメモリ上にある。Webサーバーとワーカーは別プロセスのため、ワーカー側で取得した一覧（アイデア用コンテキスト）は、Webサーバーでの変更による破棄の影響を受けない（保持時間で更新される）。</li>
+<li>アイデア用コンテキスト（<code>core/idea_context.py</code>）の<code>list_issues</code>もキャッシュ対象になる。最大45秒古い一覧が使われうるが、重複提案の防止用途のため影響は小さいと判断した。</li>
+<li>確認ポイント: <code>core/github_client.py</code>の破棄タイミング（成功後のみ）と、<code>core/issue_list_cache.py</code>のロック範囲。</li>
+<li>Issue・PRの自動クローズ・マージは行っていない。</li>
 </ul>
 </body>
 </html>
