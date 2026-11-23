@@ -12,7 +12,15 @@ import logging
 import threading
 from collections.abc import Callable
 
-from claude_agent_sdk import AssistantMessage, RateLimitEvent, ResultMessage, TextBlock, ToolUseBlock
+from claude_agent_sdk import (
+    AssistantMessage,
+    RateLimitEvent,
+    ResultMessage,
+    TextBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+    UserMessage,
+)
 from sqlalchemy.orm import sessionmaker
 
 from core.claude_client import CLI_DIALOG_DENIED_TOOLS, CLI_DIALOG_POLICY_PROMPT, run_claude
@@ -50,20 +58,29 @@ class CliMessageRole:
     USER : 利用者の発言
     ASSISTANT : Claudeの応答文
     TOOL : Claudeのツール実行
+    TOOL_RESULT : ツールの実行結果
+    TOOL_ERROR : ツールの実行失敗・拒否の結果
     ERROR : 実行の失敗
     """
 
     USER = "user"
     ASSISTANT = "assistant"
     TOOL = "tool"
+    TOOL_RESULT = "tool_result"
+    TOOL_ERROR = "tool_error"
     ERROR = "error"
 
 
 # ツール実行の表示で、入力の要約に使う項目（先に見つかった項目を使う）
 TOOL_SUMMARY_KEYS = ("command", "file_path", "path", "pattern", "url", "description")
 TOOL_SUMMARY_MAX_LENGTH = 300
+# ツールの実行結果の表示で残す行数・文字数（超えた分は省略する）
+TOOL_RESULT_MAX_LINES = 20
+TOOL_RESULT_MAX_LENGTH = 2000
+TOOL_RESULT_OMITTED_MESSAGE = "...（{count}文字省略）"
 INTERRUPTED_MESSAGE = "サーバー再起動により応答が中断されました"
 RESULT_ERROR_MESSAGE = "Claudeの実行が失敗しました"
+TOOL_ERROR_MESSAGE = "ツールの実行が失敗しました"
 
 
 class CliSessionBusy(Exception):
@@ -77,21 +94,48 @@ def _summarize_tool_input(tool_input: dict) -> str:
     return summary[:TOOL_SUMMARY_MAX_LENGTH]
 
 
+def _tool_result_text(content: str | list | None) -> str:
+    """ツールの実行結果から文字の部分を取り出す（画像などは除く）"""
+    if isinstance(content, str):
+        return content
+    texts = [item.get("text", "") for item in content or [] if isinstance(item, dict) and item.get("type") == "text"]
+    return "\n".join(text for text in texts if text)
+
+
+def truncate_tool_result(text: str) -> str:
+    """ツールの実行結果を、先頭の決まった行数・文字数まで残して省略する"""
+    kept = "\n".join(text.splitlines()[:TOOL_RESULT_MAX_LINES])[:TOOL_RESULT_MAX_LENGTH]
+    omitted = len(text.rstrip()) - len(kept.rstrip())
+    if omitted <= 0:
+        return kept.rstrip()
+    return f"{kept.rstrip()}\n{TOOL_RESULT_OMITTED_MESSAGE.format(count=omitted)}"
+
+
+def _tool_result_entry(block: ToolResultBlock) -> tuple[str, str] | None:
+    text = truncate_tool_result(_tool_result_text(block.content))
+    if block.is_error:
+        return CliMessageRole.TOOL_ERROR, text or TOOL_ERROR_MESSAGE
+    return (CliMessageRole.TOOL_RESULT, text) if text else None
+
+
 def _block_entry(block: object) -> tuple[str, str] | None:
     if isinstance(block, TextBlock) and block.text.strip():
         return CliMessageRole.ASSISTANT, block.text
     if isinstance(block, ToolUseBlock):
         return CliMessageRole.TOOL, f"{block.name}: {_summarize_tool_input(block.input or {})}"
+    if isinstance(block, ToolResultBlock):
+        return _tool_result_entry(block)
     return None
 
 
 def message_entries(message: object) -> list[tuple[str, str]]:
     """SDKのメッセージから、画面に表示する発言を取り出す
 
-    応答文とツール実行のみを表示する。
+    応答文・ツール実行・ツールの実行結果のみを表示する。
+    利用者側のメッセージは、ツールの実行結果のみを取り出す。
     最終結果は応答文と同じ内容のため、失敗時のみ表示する。
     """
-    if isinstance(message, AssistantMessage):
+    if isinstance(message, (AssistantMessage, UserMessage)) and isinstance(message.content, list):
         entries = [_block_entry(block) for block in message.content]
         return [entry for entry in entries if entry is not None]
     if isinstance(message, ResultMessage) and message.is_error:
