@@ -1,3 +1,4 @@
+import logging
 import os
 import subprocess
 import sys
@@ -17,6 +18,9 @@ from core.supervisor_control import (
     take_requested_commands,
 )
 from worker.pool import WorkerPool, spawn_worker, stop_process
+
+# python run_all.py で起動すると__name__が__main__になるため、名前を固定する
+logger = logging.getLogger("run_all")
 
 SERVER_ARGS = ["-m", "uvicorn", "app.main:app", "--host", "127.0.0.1", "--port", "8000"]
 SINGLETON_LOCK_PATH = Path(settings.supervisor_control_dir) / "supervisor.lock"
@@ -40,22 +44,22 @@ class Supervisor:
         return subprocess.Popen([sys.executable, *args], env=self.env)
 
     def start_server(self) -> None:
-        print("[run_all] サーバーを起動します")
+        logger.info("サーバーを起動します")
         self.server = self._spawn(SERVER_ARGS)
 
     def restart_server(self) -> None:
-        print("[run_all] サーバーを再起動します")
+        logger.info("サーバーを再起動します")
         stop_process(self.server)
         self.start_server()
 
     def start_workers(self) -> None:
         if self.workers.is_running():
-            print("[run_all] ワーカーは起動済みのため何もしません")
+            logger.info("ワーカーは起動済みのため何もしません")
             return
         self.workers.start()
 
     def restart_workers(self) -> None:
-        print("[run_all] ワーカーを再起動します")
+        logger.info("ワーカーを再起動します")
         self.workers.start()
 
     def handle(self, command: str) -> None:
@@ -103,7 +107,7 @@ def main() -> None:
     configure_logging()
     lock = try_acquire_singleton_lock(SINGLETON_LOCK_PATH)
     if lock is None:
-        print("[run_all] 既に起動中のため終了します")
+        logger.info("既に起動中のため終了します")
         return
 
     try:
