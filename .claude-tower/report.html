@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実行レポート: Issue、MRレイアウト改善ー⑨</title>
+<title>実行レポート: Claude参照ルールー③</title>
 <style>
 body { font-family: sans-serif; margin: 24px; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; }
@@ -15,54 +15,55 @@ code { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; }
 </style>
 </head>
 <body>
-<h1>実行レポート: Issue、MRレイアウト改善ー⑨</h1>
+<h1>実行レポート: Claude参照ルールー③</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#153 Issue、MRレイアウト改善</td></tr>
-<tr><th>サブタスク</th><td>Issue、MRレイアウト改善ー⑨</td></tr>
-<tr><th>指示</th><td>選択を切り替えて、切替の更新待ちの場合にをブロックして更新中なのが分かるようにして。</td></tr>
-<tr><th>ブランチ</th><td><code>issue-153-subtask-9</code>（base: <code>master</code>）</td></tr>
+<tr><th>Issue</th><td>#180 Claude参照ルール</td></tr>
+<tr><th>サブタスク</th><td>Claude参照ルールー③（アイデアマン提案: worktree内判定の前方一致・大文字小文字の不備を修正）</td></tr>
+<tr><th>ブランチ</th><td><code>issue-180-fb9482ce-subtask-1</code>（base: <code>master</code>）</td></tr>
 </table>
 
 <h2>2. 実装結果の要約</h2>
-<p class="ok">成功（動作確認は人間に依頼）</p>
+<p class="ok">成功</p>
 <ul>
-<li>リポジトリ・Issueの選択を切り替えたとき、取得が終わるまで画面をオーバーレイでブロックする。</li>
-<li>オーバーレイ中央に回転アイコンと「更新中…」を表示する。</li>
-<li>Issue一覧のフィルタ変更・MRステータスフィルタ変更・Issueのオープン/クローズ後の再読み込みも対象とした。</li>
-<li>定期更新を起点とする再読み込みはブロックしない。</li>
+<li>提案の根拠のうち、前方一致・大文字小文字の不備は既存の<code>is_inside</code>（#180-①②で導入）で解消済みだった。</li>
+<li><code>is_inside</code>をnormcase+commonpathによる要素単位の比較に変更し、ドライブ違いも安全に扱うようにした。</li>
+<li>アイデアマン用の読み取り専用チェックで、Globのpattern・Grep/Globのglobも範囲判定の対象にした。</li>
+<li>読み取り専用チェックの相対パスを、プロセスのカレントでなく対象フォルダ基準で解決するようにした。</li>
+<li>名前の先頭が同じ別フォルダ、大文字小文字違い、絶対パスのpatternのテストを追加した。</li>
 </ul>
 
 <h2>3. 実施した変更と主な変更ファイル</h2>
 <table>
 <tr><th>No.</th><th>コミット</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td>#153 [選択切替] 更新中のブロック表示を追加</td><td><code>app/static/index.html</code><br><code>app/static/style.css</code></td><td>更新中オーバーレイ要素とスタイルを追加した。見た目の調整値は<code>:root</code>のCSS変数にまとめた。</td></tr>
-<tr><td>2</td><td>#153 [選択切替] 更新待ちの間に画面をブロック</td><td><code>app/static/app.js</code></td><td>共通関数<code>runSelectionRequest</code>を追加した。<code>selectProject</code>・<code>selectIssue</code>・<code>reloadIssues</code>をこの関数経由に変更した。</td></tr>
+<tr><td>1</td><td><code>#180 [Claude参照ルール] 包含判定をcommonpathに変更</code></td><td><code>core/claude_access_rules.py</code><br><code>tests/test_claude_access_rules.py</code></td><td><code>is_inside</code>をcommonpath比較に変更し、ドライブ違いはFalseを返す。</td></tr>
+<tr><td>2</td><td><code>#180 [Claude参照ルール] 読み取り専用の範囲判定を拡張</code></td><td><code>core/claude_client.py</code><br><code>tests/test_claude_client.py</code></td><td><code>_pattern_target</code>・<code>_read_only_escape</code>を追加し、<code>_read_only_check</code>から使う。</td></tr>
+<tr><td>3</td><td><code>#180 [Claude参照ルール] 書き込み判定のテストを追加</code></td><td><code>tests/test_claude_client.py</code></td><td>書き込み判定の前方一致・大文字小文字のテストを追加。</td></tr>
 </table>
 
-<h2>4. 自律判断した事項</h2>
+<h2>4. 自律判断した事項・採用理由・前提</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>対象の「選択」はリポジトリ・Issueの選択とした。</td><td>通信待ちが発生するのはこの2つ。MRの選択は取得済みデータで即時に切り替わるため対象外。</td></tr>
-<tr><td>2</td><td>ブロック範囲はヘッダーを除く画面全体（<code>position: fixed</code>）とした。</td><td>縦長表示でスクロールしても表示が画面中央に出るようにするため。ヘッダーのDeploy等は通信待ちと無関係なので操作可能のままにした。</td></tr>
-<tr><td>3</td><td>操作ブロックは即時、見た目は0.2秒遅れでフェードインする。</td><td>短時間で終わる更新でのちらつきを防ぐため。</td></tr>
-<tr><td>4</td><td>定期更新（MR集計の変化による一覧再取得）はブロックしない。</td><td>ユーザー操作と無関係に画面が数秒ごとに固まるのを避けるため。</td></tr>
-<tr><td>5</td><td>オーバーレイは最新の要求の終了時に消す（失敗時も含む）。</td><td>連続した要求の途中で消えないようにし、通信失敗で固まり続けないようにするため。</td></tr>
+<tr><td>1</td><td>提案の<code>_is_inside</code>・<code>_command_escapes_worktree</code>は現存しないため、共通関数<code>is_inside</code>の改修で対応した。</td><td>現行コードでは<code>restrict_to_worktree</code>・シェル判定とも<code>AccessRules.is_writable</code>→<code>is_inside</code>に既に1本化されている。</td></tr>
+<tr><td>2</td><td>Grepの<code>pattern</code>は範囲判定の対象外とした。</td><td>Grepのpatternはファイル内容の正規表現でありパスではない。提案の「Grepのpattern」はGlobのpatternとGrepのglobを指すと解釈した。</td></tr>
+<tr><td>3</td><td>パターンは最初のワイルドカードを含む要素より前を固定フォルダとみなして判定する。</td><td>ワイルドカードを含む文字列はそのままでは包含判定できないため。</td></tr>
+<tr><td>4</td><td>ワイルドカード以降に<code>..</code>があるパターンは拒否する。</td><td><code>**/../../x</code>のように範囲を特定できず、対象フォルダ外に出得るため。</td></tr>
+<tr><td>5</td><td>書き込み側（<code>_worktree_check</code>）の相対パス解決は変更しなかった。</td><td>SDKのファイル操作ツールは絶対パスを渡す前提。今回の提案範囲外とした。</td></tr>
 </table>
 
-<h2>5. テスト</h2>
+<h2>5. 実行したテストと結果</h2>
 <ul>
-<li><code>node --check app/static/app.js</code>: 構文エラーなし</li>
-<li><code>./.venv/Scripts/python.exe -m pytest -q</code>: 412 passed</li>
-<li>ブラウザでの動作確認は未実施（アプリを人間が使用中の可能性があるというルールに従った）。</li>
+<li><code>./.venv/Scripts/python.exe -m pytest -q</code>: 423 passed。</li>
+<li>コミット分割後に<code>tests/test_claude_client.py</code>・<code>tests/test_claude_access_rules.py</code>を再実行: 49 passed。</li>
 </ul>
 
-<h2>6. 残課題・レビュー時の確認ポイント</h2>
+<h2>6. 残課題、リスク、レビュー時の確認ポイント</h2>
 <ul>
-<li>リポジトリ・Issueを切り替えたとき「更新中…」が出て、終わると消えるか。</li>
-<li>ブロック範囲（ヘッダーは操作可）と表示までの遅延（0.2秒）が意図に合うか。値は<code>style.css</code>の<code>--selection-busy-*</code>で調整できる。</li>
-<li>MR集計の変化でリポジトリが自動で選び直される場合（<code>selectFirstVisibleProject</code>）もブロックする。これは選択の切替なので対象に含めた。</li>
+<li>パターンの固定フォルダ抽出は<code>* ? [ {</code>をワイルドカードとみなす簡易判定。ファイル名にこれらの文字を含む正当な参照は、より上位のフォルダで判定される（安全側）。</li>
+<li>アイデアマンが<code>../</code>を含むGlobを使うと拒否されるようになる。通常の調査に支障がないか確認してほしい。</li>
+<li>ドライブ違いのテストはWindows前提（Z:またはY:を使用）。</li>
+<li>書き込み側ツールに相対パスが渡された場合の解決基準は従来どおりプロセスのカレントのまま。</li>
 </ul>
 </body>
 </html>

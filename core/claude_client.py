@@ -1,3 +1,4 @@
+import os
 import re
 from collections.abc import Callable
 
@@ -43,8 +44,14 @@ DANGEROUS_COMMAND_PATTERNS = [
 DIRECTORY_TRAVERSAL_PATTERN = re.compile(r"(?:^|[\s\"'])\.\.(?:[\\/]|$|[\s\"'])")
 WINDOWS_ABS_PATH_PATTERN = re.compile(r"[A-Za-z]:[\\/]")
 
-# パスを受け取るツール入力のキー（Glob・Grepの絞り込みパターンを含む）
-PATH_INPUT_KEYS = ["file_path", "path", "notebook_path", "glob"]
+# パスを受け取るツール入力のキー
+PATH_INPUT_KEYS = ["file_path", "path", "notebook_path"]
+
+# パスの絞り込みパターンを受け取るツール入力のキー（Globのpatternは別途追加する）
+PATTERN_INPUT_KEYS = ["glob"]
+
+GLOB_WILDCARD_PATTERN = re.compile(r"[*?\[{]")
+PATH_SEPARATOR_PATTERN = re.compile(r"[\\/]")
 
 DenialCheck = Callable[[str, dict], str | None]
 
@@ -69,9 +76,43 @@ def _shell_denial(command: str, rules: AccessRules) -> str | None:
     return None
 
 
-def _input_paths(tool_name: str, tool_input: dict) -> list[str]:
-    keys = PATH_INPUT_KEYS + (["pattern"] if tool_name == "Glob" else [])
+def _input_values(tool_input: dict, keys: list[str]) -> list[str]:
     return [tool_input[key] for key in keys if isinstance(tool_input.get(key), str) and tool_input[key]]
+
+
+def _input_patterns(tool_name: str, tool_input: dict) -> list[str]:
+    keys = PATTERN_INPUT_KEYS + (["pattern"] if tool_name == "Glob" else [])
+    return _input_values(tool_input, keys)
+
+
+def _input_paths(tool_name: str, tool_input: dict) -> list[str]:
+    return _input_values(tool_input, PATH_INPUT_KEYS) + _input_patterns(tool_name, tool_input)
+
+
+def _pattern_target(pattern: str, base: str) -> str | None:
+    """パターンが参照し得るフォルダを返す
+
+    最初のワイルドカードを含む要素より前を、固定のフォルダとみなす。
+    ワイルドカード以降に親フォルダ指定(..)があり、範囲を特定できない場合はNoneを返す。
+    """
+    match = GLOB_WILDCARD_PATTERN.search(pattern)
+    head = pattern if match is None else pattern[:match.start()]
+    prefix = head if match is None else head[:max(head.rfind("/"), head.rfind("\\")) + 1]
+    if ".." in PATH_SEPARATOR_PATTERN.split(pattern[len(prefix):]):
+        return None
+    return os.path.join(base, prefix)
+
+
+def _read_only_escape(root: str, tool_name: str, tool_input: dict) -> str | None:
+    """対象フォルダ外を参照し得る入力値を返す（無ければNone）"""
+    base = os.path.join(root, tool_input.get("path") or "")
+    paths = _input_values(tool_input, PATH_INPUT_KEYS)
+    outside = [path for path in paths if not is_inside(os.path.join(root, path), root)]
+    for pattern in _input_patterns(tool_name, tool_input):
+        target = _pattern_target(pattern, base)
+        if target is None or not is_inside(target, root):
+            outside.append(pattern)
+    return outside[0] if outside else None
 
 
 def _blocked_input_denial(tool_name: str, tool_input: dict) -> str | None:
@@ -179,9 +220,9 @@ def _read_only_check(root: str) -> DenialCheck:
         blocked = _blocked_input_denial(tool_name, tool_input)
         if blocked is not None:
             return blocked
-        path = tool_input.get("file_path") or tool_input.get("path")
-        if path and not is_inside(path, root):
-            return f"対象フォルダ外の参照を拒否: {path}"
+        outside = _read_only_escape(root, tool_name, tool_input)
+        if outside is not None:
+            return f"対象フォルダ外の参照を拒否: {outside}"
         return None
 
     return check

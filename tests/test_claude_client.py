@@ -132,6 +132,26 @@ def test_denies_write_outside_shared_root(tmp_path):
     assert isinstance(_check(str(worktree), "Write", {"file_path": str(target)}), PermissionResultDeny)
 
 
+def test_denies_write_to_sibling_with_same_prefix_as_shared_root(tmp_path):
+    worktree = _worktree(tmp_path)
+    target = tmp_path / "git-other" / "a.txt"
+    assert isinstance(_check(str(worktree), "Write", {"file_path": str(target)}), PermissionResultDeny)
+    assert isinstance(_check(str(worktree), "Bash", {"command": f"rm {target}"}), PermissionResultDeny)
+
+
+def test_allows_write_to_sibling_with_same_prefix_as_protected_dir(tmp_path):
+    worktree = _worktree(tmp_path)
+    target = tmp_path / "git" / "tower-tools" / "a.py"
+    assert isinstance(_check(str(worktree), "Write", {"file_path": str(target)}), PermissionResultAllow)
+
+
+def test_allows_write_to_worktree_with_different_case(tmp_path):
+    worktree = _worktree(tmp_path)
+    target = str(worktree / "Core" / "A.py").upper()
+    assert isinstance(_check(str(worktree), "Write", {"file_path": target}), PermissionResultAllow)
+    assert isinstance(_check(str(worktree), "Bash", {"command": f"cat {target}"}), PermissionResultAllow)
+
+
 def test_denies_blocked_files_for_read_and_write(tmp_path):
     worktree = _worktree(tmp_path)
     blocked_paths = [
@@ -225,6 +245,57 @@ def test_read_only_denies_read_outside_root(tmp_path):
     root.mkdir()
     result = _check_read_only(str(root), "Read", {"file_path": str(tmp_path / "secret.txt")})
     assert isinstance(result, PermissionResultDeny)
+
+
+def _read_only_root(tmp_path):
+    root = tmp_path / "repo"
+    root.mkdir()
+    return str(root)
+
+
+def test_read_only_denies_sibling_with_same_prefix(tmp_path):
+    root = _read_only_root(tmp_path)
+    result = _check_read_only(root, "Read", {"file_path": str(tmp_path / "repo-other" / "a.py")})
+    assert isinstance(result, PermissionResultDeny)
+
+
+def test_read_only_allows_read_with_different_case(tmp_path):
+    root = _read_only_root(tmp_path)
+    result = _check_read_only(root, "Read", {"file_path": str(tmp_path / "Repo" / "A.py").upper()})
+    assert isinstance(result, PermissionResultAllow)
+
+
+def test_read_only_resolves_relative_path_from_root(tmp_path):
+    root = _read_only_root(tmp_path)
+    assert isinstance(_check_read_only(root, "Read", {"file_path": "core/a.py"}), PermissionResultAllow)
+    assert isinstance(_check_read_only(root, "Read", {"file_path": "../secret.txt"}), PermissionResultDeny)
+
+
+def test_read_only_denies_absolute_pattern_outside_root(tmp_path):
+    root = _read_only_root(tmp_path)
+    outside = str(tmp_path / "other")
+    denied_inputs = [
+        ("Glob", {"pattern": outside + "/**/*.py"}),
+        ("Glob", {"pattern": "../other/*.py"}),
+        ("Glob", {"pattern": "**/../../*.py"}),
+        ("Grep", {"pattern": "x", "glob": outside + "/*.py"}),
+    ]
+    for tool_name, tool_input in denied_inputs:
+        result = _check_read_only(root, tool_name, tool_input)
+        assert isinstance(result, PermissionResultDeny), tool_input
+
+
+def test_read_only_allows_pattern_inside_root(tmp_path):
+    root = _read_only_root(tmp_path)
+    allowed_inputs = [
+        ("Glob", {"pattern": "**/*.py"}),
+        ("Glob", {"pattern": root + "/core/*.py"}),
+        ("Glob", {"pattern": "*.py", "path": root + "/core"}),
+        ("Grep", {"pattern": "C:/x/../*", "glob": "*.py"}),
+    ]
+    for tool_name, tool_input in allowed_inputs:
+        result = _check_read_only(root, tool_name, tool_input)
+        assert isinstance(result, PermissionResultAllow), tool_input
 
 
 def test_read_only_denies_blocked_file_inside_root(tmp_path):
