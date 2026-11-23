@@ -13,6 +13,9 @@ GitHub Issue連動型AI開発タスク管理システム。\
 設計書とCommonGuideLine.mdが衝突する場合、IMPLEMENTATION_PLAN.md 3章の記録を優先する。\
 新たな衝突に気づいた場合、黙って解決せずIMPLEMENTATION_PLAN.mdに追記する。
 
+`Input\アイデアマン_設計案.html`は、アイデアマン機能の未確定の設計案（v0.1）とする。\
+確定事項として扱わず、実装で採用した方式はIMPLEMENTATION_PLAN.md 9章を優先する。
+
 `CharpGuideLine.md`・`WpfGuideLine.md`は対象外とする。\
 本プロジェクトはPython/FastAPIであり、C#/WPF向け知見は機械的に適用しない。
 
