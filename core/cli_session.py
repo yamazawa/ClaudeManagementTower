@@ -15,7 +15,7 @@ from collections.abc import Callable
 from claude_agent_sdk import AssistantMessage, RateLimitEvent, ResultMessage, TextBlock, ToolUseBlock
 from sqlalchemy.orm import sessionmaker
 
-from core.claude_client import CLI_DIALOG_POLICY_PROMPT, run_claude
+from core.claude_client import CLI_DIALOG_DENIED_TOOLS, CLI_DIALOG_POLICY_PROMPT, run_claude
 from core.db import SessionLocal
 from core.models import CliMessage, CliSession, Project
 from core.rate_limits import record_rate_limit
@@ -187,7 +187,12 @@ def _finish_turn(cli_session_id: int, claude_session_id: str | None, error: Exce
 
 async def _run_claude_for_dialog(text: str, repo_path: str, resume: str | None, on_message) -> str | None:
     session_id, _ = await run_claude(
-        text, repo_path, resume=resume, on_message=on_message, policy_prompt=CLI_DIALOG_POLICY_PROMPT
+        text,
+        repo_path,
+        resume=resume,
+        on_message=on_message,
+        policy_prompt=CLI_DIALOG_POLICY_PROMPT,
+        denied_tools=CLI_DIALOG_DENIED_TOOLS,
     )
     return session_id
 

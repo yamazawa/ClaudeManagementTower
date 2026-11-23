@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock, ToolUseBlock
 from sqlalchemy.orm import sessionmaker
@@ -52,6 +54,19 @@ def test_message_entries_extracts_text_and_tool_use():
 def test_message_entries_shows_result_only_on_error():
     assert cli_session.message_entries(_result(False)) == []
     assert cli_session.message_entries(_result(True, "失敗")) == [(CliMessageRole.ERROR, "失敗")]
+
+
+def test_run_claude_for_dialog_passes_dialog_denied_tools(monkeypatch):
+    captured = {}
+
+    async def fake_run_claude(prompt, worktree, **kwargs):
+        captured.update(kwargs)
+        return "s", "done"
+
+    monkeypatch.setattr(cli_session, "run_claude", fake_run_claude)
+    asyncio.run(cli_session._run_claude_for_dialog("hi", "repo", None, None))
+    assert captured["denied_tools"] == cli_session.CLI_DIALOG_DENIED_TOOLS
+    assert "AskUserQuestion" in captured["denied_tools"]
 
 
 def test_create_session_rejects_unknown_project(session_factory):
