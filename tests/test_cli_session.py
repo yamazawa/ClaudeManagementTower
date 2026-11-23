@@ -2,10 +2,20 @@ import asyncio
 import threading
 
 import pytest
-from claude_agent_sdk import AssistantMessage, ResultMessage, SystemMessage, TextBlock, ToolUseBlock
+from claude_agent_sdk import (
+    AssistantMessage,
+    ResultMessage,
+    SystemMessage,
+    TextBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+    UserMessage,
+)
 from sqlalchemy.orm import sessionmaker
 
+from core import cli_attachments as cli_attachments
 from core import cli_session
+from core.attachments import AttachmentError
 from core.cli_session import CliMessageRole, CliSessionStatus
 from core.db import init_db, make_engine
 from core.models import CliSession, Project
@@ -60,9 +70,59 @@ def test_message_entries_extracts_text_and_tool_use():
     ]
 
 
+def test_message_entries_extracts_tool_results_from_user_message():
+    message = UserMessage(
+        content=[
+            ToolResultBlock(tool_use_id="a", content="出力", is_error=False),
+            ToolResultBlock(tool_use_id="b", content=[{"type": "text", "text": "拒否しました"}], is_error=True),
+            ToolResultBlock(tool_use_id="c", content=None, is_error=True),
+            ToolResultBlock(tool_use_id="d", content=[{"type": "image"}], is_error=False),
+        ]
+    )
+
+    assert cli_session.message_entries(message) == [
+        (CliMessageRole.TOOL_RESULT, "出力"),
+        (CliMessageRole.TOOL_ERROR, "拒否しました"),
+        (CliMessageRole.TOOL_ERROR, cli_session.TOOL_ERROR_MESSAGE),
+    ]
+
+
+def test_message_entries_ignores_user_text_message():
+    assert cli_session.message_entries(UserMessage(content="質問")) == []
+
+
+def test_truncate_tool_result_keeps_short_text():
+    assert cli_session.truncate_tool_result("a\nb\n") == "a\nb"
+
+
+def test_truncate_tool_result_limits_lines_and_length():
+    lines = "\n".join(f"line{i}" for i in range(cli_session.TOOL_RESULT_MAX_LINES + 5))
+    kept = "\n".join(lines.splitlines()[: cli_session.TOOL_RESULT_MAX_LINES])
+    omitted = cli_session.TOOL_RESULT_OMITTED_MESSAGE.format(count=len(lines) - len(kept))
+    assert cli_session.truncate_tool_result(lines) == f"{kept}\n{omitted}"
+
+    long_text = "x" * (cli_session.TOOL_RESULT_MAX_LENGTH + 10)
+    assert cli_session.truncate_tool_result(long_text) == (
+        "x" * cli_session.TOOL_RESULT_MAX_LENGTH + "\n" + cli_session.TOOL_RESULT_OMITTED_MESSAGE.format(count=10)
+    )
+
+
 def test_message_entries_shows_result_only_on_error():
     assert cli_session.message_entries(_result(False)) == []
     assert cli_session.message_entries(_result(True, "失敗")) == [(CliMessageRole.ERROR, "失敗")]
+
+
+def test_run_claude_for_dialog_passes_dialog_denied_tools(monkeypatch):
+    captured = {}
+
+    async def fake_run_claude(prompt, worktree, **kwargs):
+        captured.update(kwargs)
+        return "s", "done"
+
+    monkeypatch.setattr(cli_session, "run_claude", fake_run_claude)
+    asyncio.run(cli_session._run_claude_for_dialog("hi", "repo", None, None))
+    assert captured["denied_tools"] == cli_session.CLI_DIALOG_DENIED_TOOLS
+    assert "AskUserQuestion" in captured["denied_tools"]
 
 
 def test_create_session_rejects_unknown_project(session_factory):
@@ -127,6 +187,51 @@ def test_claim_turn_records_user_message_and_rejects_while_running(session_facto
         cli_session._claim_turn(session_id, "続き", session_factory)
 
 
+def test_claim_turn_records_attachment_names_without_paths(session_factory):
+    session_id = cli_session.create_session(1, "調査", session_factory=session_factory)["id"]
+    attachment = {"id": "S1", "filename": "画面.png", "path": "C:/x/S1/画面.png", "is_image": True}
+
+    cli_session._claim_turn(session_id, "S1を見て", session_factory, [attachment])
+
+    state = cli_session.get_session(session_id, session_factory=session_factory)
+    assert state["messages"][0]["attachments"] == [{"id": "S1", "filename": "画面.png", "is_image": True}]
+
+
+def test_send_message_rejects_unknown_attachment_without_recording(session_factory, tmp_path, monkeypatch):
+    monkeypatch.setattr(cli_attachments.settings, "worktree_base_dir", str(tmp_path))
+    session_id = cli_session.create_session(1, "調査", session_factory=session_factory)["id"]
+
+    with pytest.raises(AttachmentError):
+        cli_session.send_message(session_id, "S1を見て", ["S1"], session_factory=session_factory)
+
+    state = cli_session.get_session(session_id, session_factory=session_factory)
+    assert (state["status"], state["messages"]) == (CliSessionStatus.IDLE, [])
+
+
+def test_send_message_passes_prompt_with_attachment_table(session_factory, tmp_path, monkeypatch):
+    monkeypatch.setattr(cli_attachments.settings, "worktree_base_dir", str(tmp_path))
+    session_id = cli_session.create_session(1, "調査", session_factory=session_factory)["id"]
+    cli_attachments.save_cli_attachment(session_id, "a.png", b"1")
+    started = []
+
+    class FakeThread:
+        def __init__(self, target, args, daemon):
+            started.append(args)
+
+        def start(self):
+            pass
+
+    monkeypatch.setattr(cli_session.threading, "Thread", FakeThread)
+
+    cli_session.send_message(session_id, "S1を見て", ["S1"], session_factory=session_factory)
+
+    prompt = started[0][1]
+    assert prompt.startswith("S1を見て\n")
+    assert str(tmp_path / "cli-attachments" / str(session_id) / "S1" / "a.png") in prompt
+    state = cli_session.get_session(session_id, session_factory=session_factory)
+    assert state["messages"][0]["content"] == "S1を見て"
+
+
 def test_run_turn_records_reply_and_keeps_claude_session(session_factory):
     session_id, target = _claim(session_factory)
 
@@ -170,7 +275,9 @@ def _blocking_runner(started: threading.Event, claude_session_id="claude-1"):
 def test_interrupt_turn_returns_to_idle_and_accepts_next_message(session_factory):
     session_id = cli_session.create_session(1, "調査", session_factory=session_factory)["id"]
     started = threading.Event()
-    thread = cli_session.send_message(session_id, "調べて", session_factory, _blocking_runner(started))
+    thread = cli_session.send_message(
+        session_id, "調べて", session_factory=session_factory, claude_runner=_blocking_runner(started)
+    )
     assert started.wait(5)
 
     cli_session.interrupt_turn(session_id, session_factory)

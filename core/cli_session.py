@@ -19,11 +19,14 @@ from claude_agent_sdk import (
     ResultMessage,
     SystemMessage,
     TextBlock,
+    ToolResultBlock,
     ToolUseBlock,
+    UserMessage,
 )
 from sqlalchemy.orm import sessionmaker
 
-from core.claude_client import CLI_DIALOG_POLICY_PROMPT, run_claude
+from core.claude_client import CLI_DIALOG_DENIED_TOOLS, CLI_DIALOG_POLICY_PROMPT, run_claude
+from core.cli_attachments import build_cli_prompt, resolve_cli_attachments
 from core.db import SessionLocal
 from core.models import CliMessage, CliSession, Project
 from core.rate_limits import record_rate_limit
@@ -57,21 +60,30 @@ class CliMessageRole:
     USER : 利用者の発言
     ASSISTANT : Claudeの応答文
     TOOL : Claudeのツール実行
+    TOOL_RESULT : ツールの実行結果
+    TOOL_ERROR : ツールの実行失敗・拒否の結果
     ERROR : 実行の失敗
     """
 
     USER = "user"
     ASSISTANT = "assistant"
     TOOL = "tool"
+    TOOL_RESULT = "tool_result"
+    TOOL_ERROR = "tool_error"
     ERROR = "error"
 
 
 # ツール実行の表示で、入力の要約に使う項目（先に見つかった項目を使う）
 TOOL_SUMMARY_KEYS = ("command", "file_path", "path", "pattern", "url", "description")
 TOOL_SUMMARY_MAX_LENGTH = 300
+# ツールの実行結果の表示で残す行数・文字数（超えた分は省略する）
+TOOL_RESULT_MAX_LINES = 20
+TOOL_RESULT_MAX_LENGTH = 2000
+TOOL_RESULT_OMITTED_MESSAGE = "...（{count}文字省略）"
 INTERRUPTED_MESSAGE = "サーバー再起動により応答が中断されました"
 INTERRUPTED_BY_USER_MESSAGE = "利用者が中断しました"
 RESULT_ERROR_MESSAGE = "Claudeの実行が失敗しました"
+TOOL_ERROR_MESSAGE = "ツールの実行が失敗しました"
 
 
 class CliSessionBusy(Exception):
@@ -139,21 +151,48 @@ def _summarize_tool_input(tool_input: dict) -> str:
     return summary[:TOOL_SUMMARY_MAX_LENGTH]
 
 
+def _tool_result_text(content: str | list | None) -> str:
+    """ツールの実行結果から文字の部分を取り出す（画像などは除く）"""
+    if isinstance(content, str):
+        return content
+    texts = [item.get("text", "") for item in content or [] if isinstance(item, dict) and item.get("type") == "text"]
+    return "\n".join(text for text in texts if text)
+
+
+def truncate_tool_result(text: str) -> str:
+    """ツールの実行結果を、先頭の決まった行数・文字数まで残して省略する"""
+    kept = "\n".join(text.splitlines()[:TOOL_RESULT_MAX_LINES])[:TOOL_RESULT_MAX_LENGTH]
+    omitted = len(text.rstrip()) - len(kept.rstrip())
+    if omitted <= 0:
+        return kept.rstrip()
+    return f"{kept.rstrip()}\n{TOOL_RESULT_OMITTED_MESSAGE.format(count=omitted)}"
+
+
+def _tool_result_entry(block: ToolResultBlock) -> tuple[str, str] | None:
+    text = truncate_tool_result(_tool_result_text(block.content))
+    if block.is_error:
+        return CliMessageRole.TOOL_ERROR, text or TOOL_ERROR_MESSAGE
+    return (CliMessageRole.TOOL_RESULT, text) if text else None
+
+
 def _block_entry(block: object) -> tuple[str, str] | None:
     if isinstance(block, TextBlock) and block.text.strip():
         return CliMessageRole.ASSISTANT, block.text
     if isinstance(block, ToolUseBlock):
         return CliMessageRole.TOOL, f"{block.name}: {_summarize_tool_input(block.input or {})}"
+    if isinstance(block, ToolResultBlock):
+        return _tool_result_entry(block)
     return None
 
 
 def message_entries(message: object) -> list[tuple[str, str]]:
     """SDKのメッセージから、画面に表示する発言を取り出す
 
-    応答文とツール実行のみを表示する。
+    応答文・ツール実行・ツールの実行結果のみを表示する。
+    利用者側のメッセージは、ツールの実行結果のみを取り出す。
     最終結果は応答文と同じ内容のため、失敗時のみ表示する。
     """
-    if isinstance(message, AssistantMessage):
+    if isinstance(message, (AssistantMessage, UserMessage)) and isinstance(message.content, list):
         entries = [_block_entry(block) for block in message.content]
         return [entry for entry in entries if entry is not None]
     if isinstance(message, ResultMessage) and message.is_error:
@@ -161,8 +200,29 @@ def message_entries(message: object) -> list[tuple[str, str]]:
     return []
 
 
-def _add_message(session, cli_session_id: int, role: str, content: str) -> None:
-    session.add(CliMessage(cli_session_id=cli_session_id, role=role, content=content))
+# 発言一覧に記録する添付ファイルの項目（パスは画面に出さない）
+MESSAGE_ATTACHMENT_KEYS = ("id", "filename", "is_image")
+
+
+def _add_message(session, cli_session_id: int, role: str, content: str, attachments: list[dict] = ()) -> None:
+    recorded = [{key: a[key] for key in MESSAGE_ATTACHMENT_KEYS} for a in attachments]
+    session.add(
+        CliMessage(
+            cli_session_id=cli_session_id,
+            role=role,
+            content=content,
+            attachments=json.dumps(recorded, ensure_ascii=False),
+        )
+    )
+
+
+def _message_to_dict(message: CliMessage) -> dict:
+    return {
+        "id": message.id,
+        "role": message.role,
+        "content": message.content,
+        "attachments": json.loads(message.attachments or "[]"),
+    }
 
 
 def session_to_dict(cli_session: CliSession) -> dict:
@@ -208,10 +268,13 @@ def update_session(
         return session_to_dict(session.get(CliSession, cli_session_id))
 
 
-def _claim_turn(cli_session_id: int, text: str, session_factory: sessionmaker) -> dict:
+def _claim_turn(
+    cli_session_id: int, text: str, session_factory: sessionmaker, attachments: list[dict] = ()
+) -> dict:
     """発言を記録して応答中にし、Claude実行に必要な値を返す
 
     応答中・Closeの対話には発言させない。
+    添付ファイルは発言と一緒に記録する。
     """
     with session_factory() as session:
         cli_session = get_item_or_raise(session, CliSession, cli_session_id)
@@ -219,7 +282,7 @@ def _claim_turn(cli_session_id: int, text: str, session_factory: sessionmaker) -
         if cli_session.status == CliSessionStatus.RUNNING:
             raise CliSessionBusy("Claudeの応答中です")
         cli_session.status = CliSessionStatus.RUNNING
-        _add_message(session, cli_session_id, CliMessageRole.USER, text)
+        _add_message(session, cli_session_id, CliMessageRole.USER, text, attachments)
         session.commit()
         project = session.get(Project, cli_session.project_id)
         return {"repo_path": project.repo_path, "resume": cli_session.claude_session_id}
@@ -254,7 +317,12 @@ def _finish_turn(cli_session_id: int, claude_session_id: str | None, notice: str
 
 async def _run_claude_for_dialog(text: str, repo_path: str, resume: str | None, on_message) -> str | None:
     session_id, _ = await run_claude(
-        text, repo_path, resume=resume, on_message=on_message, policy_prompt=CLI_DIALOG_POLICY_PROMPT
+        text,
+        repo_path,
+        resume=resume,
+        on_message=on_message,
+        policy_prompt=CLI_DIALOG_POLICY_PROMPT,
+        denied_tools=CLI_DIALOG_DENIED_TOOLS,
     )
     return session_id
 
@@ -307,18 +375,23 @@ def run_turn(
 def send_message(
     cli_session_id: int,
     text: str,
+    attachment_ids: list[str] = (),
     session_factory: sessionmaker = SessionLocal,
     claude_runner: Callable = _run_claude_for_dialog,
 ) -> threading.Thread:
     """発言を受け付け、Claudeの応答を別スレッドで開始する
 
+    添付ファイルは、MRの実装指示と同じ形で対応表を発言に付け加えてClaudeに渡す。
+    存在しない添付のIDはAttachmentErrorとし、発言を記録しない。
     応答の開始前に中断できるよう、中断の目印はスレッドの開始前に登録する。
     """
-    target = _claim_turn(cli_session_id, text, session_factory)
+    attachments = resolve_cli_attachments(cli_session_id, list(attachment_ids))
+    target = _claim_turn(cli_session_id, text, session_factory, attachments)
+    prompt = build_cli_prompt(text, attachments)
     canceller = _register_canceller(cli_session_id)
     thread = threading.Thread(
         target=run_turn,
-        args=(cli_session_id, text, target, session_factory, claude_runner, canceller),
+        args=(cli_session_id, prompt, target, session_factory, claude_runner, canceller),
         daemon=True,
     )
     thread.start()
@@ -342,6 +415,15 @@ def interrupt_turn(cli_session_id: int, session_factory: sessionmaker = SessionL
     _finish_turn(cli_session_id, None, INTERRUPTED_BY_USER_MESSAGE, session_factory)
 
 
+def ensure_session_open(cli_session_id: int, session_factory: sessionmaker = SessionLocal) -> None:
+    """添付ファイルを追加できる対話か確認する
+
+    存在しない・Closeの対話はそれぞれの例外とする。
+    """
+    with session_factory() as session:
+        ensure_open(get_item_or_raise(session, CliSession, cli_session_id))
+
+
 def get_session(cli_session_id: int, after_id: int = 0, session_factory: sessionmaker = SessionLocal) -> dict:
     """対話の項目と、指定IDより後の発言を返す"""
     with session_factory() as session:
@@ -354,7 +436,7 @@ def get_session(cli_session_id: int, after_id: int = 0, session_factory: session
         )
         return {
             **session_to_dict(cli_session),
-            "messages": [{"id": m.id, "role": m.role, "content": m.content} for m in messages],
+            "messages": [_message_to_dict(m) for m in messages],
         }
 
 

@@ -108,3 +108,22 @@ def test_delete_attachment_rejects_unknown_or_invalid_id(tmp_path, attachment_id
 
     assert delete_attachment(str(tmp_path), attachment_id) is False
     assert find_attachment_file(str(tmp_path), "S1") is not None
+
+
+def test_attachments_can_be_saved_directly_under_given_folder(tmp_path):
+    entry = save_attachment(str(tmp_path), "a.png", b"1", subdir="")
+
+    assert entry["path"] == "S1/a.png"
+    assert [a["id"] for a in list_attachments(str(tmp_path), subdir="")] == ["S1"]
+    assert find_attachment_file(str(tmp_path), "S1", subdir="").read_bytes() == b"1"
+    assert delete_attachment(str(tmp_path), "S1", subdir="") is True
+    assert list_attachments(str(tmp_path), subdir="") == []
+
+
+def test_build_instruction_prompt_uses_given_path_note(tmp_path):
+    attachments = [save_attachment(str(tmp_path), "a.png", b"1")]
+
+    prompt = build_instruction_prompt("S1を見て", attachments, path_note="パスは絶対パス。\n")
+
+    assert "パスは絶対パス。\n\n| ID |" in prompt
+    assert "worktree" not in prompt

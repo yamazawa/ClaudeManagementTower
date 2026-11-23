@@ -221,6 +221,59 @@ def test_run_claude_registers_pre_tool_use_hook(monkeypatch, tmp_path):
     assert "PreToolUse" in captured["options"].hooks
 
 
+def _check_dialog(worktree, tool_name, tool_input):
+    can_use_tool = restrict_to_worktree(worktree, _rules(worktree), claude_client.CLI_DIALOG_DENIED_TOOLS)
+    return asyncio.run(can_use_tool(tool_name, tool_input, {}))
+
+
+def test_dialog_denies_ask_user_question(tmp_path):
+    result = _check_dialog(str(tmp_path), "AskUserQuestion", {"questions": []})
+    assert isinstance(result, PermissionResultDeny)
+    assert result.message == claude_client.CLI_DIALOG_DENIED_TOOLS["AskUserQuestion"]
+
+
+def test_worker_allows_ask_user_question(tmp_path):
+    result = _check(str(tmp_path), "AskUserQuestion", {"questions": []})
+    assert isinstance(result, PermissionResultAllow)
+
+
+def test_dialog_keeps_other_tool_decisions(tmp_path):
+    worktree = _worktree(tmp_path)
+    cases = [
+        ("Bash", {"command": "git add . && git commit -m test"}),
+        ("Bash", {"command": "git push --force origin main"}),
+        ("Edit", {"file_path": str(worktree / "a.py")}),
+        ("Read", {"file_path": str(worktree / ".env")}),
+    ]
+    results = [(_check_dialog(str(worktree), name, args), _check(str(worktree), name, args)) for name, args in cases]
+    assert all(type(dialog) is type(worker) for dialog, worker in results)
+
+
+def test_pre_tool_use_hook_denies_dialog_tool(tmp_path):
+    check = claude_client._with_denied_tools(
+        claude_client._worktree_check(_rules(str(tmp_path))), claude_client.CLI_DIALOG_DENIED_TOOLS
+    )
+    hook = claude_client._to_pre_tool_use_hooks(check)["PreToolUse"][0].hooks[0]
+    denied = asyncio.run(hook({"tool_name": "AskUserQuestion", "tool_input": {}}, None, {}))
+    assert denied["hookSpecificOutput"]["permissionDecision"] == "deny"
+
+
+def test_run_claude_applies_denied_tools(monkeypatch, tmp_path):
+    captured = {}
+
+    async def fake_query(prompt, options):
+        captured["options"] = options
+        return
+        yield
+
+    monkeypatch.setattr(claude_client, "query", fake_query)
+    asyncio.run(
+        claude_client.run_claude("prompt", str(tmp_path), denied_tools=claude_client.CLI_DIALOG_DENIED_TOOLS)
+    )
+    result = asyncio.run(captured["options"].can_use_tool("AskUserQuestion", {}, {}))
+    assert isinstance(result, PermissionResultDeny)
+
+
 def test_max_buffer_size_covers_multiple_attachments():
     assert MAX_BUFFER_SIZE >= MAX_ATTACHMENT_BYTES * 10 * 4 // 3
 
