@@ -1999,6 +1999,11 @@ function countMrs(subtasks) {
   };
 }
 
+/**
+ * Issue作成フォームの送信
+ *
+ * 作成したIssueとMRを開くまで更新中を表示する。
+ */
 async function onSubmitIssueForm(event) {
   event.preventDefault();
   const form = event.target;
@@ -2011,20 +2016,29 @@ async function onSubmitIssueForm(event) {
   statusEl.textContent = "IssueとMRを作成中...";
   form.querySelector("button").disabled = true;
   try {
-    const created = await createIssueWithSubtask(projectId, title, statusEl);
-    if (!created) return;
-    if (form.title.value === title) form.reset();
-    if (projectId === currentProjectId) await openCreatedIssueAndSubtask(created.issue, created.subtaskId);
+    await runBusyAction(() => createAndOpenIssue(form, projectId, title, statusEl));
   } finally {
     form.querySelector("button").disabled = false;
   }
 }
 
 /**
+ * IssueとMRを作成し、作成したIssueとMRを開く
+ *
+ * 作成中に別プロジェクトへ切り替えた場合は開かない。
+ */
+async function createAndOpenIssue(form, projectId, title, statusEl) {
+  const created = await createIssueWithSubtask(projectId, title, statusEl);
+  if (!created) return;
+  if (form.title.value === title) form.reset();
+  if (projectId === currentProjectId) await openCreatedIssueAndSubtask(created.issue, created.subtaskId);
+}
+
+/**
  * IssueとMRの作成
  *
  * 高速化のため、Issue作成とMR作成を並行して行い、MRへのIssue紐付けは後から行う。
- * 作成中は画面を更新せず、利用者の操作を妨げない。
+ * 作成中は画面を更新せず、作成完了後にまとめて反映する。
  * Issue作成に失敗した場合はnull、MR作成のみ失敗した場合はsubtaskIdをnullで返す。
  */
 async function createIssueWithSubtask(projectId, title, statusEl) {
