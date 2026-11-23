@@ -178,7 +178,7 @@ function selectRepoItem(kind, item) {
     .querySelectorAll(`#${kind}-list-items .repo-item-row`)
     .forEach((li) => li.classList.toggle("active", Number(li.dataset.id) === item?.id));
   renderRepoItemDetail();
-  if (item) autoSetSectionExpanded(REPO_ITEM_DETAIL_SECTION_ID, true);
+  if (item) autoExpandSection(REPO_ITEM_DETAIL_SECTION_ID);
 }
 
 /**
