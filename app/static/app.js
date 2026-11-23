@@ -2,7 +2,10 @@ let currentProjectId = null;
 let currentIssueNumber = null;
 let currentIssueState = null;
 let currentIssueTitle = null;
+let currentIssueUrl = null;
 let currentSubtasks = [];
+// Issue一覧に表示中のIssue（番号→番号・タイトル・状態・URL）
+const listedIssues = new Map();
 let currentSelectedSubtaskId = null;
 // Issue作成に続くMR自動作成の対象Issue番号（実行中はそのIssueにMRを追加作成させない）
 let autoMrCreatingIssueNumber = null;
@@ -709,6 +712,7 @@ function clearIssueSelection() {
   currentIssueNumber = null;
   currentIssueState = null;
   currentIssueTitle = null;
+  currentIssueUrl = null;
   currentSubtasks = [];
   currentSelectedSubtaskId = null;
   highlightSelectedIssue();
@@ -1120,12 +1124,13 @@ async function fetchIssueList() {
  *
  * 選択中のIssueが一覧に有る場合は選択し直さない（内容は取得しない）。
  * 一覧に無い場合は先頭のIssueとし、一覧が空の場合は未選択とする。
+ * Issue内容は一覧の取得値とDB上のMR一覧で組み立て、GitHubへは問い合わせない。
  */
 async function fetchIssueSelection(issues) {
   if (issues.some((issue) => issue.number === currentIssueNumber)) return { number: currentIssueNumber, detail: null };
   const [first] = issues;
   if (!first) return { number: null, detail: null };
-  return { number: first.number, detail: await fetchIssueDetail(first.number) };
+  return { number: first.number, detail: await fetchIssueContent(first) };
 }
 
 /**
@@ -1146,6 +1151,7 @@ function applyIssueList(issues, { number, detail }) {
 function renderIssueList(issues) {
   const listEl = document.getElementById("issue-list-items");
   listEl.innerHTML = "";
+  listedIssues.clear();
   if (issues.length === 0) listEl.innerHTML = '<li class="empty">Issueがありません。</li>';
   else issues.forEach((issue) => listEl.appendChild(renderIssueItem(issue)));
 }
@@ -1194,6 +1200,7 @@ async function fetchUnlistedIssue(number) {
  * リンクとボタンのクリックではIssueを選択しない。
  */
 function renderIssueItem(issue) {
+  listedIssues.set(issue.number, toIssueSummary(issue));
   const li = document.createElement("li");
   li.className = "issue-item";
   li.classList.toggle("active", issue.number === currentIssueNumber);
@@ -1384,6 +1391,8 @@ async function saveIssueTitle(number, title) {
  * Issue見出しは表示中のIssueの場合のみ差し替える。
  */
 function updateIssueTitleDisplay(number, title) {
+  const listed = listedIssues.get(number);
+  if (listed) listed.title = title;
   const itemTitle = document.querySelector(`.issue-item[data-number="${number}"] .issue-item-title`);
   if (itemTitle) {
     itemTitle.textContent = title;
@@ -1502,10 +1511,13 @@ function highlightSelectedSubtaskRow() {
  * Issueの選択
  *
  * Issue内容の取得後に、Issue一覧の選択表示からMR内容までまとめて切り替える。
+ * Issue一覧に表示中の場合は、一覧の取得値とDB上のMR一覧で内容を組み立てる。
+ * 一覧に無い場合のみ、GitHubへ問い合わせる詳細APIで取得する。
  */
 async function selectIssue(number) {
+  const listed = listedIssues.get(number);
   await runSelectionRequest(
-    () => fetchIssueDetail(number),
+    () => (listed ? fetchIssueContent(listed) : fetchIssueDetail(number)),
     (detail) => {
       currentIssueNumber = number;
       highlightSelectedIssue();
@@ -1546,18 +1558,53 @@ function renderTitleNumber(label, url) {
   return `<a class="title-number" href="${url}" target="_blank" rel="noopener" title="GitHubで開く">${label}</a>`;
 }
 
+/**
+ * GitHubへ問い合わせてIssue内容を取得する
+ *
+ * Issue一覧に無い番号の取得に限って使う。
+ */
 async function fetchIssueDetail(number) {
   return fetch(`/api/projects/${currentProjectId}/issues/${number}`).then((r) => r.json());
 }
 
 /**
+ * Issue内容の組み立て
+ *
+ * 取得済みの番号・タイトル・状態・URLに、DB上のMR一覧を合わせる。
+ * GitHubへは問い合わせない。
+ */
+async function fetchIssueContent(issue) {
+  const subtasks = await fetchIssueSubtasks(currentProjectId, issue.number);
+  return { ...toIssueSummary(issue), subtasks };
+}
+
+function toIssueSummary(issue) {
+  return { number: issue.number, title: issue.title, state: issue.state, url: issue.url };
+}
+
+/**
+ * DB上のMR一覧の取得（GitHubへは問い合わせない）
+ */
+async function fetchIssueSubtasks(projectId, issueNumber) {
+  const response = await fetch(`/api/projects/${projectId}/issues/${issueNumber}/subtasks`);
+  if (!response.ok) throw new Error(`MR一覧の取得に失敗しました: ${response.status}`);
+  return response.json();
+}
+
+/**
  * 選択中のIssueの内容を取得し直して描画する
  *
+ * 見出しは表示中の値を使い、MR一覧のみDBから取得し直す。
  * MRの選択は、MR一覧に表示中であれば維持する。
  */
 async function refreshIssueDetail() {
   const issueNumber = currentIssueNumber;
-  const issue = await fetchIssueDetail(issueNumber);
+  const issue = await fetchIssueContent({
+    number: issueNumber,
+    title: currentIssueTitle,
+    state: currentIssueState,
+    url: currentIssueUrl,
+  });
   if (issueNumber !== currentIssueNumber) return;
   renderIssueDetail(issue);
 }
@@ -1568,6 +1615,7 @@ async function refreshIssueDetail() {
 function renderIssueDetail(issue) {
   currentSubtasks = issue.subtasks;
   currentIssueTitle = issue.title;
+  currentIssueUrl = issue.url;
   updateIssueMrCounts(issue.number, issue.subtasks);
 
   document.getElementById("issue-heading").innerHTML =
@@ -1884,9 +1932,7 @@ async function refreshSubtaskStates() {
   const projectId = currentProjectId;
   const issueNumber = currentIssueNumber;
   if (projectId === null || issueNumber === null) return;
-  const subtasks = await fetch(
-    `/api/projects/${projectId}/issues/${issueNumber}/subtasks`
-  ).then((r) => r.json());
+  const subtasks = await fetchIssueSubtasks(projectId, issueNumber);
   if (projectId !== currentProjectId || issueNumber !== currentIssueNumber) return;
   if (JSON.stringify(subtasks) === JSON.stringify(currentSubtasks)) return;
 
@@ -2166,13 +2212,15 @@ async function linkPendingSubtask(projectId, issueNumber, pendingPromise) {
  *
  * IssueとMRの作成完了後にまとめて画面へ反映する。
  * 高速化のため、Issue一覧と作成したIssueの内容を並行して取得する。
+ * Issue内容は作成結果とDB上のMR一覧で組み立て、GitHubへは問い合わせない。
  * GitHubの一覧反映が遅れても、作成したIssueを選択する。
  * 縦長表示ではIssue一覧とIssue内容を閉じ、MRの指示内容の入力欄を見せる。
  * MR作成に失敗した場合はIssueのみ開く。
  */
 async function openCreatedIssueAndSubtask(issue, subtaskId) {
   const requestId = nextSelectionRequest();
-  const fetched = await Promise.all([fetchIssueList(), fetchIssueDetail(issue.number)]).catch(() => null);
+  const created = { ...issue, state: "OPEN" };
+  const fetched = await Promise.all([fetchIssueList(), fetchIssueContent(created)]).catch(() => null);
   if (!fetched || !isLatestSelectionRequest(requestId)) return;
   const [issues, detail] = fetched;
   applyIssueList(issues, { number: issue.number, detail });
