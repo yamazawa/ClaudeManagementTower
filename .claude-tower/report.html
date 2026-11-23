@@ -2,67 +2,65 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実装レポート #220 サブタスク4</title>
+<title>実行レポート Issue #227 サブタスク1</title>
 <style>
 body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; }
 h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; padding-bottom: .2em; margin-top: 1.6em; }
-table { border-collapse: collapse; margin: .5em 0; }
+table { border-collapse: collapse; }
 th, td { border: 1px solid #bbb; padding: .3em .6em; text-align: left; vertical-align: top; }
-th { background: #f0f0f0; }
-.ok { color: #fff; background: #2a7a2a; padding: .1em .6em; border-radius: 4px; }
-code { background: #f4f4f4; padding: 0 .3em; }
+th { background: #f2f2f2; }
+.ok { color: #fff; background: #2e7d32; padding: .1em .6em; border-radius: 3px; }
+code { background: #f4f4f4; padding: 0 .2em; }
 </style>
 </head>
 <body>
-<h1>実装レポート</h1>
+<h1>実行レポート</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#220 エキスパンダルール見直し</td></tr>
-<tr><th>サブタスク</th><td>エキスパンダルール見直しー④</td></tr>
-<tr><th>ブランチ</th><td><code>issue-220-subtask-4</code></td></tr>
+<tr><th>Issue</th><td>#227 [IdeaMan] 起動時に、承認処理中のまま残った提案を復旧する</td></tr>
+<tr><th>サブタスク</th><td>サブタスク1（PR #228、base: master）</td></tr>
+<tr><th>ブランチ</th><td><code>issue-227-0b6c3ec7-subtask-1</code></td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
-<p><span class="ok">成功</span>（ブラウザでの見た目の確認は未実施）</p>
-<p>①Issue・CLI・Idea・MR一覧の見出しの右隣に、作成欄と同様の一覧エキスパンダを追加した。</p>
-<p>②一覧エキスパンダは開いた状態を既定とした。</p>
-<p>③リポジトリ一覧・リポジトリ・Issue・MR・CLI/Idea内容のペインのエキスパンダを、開閉処理ごと削除した。</p>
+<p><span class="ok">成功</span></p>
+<p>起動時に承認処理中（approved_*）の提案を承認前の状態へ戻す処理を追加した。</p>
 
-<h2>3. 変更内容</h2>
+<h2>3. 実施した変更</h2>
 <table>
-<tr><th>No.</th><th>ファイル</th><th>変更</th><th>コミット</th></tr>
-<tr><td>1</td><td><code>app/static/index.html</code></td><td>ペイン見出し行のエキスパンダを5箇所削除</td><td>c405714</td></tr>
-<tr><td>2</td><td><code>app/static/app.js</code></td><td>ペインの開閉・縦長表示時の自動展開の処理（<code>setSectionExpanded</code>・<code>autoExpandSection</code>・<code>setupExpanders</code>等）を削除</td><td>c405714</td></tr>
-<tr><td>3</td><td><code>app/static/repo_items.js</code></td><td>CLI・Idea選択時の自動展開呼び出しを削除</td><td>c405714</td></tr>
-<tr><td>4</td><td><code>app/static/style.css</code></td><td>閉じたペインのスタイル・無効時スタイルを削除し、エキスパンダの大きさを16pxに統一</td><td>c405714</td></tr>
-<tr><td>5</td><td><code>app/static/*.js/html/css</code></td><td>作成欄専用の開閉の仕組みを「開閉欄」（<code>fold-block</code>）として汎用化</td><td>11b42b5</td></tr>
-<tr><td>6</td><td><code>app/static/index.html</code></td><td>各一覧の見出しと一覧を開閉欄で囲み、エキスパンダ（既定で開）を追加</td><td>4a99f2b</td></tr>
-<tr><td>7</td><td><code>app/static/style.css</code></td><td>状態フィルタを<code>margin-left:auto</code>で右寄せにし、<code>.section-heading-with-filter</code>を削除</td><td>4a99f2b</td></tr>
+<tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
+<tr><td>1</td><td><code>core/idea_approval.py</code></td><td>戻す規則を<code>_release</code>に切り出し、<code>release_claim</code>と新設の<code>recover_interrupted_claims</code>で共用</td></tr>
+<tr><td>2</td><td><code>app/main.py</code></td><td>lifespanで<code>recover_interrupted_sessions</code>の直後に<code>recover_interrupted_claims</code>を呼び出し</td></tr>
+<tr><td>3</td><td><code>tests/test_idea_approval.py</code></td><td>状態ごとの復旧結果のテストを2件追加</td></tr>
+<tr><td>4</td><td><code>IMPLEMENTATION_PLAN.md</code></td><td>9章「人間の確認が必要な事項」の手動DB修正の記述を更新し、Issue重複の残存リスクを追記</td></tr>
 </table>
+<p>コミット：5f811d7（復旧処理＋テスト）、78cd315（起動時の呼び出し）、800265f（9章更新）</p>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>CLI・Idea一覧にも一覧エキスパンダを付けた</td><td>作成欄はIssue・CLI・Idea・MRの4箇所にあり、共通操作は同じUIで提供する規約に従った。</td></tr>
-<tr><td>2</td><td>CLI・Idea内容のペインのエキスパンダも削除した</td><td>Issue表示・MR表示と同じ「表示」ペインであり、開閉処理を残さず「ロジックごと削除」の指示に沿うため。</td></tr>
-<tr><td>3</td><td>作成欄の開閉処理を汎用化して一覧でも共用した</td><td>同一処理の重複を避けるため。クラス名・関数名を作成欄専用から汎用名に変更した。</td></tr>
-<tr><td>4</td><td>エキスパンダの配置は「見出し文字列の右隣」、フィルタは右端</td><td>作成欄のエキスパンダと同じ配置にそろえた。</td></tr>
-<tr><td>5</td><td>未使用となった<code>.expander:disabled</code>スタイルも削除</td><td>エキスパンダを無効化する処理が存在しないため。</td></tr>
+<tr><td>1</td><td>関数名を<code>recover_interrupted_claims</code>とした</td><td>既存の<code>recover_interrupted_sessions</code>と命名を揃え、<code>claim_idea</code>の対になる名前にした</td></tr>
+<tr><td>2</td><td>戻す規則を<code>_release</code>に共通化した</td><td>「release_claimと同じ規則」を重複なく保証するため</td></tr>
+<tr><td>3</td><td>復旧時に画面向けの通知や履歴は残さない</td><td>提案モデルに履歴欄が無く、状態が戻れば画面から再操作できるため</td></tr>
+<tr><td>4</td><td>Issue重複は自動検出せず、9章に人間の確認事項として記録した</td><td>指示どおり残存リスクの記録に留めた。GitHub側の検索による自動照合は範囲外と判断</td></tr>
 </table>
 
 <h2>5. テスト結果</h2>
-<p><code>./.venv/Scripts/python.exe -m pytest -q</code>：509件すべて成功。</p>
-<p><code>app.js</code>・<code>repo_items.js</code>の構文チェック（Node.js）：問題なし。</p>
-<p>フロントエンドの自動テストは無いため、画面での確認は未実施。</p>
-
-<h2>6. 残課題・確認ポイント</h2>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code>：511 passed</p>
 <ul>
-<li>一覧の見出し行で「〇〇一覧 &gt;」とフィルタの並びが崩れていないか、スマホ・PCで確認してほしい。</li>
-<li>一覧を閉じた状態は、リポジトリやIssueを切り替えても維持される（自動では開かない）。</li>
-<li>MRステータスフィルタ選択中もIssue一覧・MR一覧のエキスパンダは操作できる。</li>
-<li>縦長表示でペインを自動で開く処理を削除したため、各ペインは常に展開表示となる。</li>
+<li>APPROVED_ISSUE_ONLY／APPROVED_WITH_SUBTASK（Issue未作成）→ PROPOSED</li>
+<li>APPROVED_WITH_SUBTASK（Issue作成済み）→ ISSUE_CREATED</li>
+<li>PROPOSED・REJECTED・SUBTASK_CREATED は変更されない</li>
+</ul>
+<p>サーバー起動による実機確認は未実施（人間の使用中の可能性があるため）。</p>
+
+<h2>6. 残課題・レビュー観点</h2>
+<ul>
+<li>Issue作成成功後かつ番号記録前に停止した場合、再承認でIssueが重複しうる（9章に記録済み）。</li>
+<li>復旧は起動時のみ実行するため、承認処理と並行して走ることはない前提。</li>
+<li>レビュー時は<code>core/idea_approval.py</code>の<code>_release</code>切り出しで<code>release_claim</code>の挙動が変わっていないことを確認してほしい。</li>
 </ul>
 </body>
 </html>
