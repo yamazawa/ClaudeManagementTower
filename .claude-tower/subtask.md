@@ -1,67 +1,61 @@
-# サブタスク: [IdeaMan] style.cssに直接書かれた色を変数にまとめ、重複した指定を統合するー①
+# サブタスク: [IdeaMan] MRの状態を色付きバッジで表示するー①
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-style.cssに直接書かれた色を変数にまとめ、重複した指定を統合する
+MRの状態を色付きバッジで表示する
 
 ## 概要
 
-style.cssで、ヘッダーの背景色やトークン使用状況の警告色、お絵かきダイアログの赤などが:rootの変数を使わずに直接書かれている。同じ対象への指定が2か所に分かれている箇所もあるので、変数への集約と統合を行う。
+MR一覧とMR見出しの状態（Draft/Resolving/Resolved/Merging/Merged/Deploying/Deployed/Canceled）がすべて同じ灰色の小さい文字で表示され、一覧を見ただけでは進み具合が分かりにくい。状態ごとに色を変えたバッジで表示する。
 
 ## 詳細
 
-・ヘッダー背景（#18243c）、トークン使用状況の文字色（#b8c7e3/#7a869e/#e38b39/#ff6b6b）、お絵かきツールの選択色（#e01e1e）、白背景（#fff）を:rootの変数にする。
-・.issue-item/.subtask-rowの指定（891-902行と919-924行）を1つにまとめる。
-・.mr-status-filter-segments .mr-status-filter-buttonの指定（589-593行と600-605行）を1つにまとめる。
-・見た目が変わらないことを、変更前後のスクリーンショットで人間が確認する。
+・renderSubtaskStateで、状態に応じたクラス（state-resolving等）を付ける。
+・.subtask-stateを角の丸いバッジにし、状態ごとに背景色・文字色を割り当てる。
+・Resolving・Merging・Deployingは処理中と分かるよう、点滅などの動きを付ける。
+・マージ失敗を併記する場合は警告色にする。
+・色の値はstyle.cssの:rootの変数にまとめる。
 
 ## 根拠
 
-ガイドラインの「見た目の調整に使う値は、あとで変更しやすいよう1クラスに纏めて」に対して、style.css:40・637-652・1063などで色の値を直接書いている。style.css:891-902ではjustify-content: space-between・align-items: baselineを指定しているのに、style.css:919-924でflex-start・centerに上書きしている。後から読んだ人が、どちらが効いているのか判断しにくい。No.2の状態バッジのように色を増やす改善をする前に、色の値を1か所にまとめておくと変更しやすい。
+app.js:1443では、どの状態でも同じclass="subtask-state"のspanで出力している。style.css:940-952で、.subtask-stateはすべての状態でcolor: var(--muted)・font-size: 12pxの1種類だけになっている。命名規則に合わないMR名には警告色と⚠記号を付けている（style.css:932-938）のに、状態には見た目の区別がない。ヘッダーのMRステータスフィルタで状態ごとの件数を出している（style.css:599-612）ので、一覧側でも状態を色で見分けられると対応が分かりやすい。
 
 ## 関連ファイル
 
-- app/static/style.css:1
-- app/static/style.css:40
-- app/static/style.css:637
-- app/static/style.css:891
-- app/static/style.css:919
-- app/static/style.css:589
-- app/static/style.css:600
-- app/static/style.css:1063
-## 実行指示（2026-11-23 06:41:21 UTC）
+- app/static/app.js:1435
+- app/static/app.js:32
+- app/static/style.css:940
+- app/static/style.css:932
+## 実行指示（2026-11-23 06:42:45 UTC）
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-style.cssに直接書かれた色を変数にまとめ、重複した指定を統合する
+MRの状態を色付きバッジで表示する
 
 ## 概要
 
-style.cssで、ヘッダーの背景色やトークン使用状況の警告色、お絵かきダイアログの赤などが:rootの変数を使わずに直接書かれている。同じ対象への指定が2か所に分かれている箇所もあるので、変数への集約と統合を行う。
+MR一覧とMR見出しの状態（Draft/Resolving/Resolved/Merging/Merged/Deploying/Deployed/Canceled）がすべて同じ灰色の小さい文字で表示され、一覧を見ただけでは進み具合が分かりにくい。状態ごとに色を変えたバッジで表示する。
 
 ## 詳細
 
-・ヘッダー背景（#18243c）、トークン使用状況の文字色（#b8c7e3/#7a869e/#e38b39/#ff6b6b）、お絵かきツールの選択色（#e01e1e）、白背景（#fff）を:rootの変数にする。
-・.issue-item/.subtask-rowの指定（891-902行と919-924行）を1つにまとめる。
-・.mr-status-filter-segments .mr-status-filter-buttonの指定（589-593行と600-605行）を1つにまとめる。
-・見た目が変わらないことを、変更前後のスクリーンショットで人間が確認する。
+・renderSubtaskStateで、状態に応じたクラス（state-resolving等）を付ける。
+・.subtask-stateを角の丸いバッジにし、状態ごとに背景色・文字色を割り当てる。
+・Resolving・Merging・Deployingは処理中と分かるよう、点滅などの動きを付ける。
+・マージ失敗を併記する場合は警告色にする。
+・色の値はstyle.cssの:rootの変数にまとめる。
 
 ## 根拠
 
-ガイドラインの「見た目の調整に使う値は、あとで変更しやすいよう1クラスに纏めて」に対して、style.css:40・637-652・1063などで色の値を直接書いている。style.css:891-902ではjustify-content: space-between・align-items: baselineを指定しているのに、style.css:919-924でflex-start・centerに上書きしている。後から読んだ人が、どちらが効いているのか判断しにくい。No.2の状態バッジのように色を増やす改善をする前に、色の値を1か所にまとめておくと変更しやすい。
+app.js:1443では、どの状態でも同じclass="subtask-state"のspanで出力している。style.css:940-952で、.subtask-stateはすべての状態でcolor: var(--muted)・font-size: 12pxの1種類だけになっている。命名規則に合わないMR名には警告色と⚠記号を付けている（style.css:932-938）のに、状態には見た目の区別がない。ヘッダーのMRステータスフィルタで状態ごとの件数を出している（style.css:599-612）ので、一覧側でも状態を色で見分けられると対応が分かりやすい。
 
 ## 関連ファイル
 
-- app/static/style.css:1
-- app/static/style.css:40
-- app/static/style.css:637
-- app/static/style.css:891
-- app/static/style.css:919
-- app/static/style.css:589
-- app/static/style.css:600
-- app/static/style.css:1063
+- app/static/app.js:1435
+- app/static/app.js:32
+- app/static/style.css:940
+- app/static/style.css:932
 
