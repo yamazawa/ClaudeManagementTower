@@ -472,8 +472,6 @@ const PROJECT_COUNT_TOOLTIP = "OpenなIssueの未解決MR数 / 解決済MR数";
 const PROJECT_COUNT_FILTERED_TOOLTIP = "OpenなIssueで、選択中のステータスのMR数";
 const PROJECT_LIST_NO_PROJECT_TEXT = "リポジトリが登録されていません。";
 const PROJECT_LIST_NO_MATCH_TEXT = "選択中のステータスのMRを持つリポジトリはありません。";
-const PROJECT_CLI_BUTTON_TOOLTIP = "このリポジトリでClaudeと対話する";
-const PROJECT_IDEA_BUTTON_TOOLTIP = "このリポジトリの改善提案（アイデアマン）を確認する";
 
 /**
  * ヘッダーのMRステータスフィルタの初期化
@@ -726,6 +724,7 @@ function clearIssueSelection() {
  * リポジトリの選択を外し、Issue一覧以降を未選択の表示に戻す
  *
  * Issue一覧・Issue内容・MR内容のペインは非表示にする。
+ * CLI・Ideaの選択も外す。
  */
 function clearProjectSelection() {
   nextSelectionRequest();
@@ -733,10 +732,11 @@ function clearProjectSelection() {
   highlightSelectedProject();
   document.getElementById("repo-heading").textContent = "Repo";
   document.getElementById("issue-list-placeholder").hidden = false;
-  document.getElementById("issue-panel").hidden = true;
+  document.getElementById("repo-panel").hidden = true;
   document.getElementById("issue-list-items").innerHTML = "";
   setSectionShown(SECTION_IDS.repo, false);
   clearIssueSelection();
+  clearRepoItemSelection();
 }
 
 async function init() {
@@ -755,12 +755,15 @@ async function init() {
  * リポジトリの選択
  *
  * Issue一覧と先頭Issueの内容を取得してから、MR内容までまとめて表示を切り替える。
- * 別リポジトリへ切り替えた場合は、前のIssue・MRの選択を外す。
+ * 別リポジトリへ切り替えた場合は、前のIssue・MR・CLI・Ideaの選択を外す。
  * 縦長表示ではリポジトリ一覧を閉じ、Issue一覧を開く。
  * 縦長表示では、Issue一覧の表示が1件のみの場合は閉じる。
  */
 async function selectProject(project) {
-  if (project.id !== currentProjectId) currentIssueNumber = null;
+  if (project.id !== currentProjectId) {
+    currentIssueNumber = null;
+    clearRepoItemSelection();
+  }
   const wasIssueSelected = currentIssueNumber !== null;
   currentProjectId = project.id;
   await runSelectionRequest(fetchIssueListWithSelection, ({ issues, target }) => {
@@ -772,6 +775,8 @@ async function selectProject(project) {
 
 /**
  * 選択したリポジトリの見出しとIssue一覧のペインを表示する
+ *
+ * CLI・Ideaのタブの表示中は、その一覧も取得し直す。
  */
 function showProject(project) {
   highlightSelectedProject();
@@ -779,8 +784,9 @@ function showProject(project) {
   autoSetSectionExpanded(SECTION_IDS.repo, true);
   setSectionShown(SECTION_IDS.repo, true);
   document.getElementById("issue-list-placeholder").hidden = true;
-  document.getElementById("issue-panel").hidden = false;
+  document.getElementById("repo-panel").hidden = false;
   renderRepoHeading(project);
+  onRepoItemProjectShown();
 }
 
 function highlightSelectedProject() {
@@ -800,8 +806,7 @@ function renderProjectItems(listEl) {
 /**
  * リポジトリ一覧の1行
  *
- * 「表示名 MR数 Ideaボタン CLIボタン」を並べる。
- * Ideaボタン・CLIボタンはリポジトリを選択せずに各ダイアログを開く。
+ * 「表示名 MR数」を並べる。
  */
 function renderProjectItem(project) {
   const li = document.createElement("li");
@@ -809,20 +814,9 @@ function renderProjectItem(project) {
   li.dataset.projectId = project.id;
   li.innerHTML =
     `<span class="project-name" title="${escapeAttr(project.display_name)}">${escapeHtml(project.display_name)}</span>` +
-    `<span class="project-count"></span>` +
-    `<button type="button" class="subtask-action-button project-dialog-button project-idea-button" title="${PROJECT_IDEA_BUTTON_TOOLTIP}">Idea</button>` +
-    `<button type="button" class="subtask-action-button project-dialog-button project-cli-button" title="${PROJECT_CLI_BUTTON_TOOLTIP}">CLI</button>`;
+    `<span class="project-count"></span>`;
   li.addEventListener("click", () => selectProject(project));
-  bindProjectDialogButton(li, ".project-idea-button", () => openIdeaDialog(project));
-  bindProjectDialogButton(li, ".project-cli-button", () => openCliDialog(project));
   return li;
-}
-
-function bindProjectDialogButton(li, selector, open) {
-  li.querySelector(selector).addEventListener("click", (event) => {
-    event.stopPropagation();
-    open();
-  });
 }
 
 /**
@@ -1466,6 +1460,7 @@ function mrStatus(s) {
  * 一覧の行と詳細の見出しで共通に使う。
  * Resolving・Mergingはツールチップに意味（マージ待ちの場合はマージ待ち）を出す。
  * マージ失敗はResolvedのままの場合のみ併記し、ツールチップに理由を出す。
+ * 状態ごとの色分け用に、状態名のクラスを付ける。
  */
 function renderSubtaskState(s) {
   const status = mrStatus(s);
@@ -1475,7 +1470,19 @@ function renderSubtaskState(s) {
   const suffix = showFailure ? `（${MERGE_STATUS_LABELS[merge.status]}）` : "";
   const tooltipText = showFailure ? merge.error_message : mrStatusTooltip(status, merge);
   const tooltip = tooltipText ? ` title="${escapeAttr(tooltipText)}"` : "";
-  return `<span class="subtask-state"${tooltip}>${label}${suffix}</span>`;
+  const className = subtaskStateClassName(status, showFailure);
+  return `<span class="${className}"${tooltip}>${label}${suffix}</span>`;
+}
+
+/**
+ * MRの状態表示のクラス名
+ *
+ * マージ失敗を併記する場合は警告色のクラスを足す。
+ */
+function subtaskStateClassName(status, showFailure) {
+  const classes = ["subtask-state", `state-${escapeAttr(status)}`];
+  if (showFailure) classes.push("state-merge-failed");
+  return classes.join(" ");
 }
 
 function mrStatusTooltip(status, merge) {

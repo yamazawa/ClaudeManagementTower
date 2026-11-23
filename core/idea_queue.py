@@ -61,6 +61,7 @@ def job_to_dict(job: IdeaJob) -> dict:
     return {
         "id": job.id,
         "project_id": job.project_id,
+        "idea_session_id": job.idea_session_id,
         "status": job.status,
         "focus": job.focus,
         "queued_at": job.queued_at,
@@ -72,11 +73,17 @@ def job_to_dict(job: IdeaJob) -> dict:
     }
 
 
-def enqueue_idea_job(project_id: int, focus: str = "", session_factory: sessionmaker = SessionLocal) -> dict:
+def enqueue_idea_job(
+    project_id: int,
+    focus: str = "",
+    session_factory: sessionmaker = SessionLocal,
+    idea_session_id: int | None = None,
+) -> dict:
     """アイデア出しジョブを投入する
 
     同じプロジェクトで待機中・実行中のジョブがあれば重ねて投入しない。
     focusはアイデアを出してほしい観点で、前後の空白を除いて保存する。
+    idea_session_idは投入元のIdeaタブの項目とする。
     """
     with session_factory() as session:
         if session.get(Project, project_id) is None:
@@ -88,7 +95,12 @@ def enqueue_idea_job(project_id: int, focus: str = "", session_factory: sessionm
         )
         if active is not None:
             raise IdeaJobAlreadyActive("アイデア出しを実行中です")
-        job = IdeaJob(project_id=project_id, status=IdeaJobStatus.QUEUED, focus=focus.strip())
+        job = IdeaJob(
+            project_id=project_id,
+            idea_session_id=idea_session_id,
+            status=IdeaJobStatus.QUEUED,
+            focus=focus.strip(),
+        )
         session.add(job)
         session.commit()
         return job_to_dict(job)
@@ -103,6 +115,17 @@ def latest_idea_job(project_id: int, session_factory: sessionmaker = SessionLoca
             .first()
         )
         return job_to_dict(job) if job else None
+
+
+def latest_session_jobs(session, idea_session_ids: list[int]) -> dict[int, dict]:
+    """Ideaタブの項目IDごとの最新ジョブ"""
+    jobs = (
+        session.query(IdeaJob)
+        .filter(IdeaJob.idea_session_id.in_(idea_session_ids))
+        .order_by(IdeaJob.id)
+        .all()
+    )
+    return {job.idea_session_id: job_to_dict(job) for job in jobs}
 
 
 def claim_next_idea_job(worker_id: int, bind=engine, session_factory: sessionmaker = SessionLocal):

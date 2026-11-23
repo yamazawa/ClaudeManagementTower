@@ -98,15 +98,18 @@ class ExecutionEvent(Base):
 
 
 class CliSession(Base):
-    """リポジトリ表示のCLI実行ダイアログでの対話
+    """リポジトリ表示のCLIタブの項目（対話）
 
     1対話を1行とし、Claudeのセッションを引き継いで続けて会話する。
+    statusは応答中か、stateは一覧のOpen・Closeを表す。
     """
 
     __tablename__ = "cli_sessions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"))
+    title: Mapped[str] = mapped_column(default="")
+    state: Mapped[str] = mapped_column(default="open")
     status: Mapped[str]
     claude_session_id: Mapped[str | None] = mapped_column(default=None)
     created_at: Mapped[datetime] = mapped_column(default=_now)
@@ -114,7 +117,7 @@ class CliSession(Base):
 
 
 class CliMessage(Base):
-    """CLI実行ダイアログに表示する発言"""
+    """CLIタブの項目に表示する発言"""
 
     __tablename__ = "cli_messages"
 
@@ -135,6 +138,23 @@ class Report(Base):
     created_at: Mapped[datetime] = mapped_column(default=_now)
 
 
+class IdeaSession(Base):
+    """リポジトリ表示のIdeaタブの項目
+
+    項目ごとにアイデア出しを実行し、提案を確認する。
+    stateは一覧のOpen・Closeを表す。
+    """
+
+    __tablename__ = "idea_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"))
+    title: Mapped[str]
+    state: Mapped[str] = mapped_column(default="open")
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+    updated_at: Mapped[datetime] = mapped_column(default=_now, onupdate=_now)
+
+
 class IdeaJob(Base):
     """アイデアマンのアイデア出しジョブ
 
@@ -147,6 +167,7 @@ class IdeaJob(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"))
+    idea_session_id: Mapped[int | None] = mapped_column(ForeignKey("idea_sessions.id"), default=None)
     status: Mapped[str]
     focus: Mapped[str] = mapped_column(default="")
     queued_at: Mapped[datetime] = mapped_column(default=_now)

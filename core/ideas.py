@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from sqlalchemy.orm import sessionmaker
 
 from core.db import SessionLocal
-from core.models import Idea
+from core.models import Idea, IdeaJob
 
 
 class IdeaStatus:
@@ -173,10 +173,18 @@ def list_ideas(
     project_id: int,
     statuses: tuple[str, ...] | None = None,
     session_factory: sessionmaker = SessionLocal,
+    idea_session_id: int | None = None,
 ) -> list[dict]:
-    """提案一覧（新しい順）"""
+    """提案一覧（新しい順）
+
+    idea_session_idの指定があれば、その項目で実行したアイデア出しの提案に絞る。
+    """
     with session_factory() as session:
         query = session.query(Idea).filter(Idea.project_id == project_id)
+        if idea_session_id is not None:
+            query = query.join(IdeaJob, Idea.source_job_id == IdeaJob.id).filter(
+                IdeaJob.idea_session_id == idea_session_id
+            )
         if statuses is not None:
             query = query.filter(Idea.status.in_(statuses))
         return [to_dict(idea) for idea in query.order_by(Idea.id.desc()).all()]
