@@ -98,15 +98,18 @@ class ExecutionEvent(Base):
 
 
 class CliSession(Base):
-    """リポジトリ表示のCLI実行ダイアログでの対話
+    """リポジトリ表示のCLIタブの項目（対話）
 
     1対話を1行とし、Claudeのセッションを引き継いで続けて会話する。
+    statusは応答中か、stateは一覧のOpen・Closeを表す。
     """
 
     __tablename__ = "cli_sessions"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"))
+    title: Mapped[str] = mapped_column(default="")
+    state: Mapped[str] = mapped_column(default="open")
     status: Mapped[str]
     claude_session_id: Mapped[str | None] = mapped_column(default=None)
     created_at: Mapped[datetime] = mapped_column(default=_now)

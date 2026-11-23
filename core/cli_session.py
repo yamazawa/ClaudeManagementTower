@@ -1,6 +1,7 @@
-"""CLI実行ダイアログの対話
+"""CLIタブの対話
 
 リポジトリのフォルダでClaudeを実行し、開発PCで対話式に実行している時のように会話する。
+対話はリポジトリの項目として、タイトルとOpen・Closeの状態を持つ。
 Webサーバーは応答を待たず、発言ごとに別スレッドでClaudeを実行する。
 画面は発言一覧をポーリングして表示する。
 """
@@ -18,6 +19,15 @@ from core.claude_client import CLI_DIALOG_POLICY_PROMPT, run_claude
 from core.db import SessionLocal
 from core.models import CliMessage, CliSession, Project
 from core.rate_limits import record_rate_limit
+from core.repo_items import (
+    ItemState,
+    ensure_open,
+    ensure_project,
+    get_item_or_raise,
+    list_items,
+    normalize_title,
+    update_item,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -53,10 +63,6 @@ TOOL_SUMMARY_KEYS = ("command", "file_path", "path", "pattern", "url", "descript
 TOOL_SUMMARY_MAX_LENGTH = 300
 INTERRUPTED_MESSAGE = "サーバー再起動により応答が中断されました"
 RESULT_ERROR_MESSAGE = "Claudeの実行が失敗しました"
-
-
-class CliSessionNotFound(Exception):
-    pass
 
 
 class CliSessionBusy(Exception):
@@ -96,25 +102,57 @@ def _add_message(session, cli_session_id: int, role: str, content: str) -> None:
     session.add(CliMessage(cli_session_id=cli_session_id, role=role, content=content))
 
 
-def create_session(project_id: int, session_factory: sessionmaker = SessionLocal) -> int:
+def session_to_dict(cli_session: CliSession) -> dict:
+    return {
+        "id": cli_session.id,
+        "project_id": cli_session.project_id,
+        "title": cli_session.title,
+        "state": cli_session.state,
+        "status": cli_session.status,
+        "created_at": cli_session.created_at,
+        "updated_at": cli_session.updated_at,
+    }
+
+
+def list_sessions(project_id: int, state: str, session_factory: sessionmaker = SessionLocal) -> list[dict]:
+    """CLI一覧（新しい順）"""
     with session_factory() as session:
-        if session.get(Project, project_id) is None:
-            raise CliSessionNotFound("project not found")
-        cli_session = CliSession(project_id=project_id, status=CliSessionStatus.IDLE)
+        return [session_to_dict(s) for s in list_items(session, CliSession, project_id, state)]
+
+
+def create_session(project_id: int, title: str, session_factory: sessionmaker = SessionLocal) -> dict:
+    """CLIの項目をOpenで作成する"""
+    value = normalize_title(title)
+    with session_factory() as session:
+        ensure_project(session, project_id)
+        cli_session = CliSession(
+            project_id=project_id, title=value, state=ItemState.OPEN, status=CliSessionStatus.IDLE
+        )
         session.add(cli_session)
         session.commit()
-        return cli_session.id
+        return session_to_dict(cli_session)
+
+
+def update_session(
+    cli_session_id: int,
+    title: str | None = None,
+    state: str | None = None,
+    session_factory: sessionmaker = SessionLocal,
+) -> dict:
+    """タイトル・Open・Closeを変更する"""
+    update_item(CliSession, cli_session_id, title, state, session_factory)
+    with session_factory() as session:
+        return session_to_dict(session.get(CliSession, cli_session_id))
 
 
 def _claim_turn(cli_session_id: int, text: str, session_factory: sessionmaker) -> dict:
     """発言を記録して応答中にし、Claude実行に必要な値を返す
 
-    応答中に重ねて発言させない。
+    応答中・Closeの対話には発言させない。
     """
     with session_factory() as session:
-        cli_session = session.get(CliSession, cli_session_id)
-        if cli_session is None:
-            raise CliSessionNotFound("cli session not found")
+        cli_session = get_item_or_raise(session, CliSession, cli_session_id)
+        ensure_open(cli_session)
         if cli_session.status == CliSessionStatus.RUNNING:
             raise CliSessionBusy("Claudeの応答中です")
         cli_session.status = CliSessionStatus.RUNNING
@@ -185,11 +223,9 @@ def send_message(cli_session_id: int, text: str, session_factory: sessionmaker =
 
 
 def get_session(cli_session_id: int, after_id: int = 0, session_factory: sessionmaker = SessionLocal) -> dict:
-    """対話の状態と、指定IDより後の発言を返す"""
+    """対話の項目と、指定IDより後の発言を返す"""
     with session_factory() as session:
-        cli_session = session.get(CliSession, cli_session_id)
-        if cli_session is None:
-            raise CliSessionNotFound("cli session not found")
+        cli_session = get_item_or_raise(session, CliSession, cli_session_id)
         messages = (
             session.query(CliMessage)
             .filter(CliMessage.cli_session_id == cli_session_id, CliMessage.id > after_id)
@@ -197,8 +233,7 @@ def get_session(cli_session_id: int, after_id: int = 0, session_factory: session
             .all()
         )
         return {
-            "id": cli_session.id,
-            "status": cli_session.status,
+            **session_to_dict(cli_session),
             "messages": [{"id": m.id, "role": m.role, "content": m.content} for m in messages],
         }
 
