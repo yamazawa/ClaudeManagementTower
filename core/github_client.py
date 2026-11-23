@@ -168,6 +168,7 @@ def list_open_pull_requests(repo: str) -> list[dict]:
             "pr", "list",
             "--repo", repo,
             "--state", "open",
+            "--limit", str(PR_STATE_LIST_LIMIT),
             "--json", "number,isDraft,headRefName,baseRefName",
         ]
     )

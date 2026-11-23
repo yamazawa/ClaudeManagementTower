@@ -81,6 +81,7 @@ def test_list_open_pull_requests_parses_json(monkeypatch):
     assert calls == [
         [
             "gh", "pr", "list", "--repo", "owner/repo", "--state", "open",
+            "--limit", str(github_client.PR_STATE_LIST_LIMIT),
             "--json", "number,isDraft,headRefName,baseRefName",
         ]
     ]
