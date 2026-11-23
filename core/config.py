@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     claude_usage_refresh_interval_seconds: float = 300.0
     idea_max_proposals: int = 5
     idea_history_limit: int = 10
+    rate_limit_retry_delay_seconds: int = 600
 
 
 settings = Settings()

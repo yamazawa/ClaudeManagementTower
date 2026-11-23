@@ -41,6 +41,11 @@
 - `WorkerPool`の起動・停止時は、心拍のある登録済みワーカーをPID指定で停止し、ワーカー行を全削除する。ワーカーは自分の行が削除されていた場合は再登録せず終了する（Issue #69）。
 - `git worktree add`はリポジトリ単位で`filelock`による排他を行う（共有Gitメタデータの同時変更を避けるため。Phase 8実装済み）。
 - 各ワーカーはジョブ実行中、別スレッドで`heartbeat_interval_seconds`ごとにjob/workerのheartbeat_atを更新する。ポーリングのたびに`stale_timeout_seconds`を超えて更新のないrunningジョブを`needs_attention`にする。要確認ジョブは自動再実行しない（Phase 8実装・ワーカー強制終了での実機確認済み）。
+- ワーカーはジョブ取得前に`rate_limit_snapshots`を確認し、`rejected`かつリセット時刻が未来の枠があれば実装・アイデア出しのどちらのジョブも取得しない。\
+Claudeの「hit your limit」系エラーで失敗したジョブは`failed`と区別して`rate_limited`にする。\
+実装ジョブは上限中でなく、中断から`rate_limit_retry_delay_seconds`経過後に自動で`queued`へ戻す。\
+同じサブタスクで後から再実行されたジョブがある場合は戻さない。\
+アイデア出しジョブは自動で戻さず、画面から再実行する（Issue #185）。
 - Webサーバーはリクエスト処理中にClaude Codeを直接起動して待機しない。
 - リポジトリ一覧のCLIボタンから開くCLI実行ダイアログは、リポジトリの`repo_path`でClaudeを実行する。\
 発言はDBの`cli_sessions`・`cli_messages`に保持し、応答はWebサーバー内の別スレッドで実行する。\

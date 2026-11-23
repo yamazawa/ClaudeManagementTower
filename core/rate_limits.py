@@ -5,6 +5,7 @@ Claude Agent SDKが通知するRateLimitEventを枠ごとに保存する。
 使用率は使用率APIの値を優先し、SDK通知の値は補助として使う。
 """
 
+import re
 from collections.abc import Callable
 from datetime import datetime, timezone
 
@@ -18,6 +19,12 @@ from core.models import RateLimitSnapshot
 FIVE_HOUR = "five_hour"
 SEVEN_DAY = "seven_day"
 DISPLAY_TYPES = (FIVE_HOUR, SEVEN_DAY)
+
+# 上限に達している状態（SDKのRateLimitStatusの値）
+STATUS_REJECTED = "rejected"
+
+# 利用上限で失敗したとみなすClaudeのエラーメッセージ
+RATE_LIMIT_ERROR_PATTERN = re.compile(r"hit your .*limit|usage limit reached", re.IGNORECASE)
 
 
 def record_rate_limit(info: object, session_factory: sessionmaker = SessionLocal) -> bool:
@@ -40,6 +47,23 @@ def record_rate_limit(info: object, session_factory: sessionmaker = SessionLocal
         snapshot.updated_at = datetime.now(timezone.utc)
         session.commit()
     return True
+
+
+def is_rate_limit_error(message: str) -> bool:
+    return bool(RATE_LIMIT_ERROR_PATTERN.search(message or ""))
+
+
+def blocked_until(session_factory: sessionmaker = SessionLocal) -> int | None:
+    """上限中の枠のうち、最も遅いリセット時刻を返す
+
+    全ての枠を対象とし、上限中でリセット時刻が未来の枠が無ければNoneを返す。
+    リセット時刻が不明な上限は、待機し続けないよう対象外とする。
+    """
+    now = datetime.now(timezone.utc).timestamp()
+    with session_factory() as session:
+        snapshots = session.query(RateLimitSnapshot).filter(RateLimitSnapshot.status == STATUS_REJECTED).all()
+        resets = [_future_resets_at(s.resets_at, now) for s in snapshots]
+    return max((r for r in resets if r is not None), default=None)
 
 
 def _to_dict(snapshot: RateLimitSnapshot | None) -> dict | None:

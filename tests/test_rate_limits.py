@@ -2,7 +2,7 @@ from claude_agent_sdk import RateLimitInfo
 from sqlalchemy.orm import sessionmaker
 
 from core.db import init_db, make_engine
-from core.rate_limits import get_rate_limits, record_rate_limit
+from core.rate_limits import blocked_until, get_rate_limits, is_rate_limit_error, record_rate_limit
 
 
 # 2100-01-01T00:00:00Z（未来のリセット時刻）
@@ -95,3 +95,33 @@ def test_get_rate_limits_hides_past_event_resets_at(tmp_path):
 
     assert get_rate_limits(factory, lambda: usage)["five_hour"]["resets_at"] is None
     assert get_rate_limits(factory, _no_usage)["five_hour"]["resets_at"] is None
+
+
+def test_blocked_until_returns_none_without_rejection(tmp_path):
+    factory = _session_factory(tmp_path)
+    record_rate_limit(RateLimitInfo(status="allowed_warning", rate_limit_type="five_hour", resets_at=FUTURE), factory)
+
+    assert blocked_until(factory) is None
+
+
+def test_blocked_until_returns_latest_future_reset(tmp_path):
+    factory = _session_factory(tmp_path)
+    record_rate_limit(RateLimitInfo(status="rejected", rate_limit_type="five_hour", resets_at=FUTURE), factory)
+    record_rate_limit(RateLimitInfo(status="rejected", rate_limit_type="seven_day_opus", resets_at=FUTURE + 100), factory)
+
+    assert blocked_until(factory) == FUTURE + 100
+
+
+def test_blocked_until_ignores_past_or_unknown_reset(tmp_path):
+    factory = _session_factory(tmp_path)
+    record_rate_limit(RateLimitInfo(status="rejected", rate_limit_type="five_hour", resets_at=100), factory)
+    record_rate_limit(RateLimitInfo(status="rejected", rate_limit_type="seven_day"), factory)
+
+    assert blocked_until(factory) is None
+
+
+def test_is_rate_limit_error_detects_limit_messages():
+    assert is_rate_limit_error("You've hit your 5-hour limit · resets 10pm (exit code: 1)")
+    assert is_rate_limit_error("Claude AI usage limit reached|1700000000")
+    assert not is_rate_limit_error("Command failed (exit code: 1)")
+    assert not is_rate_limit_error("")

@@ -1,6 +1,16 @@
+from types import SimpleNamespace
+
 import pytest
 
 import worker.main as worker_main
+
+LIMIT_MESSAGE = "You've hit your 5-hour limit · resets 10pm (exit code: 1)"
+ORIGINAL_IS_RATE_LIMITED = worker_main._is_rate_limited
+
+
+@pytest.fixture(autouse=True)
+def not_rate_limited(monkeypatch):
+    monkeypatch.setattr(worker_main, "_is_rate_limited", lambda: False)
 
 
 def test_run_loop_exits_when_own_row_removed(monkeypatch):
@@ -45,9 +55,44 @@ def test_run_claude_for_job_records_rate_limit_event(monkeypatch):
     assert recorded == [info]
 
 
-def _finalize_targets(monkeypatch, events: list):
-    from types import SimpleNamespace
+def _run_failing_job(monkeypatch, message: str) -> list:
+    finished = []
 
+    def failing(*args):
+        raise RuntimeError(message)
+
+    monkeypatch.setattr(worker_main, "set_worker_state", lambda *a, **k: True)
+    subtask = SimpleNamespace(instruction="指示")
+    monkeypatch.setattr(worker_main, "_load_subtask_and_project", lambda subtask_id: (subtask, object()))
+    monkeypatch.setattr(worker_main, "record_event", lambda *a, **k: None)
+    monkeypatch.setattr(worker_main, "_run_with_heartbeat", failing)
+    monkeypatch.setattr(worker_main, "finish_job", lambda job_id, status, exit_code: finished.append(status))
+    worker_main.process_job({"job_id": 1, "subtask_id": 1}, 1)
+    return finished
+
+
+def test_process_job_marks_rate_limited_on_limit_error(monkeypatch):
+    assert _run_failing_job(monkeypatch, LIMIT_MESSAGE) == ["rate_limited"]
+
+
+def test_process_job_marks_failed_on_other_error(monkeypatch):
+    assert _run_failing_job(monkeypatch, "boom") == ["failed"]
+
+
+@pytest.mark.parametrize(
+    ("resets_at", "expected", "requeued"),
+    [(None, False, True), (4102444800, True, False)],
+)
+def test_is_rate_limited_requeues_only_after_reset(monkeypatch, resets_at, expected, requeued):
+    calls = []
+    monkeypatch.setattr(worker_main, "blocked_until", lambda: resets_at)
+    monkeypatch.setattr(worker_main, "requeue_rate_limited_jobs", lambda delay: calls.append(delay) or [])
+
+    assert ORIGINAL_IS_RATE_LIMITED() is expected
+    assert bool(calls) is requeued
+
+
+def _finalize_targets(monkeypatch, events: list):
     monkeypatch.setattr(worker_main, "save_report", lambda *a, **k: "report.html")
     monkeypatch.setattr(worker_main, "record_event", lambda job_id, **k: events.append(k))
     subtask = SimpleNamespace(id=1, github_pr_number=9)
@@ -73,8 +118,6 @@ def test_finalize_success_returns_needs_attention_when_mark_ready_fails(monkeypa
 
 
 def test_finalize_success_marks_resolved_when_mark_ready_succeeds(monkeypatch):
-    from types import SimpleNamespace
-
     events = []
     subtask, project = _finalize_targets(monkeypatch, events)
     db_subtask = SimpleNamespace(lifecycle_state=None)
