@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実行レポート #208 サブタスク1</title>
+<title>実行レポート #176 サブタスク1</title>
 <style>
 body{font-family:sans-serif;max-width:960px;margin:24px auto;padding:0 16px;line-height:1.6;color:#222}
 h1{font-size:1.4em}h2{font-size:1.15em;border-bottom:1px solid #ccc;padding-bottom:4px;margin-top:28px}
@@ -16,46 +16,52 @@ th{background:#f3f3f3}code{background:#f5f5f5;padding:1px 4px}
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#208</td></tr>
-<tr><th>サブタスク</th><td>[IdeaMan] MR状態の定期同期をリポジトリごとに並行実行し、1件の失敗で他を止めないー①</td></tr>
-<tr><th>ブランチ</th><td><code>issue-208-cd2e0ade-subtask-1</code></td></tr>
-<tr><th>PR</th><td>#209（Draft・既存）</td></tr>
+<tr><th>Issue</th><td>#176</td></tr>
+<tr><th>サブタスク</th><td>CLI機能の追加ー⑤（CLIタブのClaudeの応答文をMarkdownとして表示する）</td></tr>
+<tr><th>ブランチ</th><td><code>issue-176-a1f871a2-subtask-1</code></td></tr>
+<tr><th>PR</th><td>#216（Draft・既存）</td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
 <p><span class="ok">成功</span></p>
-<p>PR状態の同期をリポジトリごとに並行実行するようにした。<br>
-1リポジトリの失敗はログに残し、他のリポジトリの同期は続行する。</p>
+<p>assistantの発言だけをMarkdownとして描画するようにした。<br>
+今回の実行指示は前回と同じ内容だった。<br>
+実装は前回の実行でコミット・push済みのため、今回は内容の再確認とテストの再実行を行った。</p>
 
 <h2>3. 変更内容</h2>
 <table>
 <tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td><code>core/pr_sync.py</code></td><td>sync_all_projectsをThreadPoolExecutorによるリポジトリ単位の並行実行に変更。<br>リポジトリごとにDBセッションを生成する<code>_sync_repo</code>を追加。<br>例外をリポジトリ単位で捕捉する<code>_sync_repo_safely</code>を追加。<br>sync_project_statesはPR一覧を引数で受け取る形に変更。</td></tr>
-<tr><td>2</td><td><code>core/config.py</code></td><td>同時実行数<code>pr_sync_max_workers</code>（既定3）を追加。</td></tr>
-<tr><td>3</td><td><code>tests/test_pr_sync.py</code></td><td>1リポジトリ失敗時に他方が反映されるテストを追加。<br>同一リポジトリのgh実行が1回であるテストを追加。</td></tr>
+<tr><td>1</td><td><code>app/static/markdown_view.js</code>（新規）</td><td>自前のMarkdown描画処理。<br>見出し・箇条書き（入れ子・番号付き）・表（列寄せ）・コードブロック・引用・水平線に対応。<br>行内のコード・リンク・強調・斜体・取り消し線に対応。<br>文字列は全てエスケープしてからタグを組み立てる。<br>描画後、templateに入れて許可したタグ・属性以外を取り除く。</td></tr>
+<tr><td>2</td><td><code>app/static/cli_view.js</code></td><td>appendCliMessageで、assistantだけMarkdown描画にした。<br>user・tool・errorはtextContentのまま。</td></tr>
+<tr><td>3</td><td><code>app/static/index.html</code></td><td>markdown_view.jsを読み込むscriptタグを追加（cli_view.jsより前）。</td></tr>
+<tr><td>4</td><td><code>app/static/style.css</code></td><td>表・コードブロック・引用の色や余白を<code>--markdown-*</code>として:rootに追加。<br>コードブロックと表は横スクロールの枠に入れた。</td></tr>
+<tr><td>5</td><td><code>tests/test_markdown_view.py</code>（新規）</td><td>Node.jsでrenderMarkdownを実行し、生成HTMLを確認するテスト11件。</td></tr>
 </table>
-<p>コミット：<code>56fa625</code>（実装）、<code>929318c</code>（テスト）</p>
+<p>コミット：<code>c2cfa2b</code>（描画処理）、<code>0946565</code>（CLIタブへの組み込み）、<code>1f8a41d</code>（見た目）</p>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>同時実行数の定数はSettings（config.py）に置いた。</td><td>同期間隔など既存の同期設定と同じ場所で管理でき、環境変数で調整可能になるため。</td></tr>
-<tr><td>2</td><td>同時実行数は3とした。</td><td>ワーカー数の既定値と揃え、gh APIの同時呼び出しを小さく抑えるため。</td></tr>
-<tr><td>3</td><td>並行単位をプロジェクトではなくリポジトリとし、同一リポジトリを持つ複数プロジェクトはgh実行を1回にまとめた。</td><td>提案の「リポジトリごと」に合わせ、重いgh pr listの重複実行を避けるため。</td></tr>
-<tr><td>4</td><td>sync_project_statesの引数にprsを追加した。</td><td>gh実行とDB反映を分離するため。呼び出し元はpr_sync内のみで影響はない。</td></tr>
-<tr><td>5</td><td>_sync_loopの全体例外捕捉は残した。</td><td>プロジェクト一覧取得などリポジトリ外の失敗でループを止めないため。</td></tr>
-<tr><td>6</td><td>ログ出力は既存に合わせてprintとした。</td><td>pr_syncの既存ログ方式に揃えるため。</td></tr>
+<tr><td>1</td><td>ライブラリを同梱せず、必要な範囲の描画処理を自前で書いた。</td><td>依存とライセンス管理を増やさず、対応範囲を応答文で使う記法に絞れるため。</td></tr>
+<tr><td>2</td><td>許可しないタグは削除せず文字列に置き換えた。</td><td>応答文の内容が欠けないようにするため。</td></tr>
+<tr><td>3</td><td>リンクはhttp/httpsのみ許可し、別タブ・noopener noreferrerで開く。</td><td>javascript:等のスキームを防ぎ、管理塔画面から遷移しないため。</td></tr>
+<tr><td>4</td><td>画像記法・生HTMLは描画対象外とした。</td><td>外部リソースの読み込みとXSSの経路を作らないため。</td></tr>
+<tr><td>5</td><td>段落内の改行は&lt;br&gt;として表示する。</td><td>従来のpre-wrap表示と見た目を揃え、CLIの出力に近づけるため。</td></tr>
+<tr><td>6</td><td>JSのテストはNode.jsで実行し、Node.jsが無い環境ではスキップする。</td><td>既存のテスト基盤がpytestのため、追加の依存を入れずに検証するため。</td></tr>
+<tr><td>7</td><td>同じ指示の再実行では、実装を作り直さず再確認のみとした。</td><td>既に要件を満たした実装がpush済みで、作り直すと差分が増えるだけのため。</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<p><code>./.venv/Scripts/python.exe -m pytest -q</code>：<strong>449 passed</strong></p>
-<p>サーバー起動での動作確認は未実施（稼働中の管理塔に影響させないため）。</p>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code>：<strong>474 passed</strong>（Markdown描画テスト11件を含む。Node.js v24で実行）</p>
+<p>サニタイズ処理（sanitizeMarkdownHtml）はブラウザのDOMが必要なため自動テストは未実施。</p>
+<p>サーバー起動・ブラウザでの表示確認は未実施（稼働中の管理塔に影響させないため）。</p>
 
 <h2>6. 残課題・リスク・確認ポイント</h2>
 <ul>
-<li>SQLiteへの並行書き込みはWAL・busy_timeout=5000msに依存する。同時実行数3では問題ない想定だが、ロック待ちが長引く場合は該当リポジトリの同期がその回失敗としてスキップされる。</li>
-<li>1周の所要時間は最も遅いリポジトリに律速される。リポジトリ数が同時実行数を超えると再び比例的に延びる。</li>
-<li>レビュー時は<code>core/pr_sync.py</code>のsync_all_projects周辺と、同時実行数の既定値の妥当性を確認してほしい。</li>
+<li>自前実装のため、CommonMarkの細かい仕様（遅延継続行・リスト内のコードブロック・参照リンク等）には対応していない。</li>
+<li>リスト項目の下に字下げしたコードブロックがある場合、リストの外のコードブロックとして表示される。</li>
+<li>ブラウザでCLIタブを開き、表・コードブロック・入れ子リストの見た目と横スクロールを確認してほしい。</li>
+<li>レビュー時は<code>app/static/markdown_view.js</code>のsanitizeMarkdownHtml周辺（許可タグ・属性の一覧）を確認してほしい。</li>
 </ul>
 </body>
 </html>
