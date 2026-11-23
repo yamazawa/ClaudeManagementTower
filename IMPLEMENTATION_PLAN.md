@@ -34,6 +34,8 @@
 - ブランチ作成後、サブタスクのタイトル・指示内容を`.claude-tower/subtask.md`に書き出す初期コミットを1件追加してからDraft PRを作成する（差分ゼロではDraft PR作成不可のため。Phase 1実機検証済み、ダミーコミットではなく意味のある内容とする）。
 - Claudeには`.claude-tower/report.html`への自己完結HTMLレポート出力を、system_promptの追記（`claude_code`プリセット + append）で指示する。ワーカーはこのファイルを`reports/job-{id}.html`へコピーしてReportテーブルへ記録する（Phase 7実装・実機確認済み）。
 - ジョブが例外なく完走したら（job.status=succeeded）、Claudeの作業判断の成否に関わらずDraftを解除し、サブタスクのlifecycle_stateを`resolved`にする。Claude自身の成功/一部成功/失敗の判断はレポートの中身で人間が確認する（Phase 7確定）。
+- Claude実行後のDraft解除に失敗した場合、ジョブは`needs_attention`とし、lifecycle_stateは変更しない（Issue #187）。
+- gh呼び出しは一時的な通信エラー時に再試行する。issue create・pr create・pr mergeは二重実行を避けるため再試行しない（Issue #187）。
 - Nワーカーは`python -m worker.launcher`が`worker.count`個のサブプロセスとして起動する。単独起動（`python -m worker.main`）はデバッグ用途とする（Phase 8実装・実機確認済み）。
 - ワーカー群は`worker/pool.py`の`WorkerPool`が直接の子プロセスとして管理し、終了したワーカーを再起動して常にN個を維持する。`run_all.py`はランチャーのサブプロセスを挟まず`WorkerPool`を直接保持する。`python -m worker.launcher`も同じ`WorkerPool`で動作する（Issue #69）。
 - `WorkerPool`の起動・停止時は、心拍のある登録済みワーカーをPID指定で停止し、ワーカー行を全削除する。ワーカーは自分の行が削除されていた場合は再登録せず終了する（Issue #69）。
