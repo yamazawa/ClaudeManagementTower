@@ -2,69 +2,67 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実装レポート Issue/CLI/Ideaの表示ー①</title>
+<title>実装レポート #241 サブタスク1</title>
 <style>
 body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; }
-h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; padding-bottom: .2em; margin-top: 1.6em; }
-table { border-collapse: collapse; margin: .5em 0; }
-th, td { border: 1px solid #bbb; padding: .3em .6em; text-align: left; vertical-align: top; }
-th { background: #f0f0f0; }
-.ok { color: #fff; background: #2a7a2a; padding: .1em .6em; border-radius: 4px; }
-code { background: #f4f4f4; padding: 0 .3em; }
+h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; margin-top: 1.6em; }
+table { border-collapse: collapse; margin: 0.5em 0; }
+th, td { border: 1px solid #bbb; padding: 4px 8px; text-align: left; vertical-align: top; }
+th { background: #f2f2f2; }
+.ok { color: #fff; background: #2e7d32; padding: 2px 8px; border-radius: 4px; }
+code { background: #f5f5f5; padding: 0 3px; }
 </style>
 </head>
 <body>
-<h1>実装レポート</h1>
+<h1>実装レポート：実装ジョブ・ワーカーの状態の文字列を、状態クラスにまとめる</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>未採番（サブタスク作成時点でIssue番号なし）</td></tr>
-<tr><th>サブタスク</th><td>Issue/CLI/Ideaの表示ー①</td></tr>
-<tr><th>ブランチ</th><td><code>issue-new-944cf386-subtask-1</code></td></tr>
+<tr><th>Issue</th><td>#241（アイデアマン提案の実装）</td></tr>
+<tr><th>サブタスク</th><td>ExecutionJob・Workerの状態文字列を状態クラスに集約する</td></tr>
+<tr><th>ブランチ</th><td><code>issue-241-acd96670-subtask-1</code>（push済み）</td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
-<p><span class="ok">成功</span>（ブラウザでの動作確認は未実施）</p>
-<p>①Issueのタブ表示中のみIssue内容・MR内容のペインを表示するようにした。</p>
-<p>CLI・Ideaのタブでは、それぞれの項目の内容のペインのみ表示する。</p>
-<p>②ヘッダーのMRステータスフィルタの切替時に、Issueのタブへ自動で切り替えるようにした。</p>
-<p>CLI・Ideaのタブへ切り替えた際は、MRステータスフィルタの選択を自動で解除するようにした。</p>
+<p><span class="ok">成功</span></p>
+<p>提案の詳細に記載された置き換えをすべて実施した。</p>
+<p>全テスト（522件）が成功した。</p>
 
-<h2>3. 変更内容</h2>
+<h2>3. 実施した変更</h2>
 <table>
-<tr><th>No.</th><th>ファイル</th><th>変更</th><th>コミット</th></tr>
-<tr><td>1</td><td><code>app/static/app.js</code></td><td><code>setSectionShown</code>で表示指定を保持し、<code>applySectionShown</code>でタブを考慮して反映</td><td>67bc3b0</td></tr>
-<tr><td>2</td><td><code>app/static/repo_items.js</code></td><td><code>isSectionHiddenByTab</code>を追加し、タブ切替時は表示指定に従いペインを再反映</td><td>67bc3b0</td></tr>
-<tr><td>3</td><td><code>app/static/app.js</code></td><td><code>toggleMrStatusFilter</code>でIssueのタブへ切替</td><td>bc5f289</td></tr>
-<tr><td>4</td><td><code>app/static/app.js</code>・<code>repo_items.js</code></td><td><code>clearMrStatusFilter</code>を追加し、CLI・Ideaのタブ選択時に呼び出す</td><td>b32e97f</td></tr>
+<tr><th>No.</th><th>コミット</th><th>ファイル</th><th>変更</th></tr>
+<tr><td>1</td><td>205c80a</td><td>core/job_queue.py</td><td>ExecutionJobStatus（ACTIVE_STATES含む）・WorkerStateを追加した。<br>ファイル内の状態文字列をクラス定数に置き換えた。<br>_CLAIM_SQLの状態をバインド引数（<code>:running</code>・<code>:queued</code>）にした。<br>STATUS_RATE_LIMITEDを削除しRATE_LIMITEDに統合した。</td></tr>
+<tr><td>2</td><td>ef8dcd3</td><td>worker/main.py<br>worker/idea_runner.py</td><td>ジョブ状態・ワーカー状態をクラス定数に置き換えた。</td></tr>
+<tr><td>3</td><td>46a4af5</td><td>app/routes/subtasks.py<br>core/mr_status.py</td><td>2か所のACTIVE_JOB_STATUSESを削除し、ExecutionJobStatus.ACTIVE_STATESに統一した。<br>ジョブ登録時の<code>"queued"</code>を置き換えた。</td></tr>
+<tr><td>4</td><td>5225acf</td><td>core/idea_context.py</td><td>FAILED_JOB_STATESをクラス定数で定義した。</td></tr>
 </table>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>「ステータストグル」はヘッダーのMRステータスフィルタ（Draft〜Merged）と解釈</td><td>画面上でトグル選択するステータスはこれのみのため</td></tr>
-<tr><td>2</td><td>①の原因は、CLI・Ideaのタブ表示中に定期更新等で<code>setSectionShown</code>がIssue・MRのペインを再表示することと判断</td><td>従来はタブ切替時のみ隠しており、その後の再描画で表示されていたため</td></tr>
-<tr><td>3</td><td>ペインの「表示指定」を<code>data-shown</code>に保持し、タブとの組み合わせで表示を決める方式を採用</td><td>Issueのタブへ戻した際、未選択のペインを表示しない（従来は無条件に表示していた）ため</td></tr>
-<tr><td>4</td><td>ステータスの選択・選択解除のどちらでもIssueのタブへ切り替える</td><td>指示が「変更時」のため（選択解除はIssueのタブでのみ起こり得る）</td></tr>
-<tr><td>5</td><td>フィルタ解除後のIssue一覧の再取得は、既存の<code>onMrStatusFilterChanged</code>に任せる</td><td>Issueのタブへ戻った際に、通常のフィルタの一覧を表示するため</td></tr>
+<tr><td>1</td><td>_CLAIM_SQLは<code>text(...).bindparams(...)</code>でモジュール定義時に値を束縛した。</td><td>呼び出し側（claim_next_job）を変えずに済むため。<br>同じ<code>:running</code>を2か所で使える。</td></tr>
+<tr><td>2</td><td>STATUS_RATE_LIMITEDは互換用に残さず削除した。</td><td>利用箇所がworker/main.pyのみで、同PR内で置き換えたため。<br>ガイドラインの「互換性は保たない」に沿う。</td></tr>
+<tr><td>3</td><td>FAILED_JOB_STATESはidea_context.pyに残し、中身だけクラス定数にした。</td><td>提案ではクラスに持たせる組はACTIVE_STATESのみと指定されていたため。<br>利用箇所が1か所のみのため。</td></tr>
+<tr><td>4</td><td>worker/idea_runner.pyも置き換え対象に含めた。</td><td>提案の根拠にワーカー状態の記載箇所として挙がっていたため。</td></tr>
+<tr><td>5</td><td>core/idea_queue.pyの_CLAIM_SQLは変更しなかった。</td><td>提案の対象はExecutionJobのみのため。<br>同様の対応は別提案で行う想定。</td></tr>
+<tr><td>6</td><td>テストコード内の状態文字列は変更しなかった。</td><td>DBに保存される値そのものを検証しており、文字列のままで意味が通るため。</td></tr>
 </table>
 
 <h2>5. テスト</h2>
 <table>
-<tr><th>テスト</th><th>結果</th></tr>
-<tr><td><code>./.venv/Scripts/python.exe -m pytest -q</code></td><td>509 passed</td></tr>
-<tr><td><code>node --check</code>（app.js・repo_items.js）</td><td>構文エラーなし</td></tr>
-<tr><td>ブラウザでの動作確認</td><td>未実施（フロントエンドのJSテスト基盤が無いため、人間による確認を依頼）</td></tr>
+<tr><th>コマンド</th><th>結果</th></tr>
+<tr><td><code>./.venv/Scripts/python.exe -m pytest -q</code></td><td>522 passed</td></tr>
 </table>
+<p>_CLAIM_SQLのバインド引数化は、tests/test_job_queue.pyのclaim系テスト（同一サブタスクの多重実行防止を含む）で確認済み。</p>
+<p>サーバー・ワーカーの起動確認は未実施（人間による動作確認を想定）。</p>
 
-<h2>6. 残課題・レビュー時の確認ポイント</h2>
+<h2>6. 残課題・リスク・確認ポイント</h2>
 <ul>
-<li>CLI・Ideaのタブ表示中に定期更新が走っても、Issue内容・MR内容のペインが表示されないこと。</li>
-<li>Issueのタブへ戻した際、Issue選択済みならIssue内容・MR内容が表示されること。</li>
-<li>CLI・Ideaのタブでステータスを押すと、Issueのタブに切り替わり絞り込み表示されること。</li>
-<li>ステータス選択中にCLI・Ideaのタブへ切り替えると、選択が解除されること。</li>
-<li>選択解除時にIssue一覧を再取得するため、一時的に「更新中」の表示が出る。</li>
+<li>コミット1単体ではworker/main.pyがSTATUS_RATE_LIMITEDをimportできず壊れる（コミット2で解消）。</li>
+<li>core/mr_status.pyがcore/job_queue.py経由でcore.dbをimportするようになった（merge_queue経由で既に依存しているため影響なし）。</li>
+<li>app/static/common.jsのJOB_STATUS・ACTIVE_JOB_STATUSESはフロント側の定義として残っている。</li>
+<li>core/idea_queue.pyの_CLAIM_SQLは文字列埋め込みのまま。</li>
 </ul>
 </body>
 </html>
