@@ -287,8 +287,8 @@ Issue名・入力欄・作成ボタンは折り返さず1行に並べる。
   gap: 6px;
 }
 
-/* リポジトリ一覧のCLIボタン */
-.project-cli-button {
+/* リポジトリ一覧のIdeaボタン・CLIボタン */
+.project-dialog-button {
   flex: none;
 }
 
@@ -387,6 +387,136 @@ Issue名・入力欄・作成ボタンは折り返さず1行に並べる。
   padding: 6px 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
+}
+
+/* 提案一覧（アイデアマン）ダイアログ（枠・見出し行はCLI実行ダイアログと共通） */
+.idea-dialog-tabs {
+  display: flex;
+  gap: 6px;
+}
+
+.idea-tab-button {
+  font: inherit;
+  font-size: 13px;
+  padding: 2px 12px;
+  border: 1px solid var(--line);
+  border-radius: 99px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.idea-tab-button[aria-pressed="true"] {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #fff;
+  font-weight: bold;
+}
+
+.idea-dialog-message {
+  margin: 0;
+  min-height: 1.5em;
+  color: var(--warning);
+  font-size: 12.5px;
+}
+
+.idea-card {
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+}
+
+.idea-card-header {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.idea-category {
+  flex: none;
+  padding: 0 8px;
+  border-radius: 99px;
+  background: var(--soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: bold;
+}
+
+.idea-title {
+  flex: 1;
+  min-width: 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.idea-status {
+  flex: none;
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.idea-summary,
+.idea-note {
+  margin: 4px 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.idea-note {
+  color: var(--muted);
+  font-size: 12.5px;
+}
+
+.idea-section summary {
+  color: var(--muted);
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.idea-section-text {
+  padding: 4px 8px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 13.5px;
+}
+
+.idea-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.idea-reject-reason {
+  flex: 1;
+  min-width: 12em;
+  font: inherit;
+  font-size: 13px;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+/* スマホ幅では見出し行・操作を縦に積む */
+@media (max-width: 650px) {
+  .idea-dialog .cli-dialog-header {
+    flex-wrap: wrap;
+  }
+
+  .idea-dialog .cli-dialog-title {
+    flex-basis: 100%;
+  }
+
+  .idea-card-header {
+    flex-wrap: wrap;
+  }
+
+  .idea-actions > * {
+    flex: 1 1 100%;
+  }
 }
 
 #mr-status-filter {
