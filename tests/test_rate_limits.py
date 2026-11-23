@@ -1,8 +1,16 @@
+from datetime import datetime, timezone
+
 from claude_agent_sdk import RateLimitInfo
 from sqlalchemy.orm import sessionmaker
 
 from core.db import init_db, make_engine
-from core.rate_limits import blocked_until, get_rate_limits, is_rate_limit_error, record_rate_limit
+from core.rate_limits import (
+    blocked_until,
+    get_rate_limits,
+    is_rate_limit_error,
+    latest_event_at,
+    record_rate_limit,
+)
 
 
 # 2100-01-01T00:00:00Z（未来のリセット時刻）
@@ -104,6 +112,16 @@ def test_get_rate_limits_marks_rejected_when_usage_full(tmp_path):
 
     assert limits["five_hour"]["status"] == "rejected"
     assert limits["seven_day"]["status"] == "rejected"
+
+
+def test_latest_event_at_returns_last_received_time(tmp_path):
+    factory = _session_factory(tmp_path)
+    assert latest_event_at(factory) is None
+
+    before = datetime.now(timezone.utc)
+    record_rate_limit(RateLimitInfo(status="rejected", rate_limit_type="five_hour"), factory)
+
+    assert latest_event_at(factory) >= before
 
 
 def test_get_rate_limits_uses_usage_api_without_event(tmp_path):

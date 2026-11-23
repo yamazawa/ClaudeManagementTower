@@ -9,6 +9,7 @@ import re
 from collections.abc import Callable
 from datetime import datetime, timezone
 
+from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 
 from core.claude_usage import get_usage, normalize_window
@@ -141,6 +142,16 @@ def _merge_usage(snapshot: dict | None, usage_window: dict | None, window_second
     if usage_window["utilization"] >= FULL_UTILIZATION:
         merged["status"] = STATUS_REJECTED
     return merged
+
+
+def latest_event_at(session_factory: sessionmaker = SessionLocal) -> datetime | None:
+    """SDK通知を最後に受信した日時を返す
+
+    受信が無ければNoneを返す。
+    """
+    with session_factory() as session:
+        updated = session.query(func.max(RateLimitSnapshot.updated_at)).scalar()
+    return datetime.fromtimestamp(_to_timestamp(updated), timezone.utc) if updated else None
 
 
 def get_rate_limits(

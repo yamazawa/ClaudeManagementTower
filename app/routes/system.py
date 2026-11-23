@@ -4,7 +4,8 @@ from fastapi import APIRouter, HTTPException
 
 from core.config import settings
 from core.job_queue import cleanup_stale_workers, recover_stale_jobs
-from core.rate_limits import get_rate_limits
+from core.claude_usage import refresh_usage_if_older
+from core.rate_limits import get_rate_limits, latest_event_at
 from core.self_sync import SelfSyncAlreadyRunning, read_result, start_self_sync
 from core.supervisor_control import (
     COMMAND_RESTART_SERVER,
@@ -64,4 +65,9 @@ def cleanup_workers() -> dict:
 
 @router.get("/rate-limits")
 def rate_limits() -> dict:
+    """レート制限の表示内容を返す
+
+    SDK通知の受信後は使用率APIを取得し直し、使用率と状態を揃えてから返す。
+    """
+    refresh_usage_if_older(latest_event_at())
     return get_rate_limits()
