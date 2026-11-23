@@ -1,7 +1,10 @@
 import json
+import logging
 import subprocess
 import time
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 GH_TIMEOUT_SECONDS = 60
 ISSUE_LIST_LIMIT = 200
@@ -219,10 +222,18 @@ def list_open_pull_requests(repo: str) -> list[dict]:
             "pr", "list",
             "--repo", repo,
             "--state", "open",
+            "--limit", str(PR_STATE_LIST_LIMIT),
             "--json", "number,isDraft,headRefName,baseRefName",
         ]
     )
-    return json.loads(output)
+    prs = json.loads(output)
+    if len(prs) >= PR_STATE_LIST_LIMIT:
+        logger.warning(
+            "Open PRが取得上限%s件に達しました。上限を超えたPRは対象外の可能性があります: %s",
+            PR_STATE_LIST_LIMIT,
+            repo,
+        )
+    return prs
 
 
 def get_pr_mergeable(repo: str, number: int) -> str:
