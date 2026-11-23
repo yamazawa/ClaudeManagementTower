@@ -1,6 +1,8 @@
 import re
 import threading
+from concurrent.futures import ThreadPoolExecutor
 
+from core.config import settings
 from core.db import SessionLocal
 from core.github_client import list_pull_request_states
 from core.lifecycle import LifecycleState
@@ -104,13 +106,12 @@ def _subtask_from_pr(project: Project, pr: dict, issue_number: int) -> Subtask:
     )
 
 
-def sync_project_states(session, project: Project) -> list[dict]:
+def sync_project_states(session, project: Project, prs: list[dict]) -> list[dict]:
     """PR状態をサブタスクに反映する
 
     管理塔外で作成されたPRも、紐づくIssueのサブタスクとして取り込む。
     状態を変更・新規作成したサブタスクのIDと状態を返す。
     """
-    prs = list_pull_request_states(project.github_repo)
     subtasks = _sync_targets(session, project.id)
     updated = _update_states(subtasks, {pr["number"]: pr for pr in prs})
     imported = _import_untracked_prs(session, project, prs)
@@ -118,11 +119,45 @@ def sync_project_states(session, project: Project) -> list[dict]:
     return updated + imported
 
 
-def sync_all_projects(session_factory=None) -> list[dict]:
-    factory = session_factory or SessionLocal
+def _project_ids_by_repo(factory) -> dict[str, list[int]]:
     with factory() as session:
-        projects = session.query(Project).all()
-        return [u for p in projects for u in sync_project_states(session, p)]
+        projects = session.query(Project).order_by(Project.id).all()
+    repos: dict[str, list[int]] = {}
+    for project in projects:
+        repos.setdefault(project.github_repo, []).append(project.id)
+    return repos
+
+
+def _sync_repo(factory, repo: str, project_ids: list[int]) -> list[dict]:
+    """1リポジトリのPR状態を、そのリポジトリのプロジェクトへ反映する
+
+    DBセッションはリポジトリごとに分け、他スレッドと共有しない。
+    """
+    prs = list_pull_request_states(repo)
+    with factory() as session:
+        projects = session.query(Project).filter(Project.id.in_(project_ids)).order_by(Project.id)
+        return [u for p in projects.all() for u in sync_project_states(session, p, prs)]
+
+
+def _sync_repo_safely(factory, repo: str, project_ids: list[int]) -> list[dict]:
+    try:
+        return _sync_repo(factory, repo, project_ids)
+    except Exception as exc:  # noqa: BLE001
+        # 1リポジトリの失敗で他のリポジトリの同期を止めない
+        print(f"[pr_sync] {repo} のPR状態の同期に失敗しました: {exc}")
+        return []
+
+
+def sync_all_projects(session_factory=None) -> list[dict]:
+    """全リポジトリのPR状態をリポジトリごとに並行して同期する
+
+    失敗したリポジトリはログに残して読み飛ばす。
+    """
+    factory = session_factory or SessionLocal
+    repos = _project_ids_by_repo(factory)
+    with ThreadPoolExecutor(max_workers=settings.pr_sync_max_workers) as executor:
+        results = executor.map(lambda item: _sync_repo_safely(factory, *item), repos.items())
+        return [u for result in results for u in result]
 
 
 def mark_prs_merged(repo: str, pr_numbers: list[int], session_factory=None) -> None:
