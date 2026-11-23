@@ -1011,9 +1011,11 @@ h2 {
 
 /* 一覧の状態フィルタ
 
+見出し文字列・エキスパンダと同じ行に置き、右寄せにする。
 選択欄は他の入力欄と枠線・角丸を揃える。
 */
 .heading-filter {
+  margin-left: auto;
   font: inherit;
   font-size: 13px;
   font-weight: normal;
@@ -1032,17 +1034,6 @@ h2 {
 .heading-filter:focus {
   outline: none;
   border-color: var(--accent);
-}
-
-/* 状態フィルタ付きの小見出し
-
-見出し文字列と同じ行に置き、フィルタは右寄せにする。
-*/
-.section-heading-with-filter {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
 }
 
 .empty {
