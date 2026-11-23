@@ -16,6 +16,28 @@
   --selection-busy-show-delay: 0.2s;
   --selection-busy-fade: 0.15s;
   --selection-busy-spinner-size: 16px;
+  --state-badge-radius: 999px;
+  --state-badge-padding: 0 8px;
+  --state-badge-pulse-duration: 1.4s;
+  --state-badge-pulse-min-opacity: 0.45;
+  --state-draft-bg: #eef1f5;
+  --state-draft-fg: #637086;
+  --state-resolving-bg: #e3ebff;
+  --state-resolving-fg: #2747b8;
+  --state-resolved-bg: #e3f5ea;
+  --state-resolved-fg: #1d7342;
+  --state-merging-bg: #efe8ff;
+  --state-merging-fg: #6339c0;
+  --state-merged-bg: #e5dcfb;
+  --state-merged-fg: #4c2596;
+  --state-deploying-bg: #dff3f6;
+  --state-deploying-fg: #0e6f86;
+  --state-deployed-bg: #cdebe6;
+  --state-deployed-fg: #0b5d55;
+  --state-canceled-bg: #f1f2f4;
+  --state-canceled-fg: #98a1b0;
+  --state-merge-failed-bg: #fdf0e1;
+  --state-merge-failed-fg: var(--warning);
 }
 
 * {
@@ -949,6 +971,77 @@ section.collapsed > .section-title-row {
   flex-shrink: 0;
   margin-left: auto;
   font-weight: normal;
+}
+
+/* MRの状態バッジ
+
+状態ごとに背景色・文字色を変える。
+処理中の状態は点滅させる。
+*/
+.subtask-state {
+  padding: var(--state-badge-padding);
+  border-radius: var(--state-badge-radius);
+  line-height: 1.6;
+  background: var(--state-draft-bg);
+  color: var(--state-draft-fg);
+}
+
+.subtask-state.state-resolving {
+  background: var(--state-resolving-bg);
+  color: var(--state-resolving-fg);
+}
+
+.subtask-state.state-resolved {
+  background: var(--state-resolved-bg);
+  color: var(--state-resolved-fg);
+}
+
+.subtask-state.state-merging {
+  background: var(--state-merging-bg);
+  color: var(--state-merging-fg);
+}
+
+.subtask-state.state-merged {
+  background: var(--state-merged-bg);
+  color: var(--state-merged-fg);
+}
+
+.subtask-state.state-deploying {
+  background: var(--state-deploying-bg);
+  color: var(--state-deploying-fg);
+}
+
+.subtask-state.state-deployed {
+  background: var(--state-deployed-bg);
+  color: var(--state-deployed-fg);
+}
+
+.subtask-state.state-canceled {
+  background: var(--state-canceled-bg);
+  color: var(--state-canceled-fg);
+}
+
+.subtask-state.state-merge-failed {
+  background: var(--state-merge-failed-bg);
+  color: var(--state-merge-failed-fg);
+}
+
+.subtask-state.state-resolving,
+.subtask-state.state-merging,
+.subtask-state.state-deploying {
+  animation: subtask-state-pulse var(--state-badge-pulse-duration) ease-in-out infinite;
+}
+
+@keyframes subtask-state-pulse {
+  50% {
+    opacity: var(--state-badge-pulse-min-opacity);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .subtask-state {
+    animation: none !important;
+  }
 }
 
 .job-status {
