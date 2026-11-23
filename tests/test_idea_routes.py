@@ -129,7 +129,7 @@ def test_approve_issue_only_creates_issue(approval_db, github):
     assert result["idea"]["status"] == IdeaStatus.ISSUE_CREATED
     assert result["idea"]["created_issue_number"] == 50
     assert result["subtask"] is None
-    assert github["issues"][0][:2] == ("owner/repo", "提案タイトル")
+    assert github["issues"][0][:2] == ("owner/repo", "[IdeaMan] 提案タイトル")
     assert github["subtasks"] == []
 
 
@@ -141,10 +141,21 @@ def test_approve_with_subtask_creates_issue_subtask_and_job(approval_db, github)
     assert result["idea"]["status"] == IdeaStatus.SUBTASK_CREATED
     assert result["idea"]["created_subtask_id"] == 9
     payload = github["subtasks"][0]
-    assert (payload.github_issue_number, payload.issue_title) == (50, "提案タイトル")
+    assert (payload.github_issue_number, payload.issue_title) == (50, "[IdeaMan] 提案タイトル")
     assert payload.instruction.startswith("アイデアマンの提案を実装する。")
+    assert payload.unique_branch is True
     assert github["executes"] == [9]
     assert result["subtask"]["job"]["job_id"] == 3
+
+
+def test_approve_without_execute_skips_job(approval_db, github):
+    idea_id = _save_idea(approval_db)
+
+    result = ideas.post_approve_idea(idea_id, ideas.ApproveIdeaRequest(mode="with_subtask", execute=False))
+
+    assert result["idea"]["status"] == IdeaStatus.SUBTASK_CREATED
+    assert github["executes"] == []
+    assert result["subtask"]["job"] is None
 
 
 def test_approve_existing_issue_idea_skips_issue_creation(approval_db, github):

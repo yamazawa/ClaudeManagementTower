@@ -24,6 +24,7 @@ class ApprovalMode:
     WITH_SUBTASK = "with_subtask"
 
 
+ISSUE_TITLE_PREFIX = "[IdeaMan] "
 ISSUE_BODY_FOOTER = "アイデアマンの提案（ID: {idea_id}）から作成"
 SUBTASK_INSTRUCTION_HEADER = "アイデアマンの提案を実装する。"
 
@@ -118,6 +119,14 @@ def _file_list(files: list[str]) -> str:
 
 def _join_sections(sections: list[str]) -> str:
     return "\n\n".join(s for s in sections if s)
+
+
+def compose_issue_title(idea: dict) -> str:
+    """提案から作成するIssueのタイトル
+
+    アイデアマンの提案と分かるよう接頭辞を付ける。
+    """
+    return f"{ISSUE_TITLE_PREFIX}{idea['title']}"
 
 
 def compose_issue_body(idea: dict) -> str:

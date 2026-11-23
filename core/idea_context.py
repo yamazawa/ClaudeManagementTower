@@ -25,7 +25,7 @@ OUTPUT_FORMAT_TEXT = """
 調査結果を最終応答の最後に、次の形式のJSON配列で ```json ～ ``` に囲んで出力する。
 提案が無い場合は空配列 [] を出力する。
 - category : {categories} のいずれか
-- title : Issueタイトル案
+- title : Issueタイトル案（[SPn]タスクn等のスプリント・タスクの接頭辞は付けない）
 - summary : 提案の要約（1～2文）
 - detail : 対応内容の案
 - rationale : 根拠（対象ファイル・行・観測した事象）

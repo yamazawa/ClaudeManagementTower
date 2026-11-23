@@ -17,6 +17,7 @@ from core.idea_approval import (
     IdeaApprovalNotAllowed,
     claim_idea,
     compose_issue_body,
+    compose_issue_title,
     compose_subtask_instruction,
     record_issue_created,
     record_subtask_created,
@@ -36,6 +37,8 @@ class RejectIdeaRequest(BaseModel):
 
 class ApproveIdeaRequest(BaseModel):
     mode: Literal["issue_only", "with_subtask"]
+    # サブタスク作成後、そのまま実装の実行ジョブを投入するか
+    execute: bool = True
 
 
 @router.post("/projects/{project_id}/ideas/run", status_code=202)
@@ -86,21 +89,22 @@ def _github_repo(project_id: int) -> str:
         return session.get(Project, project_id).github_repo
 
 
-def _create_issue_for(idea: dict) -> tuple[dict, str]:
+def _create_issue_for(idea: dict) -> tuple[dict, str, str]:
     """提案からIssueを作成する
 
     作成に失敗した場合は承認前の状態へ戻す。
     """
+    title = compose_issue_title(idea)
     try:
-        issue = create_issue(_github_repo(idea["project_id"]), idea["title"], compose_issue_body(idea))
+        issue = create_issue(_github_repo(idea["project_id"]), title, compose_issue_body(idea))
     except GitHubClientError as exc:
         release_claim(idea["id"])
         raise HTTPException(status_code=500, detail=f"Issue作成に失敗しました: {exc}") from exc
-    return record_issue_created(idea["id"], issue["number"]), issue["url"]
+    return record_issue_created(idea["id"], issue["number"]), issue["url"], title
 
 
-def _create_subtask_for(idea: dict, issue_title: str) -> tuple[dict, dict]:
-    """提案のIssue配下にサブタスク（Draft PR）を作成し、実装を開始する
+def _create_subtask_for(idea: dict, issue_title: str, execute: bool) -> tuple[dict, dict]:
+    """提案のIssue配下にサブタスク（Draft PR）を作成し、指定があれば実装を開始する
 
     作成に失敗した場合は承認前の状態へ戻す（Issue作成済みならIssue作成済みに戻す）。
     """
@@ -109,6 +113,7 @@ def _create_subtask_for(idea: dict, issue_title: str) -> tuple[dict, dict]:
         github_issue_number=target_issue_number(idea),
         instruction=compose_subtask_instruction(idea),
         issue_title=issue_title,
+        unique_branch=True,
     )
     try:
         subtask = create_subtask(payload)
@@ -116,7 +121,7 @@ def _create_subtask_for(idea: dict, issue_title: str) -> tuple[dict, dict]:
         release_claim(idea["id"])
         raise HTTPException(status_code=exc.status_code, detail=f"サブタスク作成に失敗しました: {exc.detail}") from exc
     idea = record_subtask_created(idea["id"], subtask["id"])
-    return idea, {**subtask, "job": execute_subtask(subtask["id"])}
+    return idea, {**subtask, "job": execute_subtask(subtask["id"]) if execute else None}
 
 
 @router.post("/ideas/{idea_id}/approve")
@@ -124,13 +129,12 @@ def post_approve_idea(idea_id: int, payload: ApproveIdeaRequest):
     """提案を承認し、Issue（とサブタスク）を作成する
 
     既存Issue配下の提案は、Issueを作らずサブタスクのみ作成する。
-    サブタスクも作成する場合は、作成後に実装の実行ジョブを投入する。
+    サブタスクも作成する場合、指定があれば作成後に実装の実行ジョブを投入する。
     """
     idea = _claim_or_raise(idea_id, payload.mode)
     issue_url, issue_title, subtask = None, "", None
     if target_issue_number(idea) is None:
-        idea, issue_url = _create_issue_for(idea)
-        issue_title = idea["title"]
+        idea, issue_url, issue_title = _create_issue_for(idea)
     if payload.mode == ApprovalMode.WITH_SUBTASK:
-        idea, subtask = _create_subtask_for(idea, issue_title)
+        idea, subtask = _create_subtask_for(idea, issue_title, payload.execute)
     return {"idea": idea, "issue_url": issue_url, "subtask": subtask}

@@ -395,6 +395,15 @@ Issue名・入力欄・作成ボタンは折り返さず1行に並べる。
   gap: 6px;
 }
 
+.idea-dialog-execute {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
 .idea-tab-button {
   font: inherit;
   font-size: 13px;
