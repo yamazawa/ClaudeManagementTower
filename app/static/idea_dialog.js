@@ -2,6 +2,7 @@
  * 提案一覧（アイデアマン）ダイアログ
  *
  * リポジトリごとにアイデア出しを実行し、提案を確認・承認・却下する。
+ * アイデア出しの実行時は、アイデアを出してほしい観点を任意で指定できる。
  * 提案は未処理／承認済み／却下済みのタブに分けて表示する。
  * アイデア出しの実行中は、最新ジョブを一定間隔で取得して状態を表示する。
  */
@@ -71,13 +72,14 @@ const IDEA_DIALOG_MESSAGES = {
   approved: (n) => `Issue #${n} に反映しました`,
 };
 
-// 表示中の提案一覧（projectId・表示中のタブ・操作中か）
+// 表示中の提案一覧（projectId・表示中のタブ・操作中か・観点の入力欄を前回の観点で埋めたか）
 let ideaDialogState = null;
 let ideaDialogPollTimer = null;
 
 async function openIdeaDialog(project) {
-  ideaDialogState = { projectId: project.id, tab: IDEA_TABS[0].tab, busy: false };
+  ideaDialogState = { projectId: project.id, tab: IDEA_TABS[0].tab, busy: false, focusFilled: false };
   document.getElementById("idea-dialog-title").textContent = IDEA_DIALOG_MESSAGES.title(project.display_name);
+  document.getElementById("idea-dialog-focus").value = "";
   setIdeaDialogMessage("");
   renderIdeaTabs();
   document.getElementById("idea-dialog").showModal();
@@ -150,6 +152,7 @@ async function refreshIdeaJob(wasActive = false) {
   const fetched = job !== undefined;
   const active = fetched && job !== null && IDEA_JOB_ACTIVE_STATUSES.includes(job.status);
   if (fetched) renderIdeaJob(job, active);
+  if (fetched) fillIdeaFocusOnce(state, job);
   if (wasActive && fetched && !active) await refreshIdeaList();
   if (!fetched || active) {
     const nextWasActive = fetched ? active : wasActive;
@@ -162,14 +165,29 @@ function renderIdeaJob(job, active) {
   status.textContent = job ? IDEA_JOB_STATUS_LABELS[job.status] || job.status : "";
   status.title = (job && (job.error_message || job.result_summary)) || "";
   document.getElementById("idea-dialog-run").disabled = active;
+  document.getElementById("idea-dialog-focus").disabled = active;
+}
+
+/**
+ * 観点の入力欄を前回のアイデア出しの観点で埋める
+ *
+ * 同じ観点で再実行しやすくするため、ダイアログを開いた直後に1回だけ行う。
+ * 入力済みの内容は上書きしない。
+ */
+function fillIdeaFocusOnce(state, job) {
+  if (state.focusFilled) return;
+  state.focusFilled = true;
+  const input = document.getElementById("idea-dialog-focus");
+  if (job && job.focus && !input.value) input.value = job.focus;
 }
 
 async function onRunIdeaGeneration() {
   const state = ideaDialogState;
   if (!state) return;
   document.getElementById("idea-dialog-run").disabled = true;
+  const focus = document.getElementById("idea-dialog-focus").value;
   try {
-    await postIdeaJson(`/api/projects/${state.projectId}/ideas/run`, {});
+    await postIdeaJson(`/api/projects/${state.projectId}/ideas/run`, { focus });
     setIdeaDialogMessage("");
   } catch (error) {
     setIdeaDialogMessage(`${IDEA_DIALOG_MESSAGES.runFailed}: ${error.message}`);
