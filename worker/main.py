@@ -123,28 +123,39 @@ def _execute_job(job_id: int, subtask: Subtask, project: Project) -> None:
 
 
 def _load_subtask_and_project(subtask_id: int) -> tuple[Subtask, Project]:
+    """ジョブ対象のサブタスクとプロジェクトを読み込む
+
+    削除済みの場合は、原因が分かるメッセージでRuntimeErrorを送出する。
+    """
     with SessionLocal() as session:
         subtask = session.get(Subtask, subtask_id)
+        if subtask is None:
+            raise RuntimeError(f"サブタスク(id={subtask_id})が見つかりません")
         project = session.get(Project, subtask.project_id)
+        if project is None:
+            raise RuntimeError(f"プロジェクト(id={subtask.project_id})が見つかりません")
         session.expunge(subtask)
         session.expunge(project)
     return subtask, project
 
 
+def _start_job(job_id: int, subtask_id: int, worker_id: int) -> None:
+    set_worker_state(worker_id, state="busy", current_job_id=job_id)
+    subtask, project = _load_subtask_and_project(subtask_id)
+    record_event(job_id, event_type="instruction", content=subtask.instruction)
+    _run_with_heartbeat(job_id, worker_id, lambda: _execute_job(job_id, subtask, project))
+
+
 def process_job(job: dict, worker_id: int) -> None:
     """実装ジョブを1件実行する
 
+    前処理を含む失敗は、実際のエラー内容をジョブに記録する。
     Claudeの利用上限による失敗は、failedと区別してrate_limitedにする。
     """
     job_id = job["job_id"]
     print(f"[worker] job {job_id} (subtask {job['subtask_id']}) を実行開始")
-    set_worker_state(worker_id, state="busy", current_job_id=job_id)
-
-    subtask, project = _load_subtask_and_project(job["subtask_id"])
-    record_event(job_id, event_type="instruction", content=subtask.instruction)
-
     try:
-        _run_with_heartbeat(job_id, worker_id, lambda: _execute_job(job_id, subtask, project))
+        _start_job(job_id, job["subtask_id"], worker_id)
     except Exception as exc:  # noqa: BLE001
         record_event(job_id, event_type="error", content=str(exc))
         status = STATUS_RATE_LIMITED if is_rate_limit_error(str(exc)) else "failed"
