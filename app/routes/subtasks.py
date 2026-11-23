@@ -32,6 +32,7 @@ from core.github_client import (
     get_pr_state,
     reopen_pr,
 )
+from core.job_queue import ExecutionJobStatus
 from core.lifecycle import LifecycleState
 from core.models import ExecutionJob, Project, Subtask
 from core.mr_naming import compose_mr_title, next_default_suffix
@@ -47,8 +48,6 @@ router = APIRouter(prefix="/api/subtasks")
 
 logger = logging.getLogger(__name__)
 
-# 実行中とみなすジョブの状態（実行中はマージさせない）
-ACTIVE_JOB_STATUSES = ("queued", "running")
 # Issue作成と並行して作るMRのブランチ名の接頭辞（Issue番号の代わりに一意な識別子を続ける）
 PENDING_BRANCH_PREFIX = "issue-new"
 # ブランチ名に含める一意な識別子の長さ
@@ -415,7 +414,7 @@ def _find_active_job(session, subtask_id: int) -> ExecutionJob | None:
     return (
         session.query(ExecutionJob)
         .filter_by(subtask_id=subtask_id)
-        .filter(ExecutionJob.status.in_(ACTIVE_JOB_STATUSES))
+        .filter(ExecutionJob.status.in_(ExecutionJobStatus.ACTIVE_STATES))
         .order_by(ExecutionJob.id)
         .first()
     )
@@ -542,7 +541,7 @@ def execute_subtask(subtask_id: int, payload: ExecuteSubtaskRequest | None = Non
         if payload is not None and payload.instruction:
             subtask.instruction = payload.instruction
 
-        job = ExecutionJob(subtask_id=subtask_id, status="queued")
+        job = ExecutionJob(subtask_id=subtask_id, status=ExecutionJobStatus.QUEUED)
         session.add(job)
         session.commit()
         session.refresh(job)

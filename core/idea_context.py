@@ -12,10 +12,11 @@ from sqlalchemy.orm import sessionmaker
 from core.db import SessionLocal
 from core.github_client import GitHubClientError, list_issues
 from core.ideas import IdeaCategory, IdeaStatus
+from core.job_queue import ExecutionJobStatus
 from core.models import ExecutionEvent, ExecutionJob, Idea, Project, Report, Subtask
 
 # 要確認・失敗として扱う実行ジョブの状態
-FAILED_JOB_STATES = ("failed", "needs_attention")
+FAILED_JOB_STATES = (ExecutionJobStatus.FAILED, ExecutionJobStatus.NEEDS_ATTENTION)
 EXCERPT_MAX_LENGTH = 500
 NONE_TEXT = "（なし）"
 ISSUE_FETCH_FAILED_TEXT = "（取得に失敗したため不明。重複に注意する）"

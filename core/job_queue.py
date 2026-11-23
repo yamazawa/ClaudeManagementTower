@@ -7,28 +7,60 @@ from sqlalchemy.orm import sessionmaker
 from core.db import SessionLocal, engine
 from core.models import ExecutionJob, Worker
 
+
+class ExecutionJobStatus:
+    """実装ジョブの状態
+
+    QUEUED : 待機中
+    RUNNING : 実行中
+    SUCCEEDED : 完了
+    FAILED : 失敗
+    NEEDS_ATTENTION : 要確認（心拍途絶・PR更新失敗など）
+    RATE_LIMITED : Claudeの利用上限で中断した（リセット後に自動で再投入する）
+    """
+
+    QUEUED = "queued"
+    RUNNING = "running"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+    NEEDS_ATTENTION = "needs_attention"
+    RATE_LIMITED = "rate_limited"
+
+    # 実行中とみなす状態（実行中はマージさせない）
+    ACTIVE_STATES = (QUEUED, RUNNING)
+
+
+class WorkerState:
+    """ワーカーの状態
+
+    IDLE : 待機中
+    BUSY : ジョブ実行中
+    """
+
+    IDLE = "idle"
+    BUSY = "busy"
+
+
 _CLAIM_SQL = text(
     """
     UPDATE execution_jobs
-    SET status = 'running'
+    SET status = :running
     WHERE id = (
         SELECT ej.id FROM execution_jobs ej
-        WHERE ej.status = 'queued'
+        WHERE ej.status = :queued
           AND NOT EXISTS (
             SELECT 1 FROM execution_jobs ej2
             WHERE ej2.subtask_id = ej.subtask_id
-              AND ej2.status = 'running'
+              AND ej2.status = :running
           )
         ORDER BY ej.queued_at
         LIMIT 1
     )
     RETURNING id, subtask_id
     """
-)
+).bindparams(running=ExecutionJobStatus.RUNNING, queued=ExecutionJobStatus.QUEUED)
 
 
-# 利用上限で中断したジョブの状態（リセット後に自動で再投入する）
-STATUS_RATE_LIMITED = "rate_limited"
 # ハートビートが途絶えて要確認にしたジョブの失敗理由
 STALE_JOB_ERROR_MESSAGE = "ワーカーからの応答が途絶えたため中断しました"
 
@@ -76,10 +108,12 @@ def register_worker(process_identifier: str, session_factory: sessionmaker = Ses
             session.query(Worker).filter_by(process_identifier=process_identifier).first()
         )
         if worker is None:
-            worker = Worker(process_identifier=process_identifier, state="idle", heartbeat_at=now)
+            worker = Worker(
+                process_identifier=process_identifier, state=WorkerState.IDLE, heartbeat_at=now
+            )
             session.add(worker)
         else:
-            worker.state = "idle"
+            worker.state = WorkerState.IDLE
             worker.heartbeat_at = now
         session.commit()
         session.refresh(worker)
@@ -128,12 +162,15 @@ def recover_stale_jobs(
     with session_factory() as session:
         stale_jobs = (
             session.query(ExecutionJob)
-            .filter(ExecutionJob.status == "running", ExecutionJob.heartbeat_at < threshold)
+            .filter(
+                ExecutionJob.status == ExecutionJobStatus.RUNNING,
+                ExecutionJob.heartbeat_at < threshold,
+            )
             .all()
         )
         recovered_ids = [job.id for job in stale_jobs]
         for job in stale_jobs:
-            job.status = "needs_attention"
+            job.status = ExecutionJobStatus.NEEDS_ATTENTION
             job.error_message = STALE_JOB_ERROR_MESSAGE
         session.commit()
     return recovered_ids
@@ -161,12 +198,15 @@ def requeue_rate_limited_jobs(
     with session_factory() as session:
         candidates = (
             session.query(ExecutionJob)
-            .filter(ExecutionJob.status == STATUS_RATE_LIMITED, ExecutionJob.ended_at < threshold)
+            .filter(
+                ExecutionJob.status == ExecutionJobStatus.RATE_LIMITED,
+                ExecutionJob.ended_at < threshold,
+            )
             .all()
         )
         targets = [job for job in candidates if not _has_newer_job(session, job)]
         for job in targets:
-            job.status = "queued"
+            job.status = ExecutionJobStatus.QUEUED
             job.exit_code = None
             job.ended_at = None
             job.error_message = None
