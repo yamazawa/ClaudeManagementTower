@@ -23,6 +23,7 @@
   --selection-busy-show-delay: 0.2s;
   --selection-busy-fade: 0.15s;
   --selection-busy-spinner-size: 16px;
+  --job-status-spinner-size: 10px;
   --state-badge-radius: 999px;
   --state-badge-padding: 0 8px;
   --state-badge-pulse-duration: 1.4s;
@@ -1019,6 +1020,38 @@ section.collapsed > .section-title-row {
 .job-status {
   margin: 6px 0 0;
   font-size: 13px;
+}
+
+/* 実装ジョブの状態ごとの見た目（app.jsのJOB_STATUS_CLASSと合わせる） */
+.job-status-active::before {
+  content: "";
+  display: inline-block;
+  width: var(--job-status-spinner-size);
+  height: var(--job-status-spinner-size);
+  margin-right: 6px;
+  vertical-align: -2px;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: selection-busy-spin 0.8s linear infinite;
+}
+
+.job-status-success {
+  color: var(--accent);
+}
+
+.job-status-warning {
+  color: var(--warning);
+}
+
+/* 失敗理由は1行に収め、全文はツールチップで出す */
+.job-status-error {
+  display: block;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
 }
 
 .report-frame {

@@ -47,7 +47,7 @@ def _latest_job_summary(session, subtask_id: int) -> dict | None:
     if job is None:
         return None
     has_report = session.query(Report).filter_by(job_id=job.id).first() is not None
-    return {"id": job.id, "status": job.status, "has_report": has_report}
+    return {"id": job.id, "status": job.status, "has_report": has_report, "error_message": job.error_message}
 
 
 class CreateIssueRequest(BaseModel):

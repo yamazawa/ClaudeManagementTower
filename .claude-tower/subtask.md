@@ -1,61 +1,65 @@
-# サブタスク: [IdeaMan] MRの状態を色付きバッジで表示するー①
+# サブタスク: [IdeaMan] 実装ジョブの状態表示を日本語・色分けにし、失敗理由を表示するー①
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-MRの状態を色付きバッジで表示する
+実装ジョブの状態表示を日本語・色分けにし、失敗理由を表示する
 
 ## 概要
 
-MR一覧とMR見出しの状態（Draft/Resolving/Resolved/Merging/Merged/Deploying/Deployed/Canceled）がすべて同じ灰色の小さい文字で表示され、一覧を見ただけでは進み具合が分かりにくい。状態ごとに色を変えたバッジで表示する。
+MR内容ペインの実装ジョブの状態が「状態: failed」のように英語のまま、色分けなしで表示される。状態を日本語にして色分けし、失敗した場合はその理由を画面に出す。
 
 ## 詳細
 
-・renderSubtaskStateで、状態に応じたクラス（state-resolving等）を付ける。
-・.subtask-stateを角の丸いバッジにし、状態ごとに背景色・文字色を割り当てる。
-・Resolving・Merging・Deployingは処理中と分かるよう、点滅などの動きを付ける。
-・マージ失敗を併記する場合は警告色にする。
-・色の値はstyle.cssの:rootの変数にまとめる。
+・ジョブ状態（queued/running/succeeded/failed/needs_attention等）の表示文言を定数にまとめ、日本語で表示する。
+・.job-statusに状態ごとのクラスを付け、実行中はスピナー、失敗・要確認は警告色、成功はアクセント色にする。
+・GET /api/jobs/{id} と _latest_job_summary の返却値に error_message を追加する。
+・失敗時は状態の下に error_message を表示し、長い文は末尾を省略してツールチップで全文を出す。
 
 ## 根拠
 
-app.js:1443では、どの状態でも同じclass="subtask-state"のspanで出力している。style.css:940-952で、.subtask-stateはすべての状態でcolor: var(--muted)・font-size: 12pxの1種類だけになっている。命名規則に合わないMR名には警告色と⚠記号を付けている（style.css:932-938）のに、状態には見た目の区別がない。ヘッダーのMRステータスフィルタで状態ごとの件数を出している（style.css:599-612）ので、一覧側でも状態を色で見分けられると対応が分かりやすい。
+app.js:1812とapp.js:2258で job.status の値をそのまま「状態: ${job.status}」として出している。ガイドラインの「Enum定義は日本語にせず、表示はConverterで変換する」に合っていない。.job-status（style.css:954-957）には状態ごとの見た目の指定がない。ExecutionJobにはerror_message列がある（core/models.py:66）が、app/routes/jobs.py:20-30とapp/routes/projects.py:50の返却値に含まれず、MR内容ペインで失敗理由が見えない。アイデアマンのダイアログでは error_message をツールチップに出している（idea_dialog.js:166）ので、画面ごとに表示が揃っていない。最近の実行でも「JSON message exceeded maximum buffer size」「TLS handshake timeout」などの失敗が続いており、理由が画面で見えると原因を追いやすい。
 
 ## 関連ファイル
 
-- app/static/app.js:1435
-- app/static/app.js:32
-- app/static/style.css:940
-- app/static/style.css:932
-## 実行指示（2026-11-23 06:42:45 UTC）
+- app/static/app.js:1805
+- app/static/app.js:2258
+- app/static/style.css:954
+- app/routes/jobs.py:20
+- app/routes/projects.py:40
+- core/models.py:66
+- app/static/idea_dialog.js:166
+## 実行指示（2026-11-23 06:44:20 UTC）
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-MRの状態を色付きバッジで表示する
+実装ジョブの状態表示を日本語・色分けにし、失敗理由を表示する
 
 ## 概要
 
-MR一覧とMR見出しの状態（Draft/Resolving/Resolved/Merging/Merged/Deploying/Deployed/Canceled）がすべて同じ灰色の小さい文字で表示され、一覧を見ただけでは進み具合が分かりにくい。状態ごとに色を変えたバッジで表示する。
+MR内容ペインの実装ジョブの状態が「状態: failed」のように英語のまま、色分けなしで表示される。状態を日本語にして色分けし、失敗した場合はその理由を画面に出す。
 
 ## 詳細
 
-・renderSubtaskStateで、状態に応じたクラス（state-resolving等）を付ける。
-・.subtask-stateを角の丸いバッジにし、状態ごとに背景色・文字色を割り当てる。
-・Resolving・Merging・Deployingは処理中と分かるよう、点滅などの動きを付ける。
-・マージ失敗を併記する場合は警告色にする。
-・色の値はstyle.cssの:rootの変数にまとめる。
+・ジョブ状態（queued/running/succeeded/failed/needs_attention等）の表示文言を定数にまとめ、日本語で表示する。
+・.job-statusに状態ごとのクラスを付け、実行中はスピナー、失敗・要確認は警告色、成功はアクセント色にする。
+・GET /api/jobs/{id} と _latest_job_summary の返却値に error_message を追加する。
+・失敗時は状態の下に error_message を表示し、長い文は末尾を省略してツールチップで全文を出す。
 
 ## 根拠
 
-app.js:1443では、どの状態でも同じclass="subtask-state"のspanで出力している。style.css:940-952で、.subtask-stateはすべての状態でcolor: var(--muted)・font-size: 12pxの1種類だけになっている。命名規則に合わないMR名には警告色と⚠記号を付けている（style.css:932-938）のに、状態には見た目の区別がない。ヘッダーのMRステータスフィルタで状態ごとの件数を出している（style.css:599-612）ので、一覧側でも状態を色で見分けられると対応が分かりやすい。
+app.js:1812とapp.js:2258で job.status の値をそのまま「状態: ${job.status}」として出している。ガイドラインの「Enum定義は日本語にせず、表示はConverterで変換する」に合っていない。.job-status（style.css:954-957）には状態ごとの見た目の指定がない。ExecutionJobにはerror_message列がある（core/models.py:66）が、app/routes/jobs.py:20-30とapp/routes/projects.py:50の返却値に含まれず、MR内容ペインで失敗理由が見えない。アイデアマンのダイアログでは error_message をツールチップに出している（idea_dialog.js:166）ので、画面ごとに表示が揃っていない。最近の実行でも「JSON message exceeded maximum buffer size」「TLS handshake timeout」などの失敗が続いており、理由が画面で見えると原因を追いやすい。
 
 ## 関連ファイル
 
-- app/static/app.js:1435
-- app/static/app.js:32
-- app/static/style.css:940
-- app/static/style.css:932
+- app/static/app.js:1805
+- app/static/app.js:2258
+- app/static/style.css:954
+- app/routes/jobs.py:20
+- app/routes/projects.py:40
+- core/models.py:66
+- app/static/idea_dialog.js:166
 

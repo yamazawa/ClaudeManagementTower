@@ -124,8 +124,43 @@ function isMergeActive(merge) {
   return !!merge && [MERGE_STATUS.queued, MERGE_STATUS.running].includes(merge.status);
 }
 
+// 実装ジョブの状態（core/job_queue.py・worker/main.pyと合わせる）
+const JOB_STATUS = {
+  queued: "queued",
+  running: "running",
+  succeeded: "succeeded",
+  failed: "failed",
+  needsAttention: "needs_attention",
+  rateLimited: "rate_limited",
+};
+const JOB_STATUS_LABELS = {
+  [JOB_STATUS.queued]: "実行待ち",
+  [JOB_STATUS.running]: "実行中",
+  [JOB_STATUS.succeeded]: "完了",
+  [JOB_STATUS.failed]: "失敗",
+  [JOB_STATUS.needsAttention]: "要確認",
+  [JOB_STATUS.rateLimited]: "利用上限で中断（上限リセット後に自動で再実行）",
+};
+const JOB_STATUS_PREFIX = "状態: ";
+
+// ジョブ状態の見た目（style.cssの.job-status-*と合わせる）
+const JOB_STATUS_CLASS = {
+  active: "job-status-active",
+  success: "job-status-success",
+  warning: "job-status-warning",
+};
+const JOB_STATUS_CLASSES = {
+  [JOB_STATUS.queued]: JOB_STATUS_CLASS.active,
+  [JOB_STATUS.running]: JOB_STATUS_CLASS.active,
+  [JOB_STATUS.succeeded]: JOB_STATUS_CLASS.success,
+  [JOB_STATUS.failed]: JOB_STATUS_CLASS.warning,
+  [JOB_STATUS.needsAttention]: JOB_STATUS_CLASS.warning,
+  [JOB_STATUS.rateLimited]: JOB_STATUS_CLASS.warning,
+};
+const JOB_STATUS_ERROR_CLASS = "job-status-error";
+
 // 実行中とみなすジョブの状態（実行中はMRの操作ボタンを無効化する）
-const ACTIVE_JOB_STATUSES = ["queued", "running"];
+const ACTIVE_JOB_STATUSES = [JOB_STATUS.queued, JOB_STATUS.running];
 
 // 操作中（API応答待ち・実装の実行中）のMRのID
 const busySubtaskIds = new Set();
@@ -1816,14 +1851,14 @@ function restoreJobState(s) {
   }
 
   const statusEl = document.querySelector(`.job-status[data-subtask-id="${s.id}"]`);
-  statusEl.textContent = `状態: ${job.status}`;
+  renderJobStatus(statusEl, job);
 
   if (isJobActive(job)) {
     pollJob(job.id, s.id);
     return;
   }
 
-  if (job.status === "succeeded" && job.has_report) {
+  if (job.status === JOB_STATUS.succeeded && job.has_report) {
     showReport(job.id, s.id);
   }
 }
@@ -1878,6 +1913,35 @@ function refreshSelectedSubtaskState() {
 
 function isJobActive(job) {
   return !!job && ACTIVE_JOB_STATUSES.includes(job.status);
+}
+
+/**
+ * 実装ジョブの状態表示
+ *
+ * 状態を日本語で表示し、状態ごとの見た目のクラスを付ける。
+ * 失敗理由がある場合は状態の下に表示し、ツールチップに全文を出す。
+ */
+function renderJobStatus(statusEl, job) {
+  const label = JOB_STATUS_LABELS[job.status] || job.status;
+  setJobStatusText(statusEl, `${JOB_STATUS_PREFIX}${label}`, JOB_STATUS_CLASSES[job.status]);
+  if (JOB_STATUS_CLASSES[job.status] !== JOB_STATUS_CLASS.warning || !job.error_message) return;
+  const errorEl = document.createElement("span");
+  errorEl.className = JOB_STATUS_ERROR_CLASS;
+  errorEl.textContent = job.error_message;
+  errorEl.title = job.error_message;
+  statusEl.appendChild(errorEl);
+}
+
+/**
+ * ジョブ状態欄の文言と見た目を差し替える
+ *
+ * 見た目のクラスを指定しない場合は補足の文言として薄く表示する。
+ */
+function setJobStatusText(statusEl, text, statusClass = null) {
+  statusEl.classList.remove(...Object.values(JOB_STATUS_CLASS));
+  if (statusClass) statusEl.classList.add(statusClass);
+  statusEl.classList.toggle("empty", !statusClass);
+  statusEl.textContent = text;
 }
 
 /**
@@ -2226,11 +2290,11 @@ async function executeSubtask(subtask) {
   const instruction = document.getElementById(`instruction-${subtask.id}`)?.value;
   const statusEl = document.querySelector(`.job-status[data-subtask-id="${subtask.id}"]`);
   if (!instruction) {
-    statusEl.textContent = "指示内容を入力してください";
+    setJobStatusText(statusEl, "指示内容を入力してください");
     return;
   }
   setSubtaskBusy(subtask.id, true);
-  statusEl.textContent = "実行待ち...";
+  setJobStatusText(statusEl, "実行待ち...", JOB_STATUS_CLASS.active);
 
   const response = await fetch(`/api/subtasks/${subtask.id}/execute`, {
     method: "POST",
@@ -2238,7 +2302,7 @@ async function executeSubtask(subtask) {
     body: JSON.stringify({ instruction }),
   }).catch(() => null);
   if (!response || !response.ok) {
-    statusEl.textContent = "実行を開始できませんでした";
+    setJobStatusText(statusEl, "実行を開始できませんでした", JOB_STATUS_CLASS.warning);
     setSubtaskBusy(subtask.id, false);
     return;
   }
@@ -2262,7 +2326,7 @@ async function pollJobLoop(jobId, subtaskId) {
     .then((r) => r.json())
     .catch(() => null);
   const statusEl = document.querySelector(`.job-status[data-subtask-id="${subtaskId}"]`);
-  if (statusEl && job) statusEl.textContent = `状態: ${job.status}`;
+  if (statusEl && job) renderJobStatus(statusEl, job);
 
   // 取得失敗時（サーバー再起動中など）も監視を継続する
   if (!job || isJobActive(job)) {
@@ -2275,7 +2339,7 @@ async function pollJobLoop(jobId, subtaskId) {
 }
 
 async function onJobFinished(job, jobId, subtaskId) {
-  if (job.status !== "succeeded") {
+  if (job.status !== JOB_STATUS.succeeded) {
     // 失敗時はジョブ状態を取り直してボタンを戻す
     await refreshSubtaskStates().catch(() => {});
     refreshSelectedSubtaskState();
