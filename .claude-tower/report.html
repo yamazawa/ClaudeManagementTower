@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実装レポート #220 サブタスク4</title>
+<title>実装レポート #233 サブタスク1</title>
 <style>
 body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; }
@@ -19,50 +19,39 @@ code { background: #f4f4f4; padding: 0 .3em; }
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#220 エキスパンダルール見直し</td></tr>
-<tr><th>サブタスク</th><td>エキスパンダルール見直しー④</td></tr>
-<tr><th>ブランチ</th><td><code>issue-220-subtask-4</code></td></tr>
+<tr><th>Issue</th><td>#233 [IdeaMan] アイデアマン設計案をgitに登録するか、9章の参照先を見直す</td></tr>
+<tr><th>サブタスク</th><td>アイデアマン設計案をgitに登録するか、9章の参照先を見直すー①</td></tr>
+<tr><th>ブランチ</th><td><code>issue-233-370cdd45-subtask-1</code></td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
-<p><span class="ok">成功</span>（ブラウザでの見た目の確認は未実施）</p>
-<p>①Issue・CLI・Idea・MR一覧の見出しの右隣に、作成欄と同様の一覧エキスパンダを追加した。</p>
-<p>②一覧エキスパンダは開いた状態を既定とした。</p>
-<p>③リポジトリ一覧・リポジトリ・Issue・MR・CLI/Idea内容のペインのエキスパンダを、開閉処理ごと削除した。</p>
+<p><span class="ok">成功</span></p>
+<p>アイデアマン設計案をgitに登録し、CLAUDE.mdに設計案の位置づけを追記した。</p>
 
 <h2>3. 変更内容</h2>
 <table>
 <tr><th>No.</th><th>ファイル</th><th>変更</th><th>コミット</th></tr>
-<tr><td>1</td><td><code>app/static/index.html</code></td><td>ペイン見出し行のエキスパンダを5箇所削除</td><td>c405714</td></tr>
-<tr><td>2</td><td><code>app/static/app.js</code></td><td>ペインの開閉・縦長表示時の自動展開の処理（<code>setSectionExpanded</code>・<code>autoExpandSection</code>・<code>setupExpanders</code>等）を削除</td><td>c405714</td></tr>
-<tr><td>3</td><td><code>app/static/repo_items.js</code></td><td>CLI・Idea選択時の自動展開呼び出しを削除</td><td>c405714</td></tr>
-<tr><td>4</td><td><code>app/static/style.css</code></td><td>閉じたペインのスタイル・無効時スタイルを削除し、エキスパンダの大きさを16pxに統一</td><td>c405714</td></tr>
-<tr><td>5</td><td><code>app/static/*.js/html/css</code></td><td>作成欄専用の開閉の仕組みを「開閉欄」（<code>fold-block</code>）として汎用化</td><td>11b42b5</td></tr>
-<tr><td>6</td><td><code>app/static/index.html</code></td><td>各一覧の見出しと一覧を開閉欄で囲み、エキスパンダ（既定で開）を追加</td><td>4a99f2b</td></tr>
-<tr><td>7</td><td><code>app/static/style.css</code></td><td>状態フィルタを<code>margin-left:auto</code>で右寄せにし、<code>.section-heading-with-filter</code>を削除</td><td>4a99f2b</td></tr>
+<tr><td>1</td><td><code>Input/アイデアマン_設計案.html</code></td><td>本体フォルダの未登録ファイルを内容を変えずに複製し、新規登録</td><td>b310759</td></tr>
+<tr><td>2</td><td><code>CLAUDE.md</code></td><td>参照ドキュメントの優先順位の直後に、設計案を未確定のv0.1とし9章の採用方式を優先する旨を追記</td><td>109c338</td></tr>
 </table>
 
 <h2>4. 自律判断した事項</h2>
 <table>
-<tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>CLI・Idea一覧にも一覧エキスパンダを付けた</td><td>作成欄はIssue・CLI・Idea・MRの4箇所にあり、共通操作は同じUIで提供する規約に従った。</td></tr>
-<tr><td>2</td><td>CLI・Idea内容のペインのエキスパンダも削除した</td><td>Issue表示・MR表示と同じ「表示」ペインであり、開閉処理を残さず「ロジックごと削除」の指示に沿うため。</td></tr>
-<tr><td>3</td><td>作成欄の開閉処理を汎用化して一覧でも共用した</td><td>同一処理の重複を避けるため。クラス名・関数名を作成欄専用から汎用名に変更した。</td></tr>
-<tr><td>4</td><td>エキスパンダの配置は「見出し文字列の右隣」、フィルタは右端</td><td>作成欄のエキスパンダと同じ配置にそろえた。</td></tr>
-<tr><td>5</td><td>未使用となった<code>.expander:disabled</code>スタイルも削除</td><td>エキスパンダを無効化する処理が存在しないため。</td></tr>
+<tr><th>No.</th><th>事項</th><th>判断</th><th>理由・前提</th></tr>
+<tr><td>1</td><td>登録するか書き写すか</td><td>gitに登録する</td><td>全文を確認し、実IP・ホスト名・トークン・認証情報・ユーザー名を含むパスが無かったため。記載のパスはリポジトリ相対の名称やAPIパスのみ。</td></tr>
+<tr><td>2</td><td>IMPLEMENTATION_PLAN.md 9章</td><td>変更しない</td><td>登録により253・268・269行目の参照先がclone先でも存在するようになるため。</td></tr>
+<tr><td>3</td><td>CLAUDE.mdへの追記</td><td>追記する（優先順位リストには加えず補足文とする）</td><td>未確定の設計案を確定事項の列に並べると誤読の恐れがあるため。採用方式は9章を優先と明記した。</td></tr>
 </table>
 
-<h2>5. テスト結果</h2>
-<p><code>./.venv/Scripts/python.exe -m pytest -q</code>：509件すべて成功。</p>
-<p><code>app.js</code>・<code>repo_items.js</code>の構文チェック（Node.js）：問題なし。</p>
-<p>フロントエンドの自動テストは無いため、画面での確認は未実施。</p>
+<h2>5. テスト</h2>
+<p>未実施。ドキュメントの追加・追記のみで、コードの変更が無いため。</p>
+<p><code>git status</code>で設計案が登録対象になったこと、コミット後に作業ツリーがクリーンなことを確認した。</p>
 
 <h2>6. 残課題・確認ポイント</h2>
 <ul>
-<li>一覧の見出し行で「〇〇一覧 &gt;」とフィルタの並びが崩れていないか、スマホ・PCで確認してほしい。</li>
-<li>一覧を閉じた状態は、リポジトリやIssueを切り替えても維持される（自動では開かない）。</li>
-<li>MRステータスフィルタ選択中もIssue一覧・MR一覧のエキスパンダは操作できる。</li>
-<li>縦長表示でペインを自動で開く処理を削除したため、各ペインは常に展開表示となる。</li>
+<li>本体フォルダには同名の未登録ファイルが残っている。マージ後に本体でpullすると「untrackedファイルが上書きされる」エラーになる可能性がある。内容は同一のため、pull前に本体側の未登録ファイルを削除または退避する必要がある。</li>
+<li>設計案本文に「\」付きの改行表記が残っているが、元ファイルのまま変更していない。</li>
+<li>CLAUDE.mdの追記文言が意図に合うかを確認してほしい。</li>
 </ul>
 </body>
 </html>
