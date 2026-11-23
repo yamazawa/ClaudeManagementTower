@@ -214,7 +214,7 @@ const SECTION_IDS = {
 function setSectionExpanded(sectionId, expanded) {
   const section = document.getElementById(sectionId);
   section.classList.toggle("collapsed", !expanded);
-  section.querySelector(".expander").setAttribute("aria-expanded", String(expanded));
+  section.querySelector(".section-title-row > .expander").setAttribute("aria-expanded", String(expanded));
 }
 
 /**
@@ -344,10 +344,25 @@ function setupHeaderOffset() {
  * ペインは自動で閉じず、利用者の開閉操作でのみ閉じる。
  */
 function setupExpanders() {
-  document.querySelectorAll("section .expander").forEach((button) => {
+  document.querySelectorAll(".section-title-row > .expander").forEach((button) => {
     const section = button.closest("section");
     button.addEventListener("click", () => {
       setSectionExpanded(section.id, !isSectionExpanded(section.id));
+    });
+  });
+}
+
+/**
+ * 作成欄のエキスパンダの初期化
+ *
+ * 作成欄は閉じた状態で始め、開いた場合のみ作成フォームを表示する。
+ */
+function setupCreateExpanders() {
+  document.querySelectorAll(".create-expander").forEach((button) => {
+    const block = button.closest(".create-block");
+    button.addEventListener("click", () => {
+      const expanded = !block.classList.toggle("collapsed");
+      button.setAttribute("aria-expanded", String(expanded));
     });
   });
 }
@@ -2470,6 +2485,7 @@ async function showReport(jobId, subtaskId) {
 
 setupHeaderOffset();
 setupExpanders();
+setupCreateExpanders();
 setupMrStatusFilter();
 updateDeployButton();
 document.getElementById("deploy-button").addEventListener("click", openDeployDialog);
