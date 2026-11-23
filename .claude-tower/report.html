@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実装レポート #207 サブタスク1</title>
+<title>実装レポート #220 サブタスク1</title>
 <style>
 body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; }
@@ -19,52 +19,53 @@ code { background: #f4f4f4; padding: 0 .3em; }
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#207 [IdeaMan] リポジトリ切り替え時は前回のIssue一覧をすぐ表示し、画面を止めずに再取得する</td></tr>
-<tr><th>サブタスク</th><td>リポジトリ切り替え時は前回のIssue一覧をすぐ表示し、画面を止めずに再取得するー①</td></tr>
-<tr><th>ブランチ</th><td><code>issue-207-subtask-1</code></td></tr>
+<tr><th>Issue</th><td>#220</td></tr>
+<tr><th>サブタスク</th><td>エキスパンダルール見直しー①（PR #221）</td></tr>
+<tr><th>ブランチ</th><td><code>issue-new-3b02bf33-subtask-1</code></td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
-<p><span class="ok">成功</span></p>
-<p>リポジトリ切り替え時、保持しているIssue一覧があればすぐ表示し、画面を止めずに最新の一覧へ差し替えるようにした。</p>
-<p>保持が無い初回のみ、従来どおり画面をブロックして「更新中…」を表示する。</p>
+<p><span class="ok">成功</span>（ブラウザでの動作確認は未実施）</p>
+<p>①ペインを自動で閉じないようにした。</p>
+<p>代わりにMR作成後とMRステータスフィルタの切り替え後に、画面の一番下までスクロールする。</p>
+<p>②ヘッダーを<code>position: fixed</code>にし、常に画面上端に表示するようにした。</p>
 
 <h2>3. 変更内容</h2>
 <table>
 <tr><th>No.</th><th>ファイル</th><th>変更</th><th>コミット</th></tr>
-<tr><td>1</td><td><code>app/static/app.js</code></td><td>リポジトリとフィルタの組ごとのIssue一覧保持（<code>issueListCache</code>）を追加。<code>fetchIssueList</code>の取得結果を保持する。</td><td>eb63a24</td></tr>
-<tr><td>2</td><td><code>app/static/app.js</code></td><td><code>pollOpenIssues</code>（<code>refreshOpenIssueNumbers</code>）で取得したOpen一覧も保持データに入れる。</td><td>eb63a24</td></tr>
-<tr><td>3</td><td><code>app/static/app.js</code></td><td><code>selectProject</code>で保持一覧があれば非ブロックで即描画し、続けて<code>reloadIssues({ blocking: false })</code>で差し替える。</td><td>7ae609e</td></tr>
+<tr><td>1</td><td><code>app/static/app.js</code></td><td>MR作成後の処理を<code>showCreatedSubtask</code>に共通化し、指示内容欄へのフォーカスと<code>scrollToPageBottom</code>を行う。Issue一覧・Issue内容を閉じる処理を削除。</td><td>cc2796b</td></tr>
+<tr><td>2</td><td><code>app/static/app.js</code></td><td><code>toggleMrStatusFilter</code>で再表示の完了を待ってから最下部へスクロール。そのため<code>onMrStatusFilterChanged</code>・<code>selectFirstVisibleProject</code>が完了待ちのPromiseを返すよう変更。</td><td>cc2796b</td></tr>
+<tr><td>3</td><td><code>app/static/app.js</code>, <code>app/static/repo_items.js</code></td><td><code>autoSetSectionExpanded</code>を開く専用の<code>autoExpandSection</code>に変更。初期表示・リポジトリ選択・Issue選択時に閉じる処理を削除。</td><td>423fe2f</td></tr>
+<tr><td>4</td><td><code>app/static/style.css</code>, <code>app/static/app.js</code></td><td>ヘッダーを<code>sticky</code>から<code>fixed</code>に変更。高さをResizeObserverで<code>--header-height</code>に反映し、bodyの上余白と<code>scroll-padding-top</code>に使う。</td><td>95d9c40</td></tr>
 </table>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>保持キーは通常時「リポジトリID＋状態フィルタ」、MRステータスフィルタ選択中は「<code>matchedIssueKey()</code>（リポジトリID＋対象Issue番号の組）」とした。</td><td>MRステータスフィルタ選択中は一覧の中身が絞り込み対象の番号で決まるため。</td></tr>
-<tr><td>2</td><td>保持一覧の即時描画も<code>runSelectionRequest</code>（<code>blocking: false</code>）経由とした。</td><td>先頭Issueの内容（DB上のMR一覧）の取得が必要なため。後発の要求で上書きしない既存の仕組みをそのまま使える。</td></tr>
-<tr><td>3</td><td>即時描画の後に別リポジトリへ切り替わっていた場合は再取得しない。</td><td>再取得の要求が後発扱いになり、切り替え先の取得結果を捨ててしまうのを防ぐため。</td></tr>
-<tr><td>4</td><td>配列でない応答（取得失敗時のエラー応答）は保持しない。</td><td>次回切り替え時に不正な値で描画しないため。</td></tr>
-<tr><td>5</td><td>保持データはメモリ上のみ（ページ再読み込みで消える）とした。</td><td>Issueの指示が「画面側で保持」のため。localStorage等への永続化は範囲外とした。</td></tr>
-<tr><td>6</td><td>選択中Issueが再取得で消えた場合は、既存の<code>fetchIssueSelection</code>の再選択処理に任せた。</td><td>Issueの指示どおり。</td></tr>
+<tr><td>1</td><td>「ステータストグル」はヘッダーのMRステータスフィルタと解釈した。</td><td>画面内でトグル動作するステータスの切り替えはこれのみのため。</td></tr>
+<tr><td>2</td><td>スクロールは利用者の操作時のみ行い、ポーリングで選択が自動移動した場合は行わない。</td><td>自動更新のたびに画面が動くと操作の妨げになるため。</td></tr>
+<tr><td>3</td><td>縦長表示での自動で開く処理は残した。</td><td>指示は「自動で閉じない」のみで、開く処理は選択内容を見せるのに必要なため。</td></tr>
+<tr><td>4</td><td>MR作成後の入力欄へのフォーカスは残し、スクロールのみ中央寄せから最下部に変更。<code>focusWithScroll</code>は呼び出し元が無くなったので削除。</td><td>作成直後に指示内容を入力する流れは維持するため。</td></tr>
+<tr><td>5</td><td>ヘッダーを<code>fixed</code>に変更した。</td><td><code>sticky</code>は親(body)の範囲内でしか効かない。mainの下マージンがbodyの外に出るため、最下部付近でヘッダーが押し出される。最下部へのスクロールを追加するため、確実に固定できる<code>fixed</code>を採用。</td></tr>
+<tr><td>6</td><td>Issue番号はPR #221の「Related to #220」から#220とした。</td><td>ブランチ名にIssue番号が無いため。</td></tr>
 </table>
 
 <h2>5. テスト</h2>
 <table>
-<tr><th>テスト</th><th>結果</th></tr>
-<tr><td><code>node --check app/static/app.js</code>（構文確認）</td><td>成功</td></tr>
+<tr><th>内容</th><th>結果</th></tr>
 <tr><td><code>./.venv/Scripts/python.exe -m pytest -q</code></td><td>509 passed</td></tr>
-<tr><td>ブラウザでの動作確認</td><td>未実施（実行時の制約により、起動しての動作確認は人間に依頼する）</td></tr>
+<tr><td><code>node --check</code>（app.js・repo_items.js、各コミット時点の app.js）</td><td>構文エラーなし</td></tr>
+<tr><td>ブラウザでの動作確認</td><td>未実施（フロントエンドの自動テストが無く、起動確認は人間に依頼する規約のため）</td></tr>
 </table>
 
-<h2>6. 残課題・リスク・確認ポイント</h2>
+<h2>6. 残課題・レビュー時の確認ポイント</h2>
 <ul>
-<li>ブラウザでの動作確認をお願いしたい。</li>
-<li>確認1：一度表示したリポジトリへ戻った際、一覧がすぐ表示され「更新中…」が出ないこと。</li>
-<li>確認2：起動直後（Open一覧の定期取得の完了後）は、初回の切り替えでもすぐ表示されること。</li>
-<li>確認3：再取得の完了後に一覧が最新へ差し替わり、消えたIssueを選択していた場合は先頭Issueが選択されること。</li>
-<li>確認4：素早く連続でリポジトリを切り替えても、最後に選んだリポジトリの一覧が表示されること。</li>
-<li>リスク：保持一覧の表示中は古い一覧が数秒見える。その間に古いIssueを操作できる。</li>
-<li>JSの自動テストは本プロジェクトに無いため追加していない。</li>
+<li>縦長表示（幅680px以下）・横長表示の両方でヘッダーが常に表示されるか。</li>
+<li>ヘッダーの折り返しで高さが変わった時に、本文の先頭がヘッダーに隠れないか。</li>
+<li>MR作成後（Issue作成と同時の場合を含む）に最下部までスクロールされるか。</li>
+<li>MRステータスフィルタの切り替え後、Issue一覧の再表示が終わってから最下部までスクロールされるか。</li>
+<li>横長表示では、最下部は最も長いペインの下端になる。意図と違う場合は調整が必要。</li>
+<li><code>SECTION_IDS.projects</code>は参照が無くなったが、ペインIDの定義として残した。</li>
 </ul>
 </body>
 </html>
