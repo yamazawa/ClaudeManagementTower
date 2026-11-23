@@ -29,6 +29,8 @@ _CLAIM_SQL = text(
 
 # 利用上限で中断したジョブの状態（リセット後に自動で再投入する）
 STATUS_RATE_LIMITED = "rate_limited"
+# ハートビートが途絶えて要確認にしたジョブの失敗理由
+STALE_JOB_ERROR_MESSAGE = "ワーカーからの応答が途絶えたため中断しました"
 
 _PROCESS_IDENTIFIER_PREFIX = "worker"
 
@@ -132,6 +134,7 @@ def recover_stale_jobs(
         recovered_ids = [job.id for job in stale_jobs]
         for job in stale_jobs:
             job.status = "needs_attention"
+            job.error_message = STALE_JOB_ERROR_MESSAGE
         session.commit()
     return recovered_ids
 
@@ -166,6 +169,7 @@ def requeue_rate_limited_jobs(
             job.status = "queued"
             job.exit_code = None
             job.ended_at = None
+            job.error_message = None
         session.commit()
         return [job.id for job in targets]
 
@@ -188,12 +192,14 @@ def finish_job(
     job_id: int,
     status: str,
     exit_code: int,
+    error_message: str | None = None,
     session_factory: sessionmaker = SessionLocal,
 ) -> None:
     with session_factory() as session:
         job = session.get(ExecutionJob, job_id)
         job.status = status
         job.exit_code = exit_code
+        job.error_message = error_message
         job.ended_at = datetime.now(timezone.utc)
         session.commit()
 

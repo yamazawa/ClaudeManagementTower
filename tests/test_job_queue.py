@@ -4,6 +4,7 @@ from sqlalchemy.orm import sessionmaker
 
 from core.db import init_db, make_engine
 from core.job_queue import (
+    STALE_JOB_ERROR_MESSAGE,
     claim_next_job,
     cleanup_stale_workers,
     delete_all_workers,
@@ -117,6 +118,19 @@ def test_recover_stale_jobs_flags_jobs_without_recent_heartbeat(tmp_path):
     with session_factory() as session:
         reloaded = session.get(ExecutionJob, job["job_id"])
         assert reloaded.status == "needs_attention"
+        assert reloaded.error_message == STALE_JOB_ERROR_MESSAGE
+
+
+def test_finish_job_saves_error_message(tmp_path):
+    _, session_factory = _setup(tmp_path)
+    _add_subtask_and_jobs(session_factory, job_count=1)
+
+    finish_job(1, status="failed", exit_code=1, error_message="boom", session_factory=session_factory)
+
+    with session_factory() as session:
+        job = session.get(ExecutionJob, 1)
+        assert job.status == "failed"
+        assert job.error_message == "boom"
 
 
 def test_cleanup_stale_workers_removes_dead_worker_rows(tmp_path):
@@ -197,6 +211,7 @@ def _set_job_state(session_factory, job_id: int, status: str, ended_at) -> None:
         job = session.get(ExecutionJob, job_id)
         job.status = status
         job.ended_at = ended_at
+        job.error_message = "limit"
         session.commit()
 
 
@@ -210,6 +225,7 @@ def test_requeue_rate_limited_jobs_after_delay(tmp_path):
         job = session.get(ExecutionJob, 1)
         assert job.status == "queued"
         assert job.ended_at is None
+        assert job.error_message is None
 
 
 def test_requeue_rate_limited_jobs_waits_for_delay(tmp_path):

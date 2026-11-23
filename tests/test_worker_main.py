@@ -66,17 +66,21 @@ def _run_failing_job(monkeypatch, message: str) -> list:
     monkeypatch.setattr(worker_main, "_load_subtask_and_project", lambda subtask_id: (subtask, object()))
     monkeypatch.setattr(worker_main, "record_event", lambda *a, **k: None)
     monkeypatch.setattr(worker_main, "_run_with_heartbeat", failing)
-    monkeypatch.setattr(worker_main, "finish_job", lambda job_id, status, exit_code: finished.append(status))
+    monkeypatch.setattr(
+        worker_main,
+        "finish_job",
+        lambda job_id, status, exit_code, error_message: finished.append((status, error_message)),
+    )
     worker_main.process_job({"job_id": 1, "subtask_id": 1}, 1)
     return finished
 
 
 def test_process_job_marks_rate_limited_on_limit_error(monkeypatch):
-    assert _run_failing_job(monkeypatch, LIMIT_MESSAGE) == ["rate_limited"]
+    assert _run_failing_job(monkeypatch, LIMIT_MESSAGE) == [("rate_limited", LIMIT_MESSAGE)]
 
 
 def test_process_job_marks_failed_on_other_error(monkeypatch):
-    assert _run_failing_job(monkeypatch, "boom") == ["failed"]
+    assert _run_failing_job(monkeypatch, "boom") == [("failed", "boom")]
 
 
 @pytest.mark.parametrize(
@@ -112,7 +116,9 @@ def test_finalize_success_returns_needs_attention_when_mark_ready_fails(monkeypa
     monkeypatch.setattr(worker_main, "mark_pr_ready", fail)
     monkeypatch.setattr(worker_main, "SessionLocal", lambda: pytest.fail("not expected"))
 
-    assert worker_main._finalize_success(1, subtask, project, "wt", "done") == "needs_attention"
+    status, error_message = worker_main._finalize_success(1, subtask, project, "wt", "done")
+    assert status == "needs_attention"
+    assert "TLS handshake timeout" in error_message
     assert events[-1]["event_type"] == "error"
     assert "TLS handshake timeout" in events[-1]["content"]
 
@@ -138,5 +144,5 @@ def test_finalize_success_marks_resolved_when_mark_ready_succeeds(monkeypatch):
     monkeypatch.setattr(worker_main, "mark_pr_ready", lambda repo, number: None)
     monkeypatch.setattr(worker_main, "SessionLocal", FakeSession)
 
-    assert worker_main._finalize_success(1, subtask, project, "wt", "done") == "succeeded"
+    assert worker_main._finalize_success(1, subtask, project, "wt", "done") == ("succeeded", None)
     assert db_subtask.lifecycle_state == worker_main.LifecycleState.RESOLVED

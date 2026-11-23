@@ -79,8 +79,10 @@ def _run_with_heartbeat(job_id: int, worker_id: int, action: Callable[[], None])
         thread.join()
 
 
-def _finalize_success(job_id: int, subtask: Subtask, project: Project, worktree_path: str, result_text: str) -> str:
-    """Claude実行後の後処理を行い、ジョブの終了状態を返す
+def _finalize_success(
+    job_id: int, subtask: Subtask, project: Project, worktree_path: str, result_text: str
+) -> tuple[str, str | None]:
+    """Claude実行後の後処理を行い、ジョブの終了状態と失敗理由を返す
 
     Draft解除に失敗した場合、Claudeの作業結果は残っているためneeds_attentionとする。
     """
@@ -89,17 +91,18 @@ def _finalize_success(job_id: int, subtask: Subtask, project: Project, worktree_
         record_event(job_id, event_type="warning", content=".claude-tower/report.htmlが見つからない")
 
     if not subtask.github_pr_number:
-        return "succeeded"
+        return "succeeded", None
     try:
         mark_pr_ready(project.github_repo, subtask.github_pr_number)
     except GitHubClientError as exc:
-        record_event(job_id, event_type="error", content=f"PRのDraft解除に失敗: {exc}")
-        return "needs_attention"
+        message = f"PRのDraft解除に失敗: {exc}"
+        record_event(job_id, event_type="error", content=message)
+        return "needs_attention", message
     with SessionLocal() as session:
         db_subtask = session.get(Subtask, subtask.id)
         db_subtask.lifecycle_state = LifecycleState.RESOLVED
         session.commit()
-    return "succeeded"
+    return "succeeded", None
 
 
 def _execute_job(job_id: int, subtask: Subtask, project: Project) -> None:
@@ -114,8 +117,8 @@ def _execute_job(job_id: int, subtask: Subtask, project: Project) -> None:
         db_job = session.get(ExecutionJob, job_id)
         db_job.claude_session_id = session_id
         session.commit()
-    status = _finalize_success(job_id, subtask, project, worktree_path, result_text or "")
-    finish_job(job_id, status=status, exit_code=0)
+    status, error_message = _finalize_success(job_id, subtask, project, worktree_path, result_text or "")
+    finish_job(job_id, status=status, exit_code=0, error_message=error_message)
     print(f"[worker] job {job_id} 完了({status}): {result_text}")
 
 
@@ -145,7 +148,7 @@ def process_job(job: dict, worker_id: int) -> None:
     except Exception as exc:  # noqa: BLE001
         record_event(job_id, event_type="error", content=str(exc))
         status = STATUS_RATE_LIMITED if is_rate_limit_error(str(exc)) else "failed"
-        finish_job(job_id, status=status, exit_code=1)
+        finish_job(job_id, status=status, exit_code=1, error_message=str(exc))
         print(f"[worker] job {job_id} 失敗（{status}）: {exc}")
 
 
