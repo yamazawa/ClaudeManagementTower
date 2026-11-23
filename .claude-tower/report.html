@@ -2,61 +2,65 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実装レポート #231 サブタスク1</title>
+<title>実行レポート Issue #227 サブタスク1</title>
 <style>
 body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; }
 h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; padding-bottom: .2em; margin-top: 1.6em; }
-table { border-collapse: collapse; margin: .5em 0; }
+table { border-collapse: collapse; }
 th, td { border: 1px solid #bbb; padding: .3em .6em; text-align: left; vertical-align: top; }
-th { background: #f0f0f0; }
-.ok { color: #fff; background: #2a7a2a; padding: .1em .6em; border-radius: 4px; }
-code { background: #f4f4f4; padding: 0 .3em; }
+th { background: #f2f2f2; }
+.ok { color: #fff; background: #2e7d32; padding: .1em .6em; border-radius: 3px; }
+code { background: #f4f4f4; padding: 0 .2em; }
 </style>
 </head>
 <body>
-<h1>実装レポート</h1>
+<h1>実行レポート</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#231 [IdeaMan] 運用中DBのスキーマ変更方針を3章に明文化する</td></tr>
-<tr><th>サブタスク</th><td>運用中DBのスキーマ変更方針を3章に明文化するー①</td></tr>
-<tr><th>ブランチ</th><td><code>issue-231-e6bb311b-subtask-1</code></td></tr>
+<tr><th>Issue</th><td>#227 [IdeaMan] 起動時に、承認処理中のまま残った提案を復旧する</td></tr>
+<tr><th>サブタスク</th><td>サブタスク1（PR #228、base: master）</td></tr>
+<tr><th>ブランチ</th><td><code>issue-227-0b6c3ec7-subtask-1</code></td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
 <p><span class="ok">成功</span></p>
-<p>①3章No.3の採用方針を、変更の種類ごとに分けて書き直した。</p>
-<p>②<code>core/db.py</code>の<code>ADDED_COLUMNS</code>に追記条件のコメントを追加した。</p>
-<p>③9章No.19を3章No.3を参照する形に簡略化した。</p>
+<p>起動時に承認処理中（approved_*）の提案を承認前の状態へ戻す処理を追加した。</p>
 
-<h2>3. 変更内容</h2>
+<h2>3. 実施した変更</h2>
 <table>
-<tr><th>No.</th><th>ファイル</th><th>変更</th><th>コミット</th></tr>
-<tr><td>1</td><td><code>IMPLEMENTATION_PLAN.md</code> 117行</td><td>3章No.3を開発中・列追加（確認不要）・破壊的変更（事前確認）に分けて記載</td><td>3c0d45d</td></tr>
-<tr><td>2</td><td><code>IMPLEMENTATION_PLAN.md</code> 279行</td><td>9章No.19から個別列の列挙を削除し、3章No.3参照に変更</td><td>3c0d45d</td></tr>
-<tr><td>3</td><td><code>core/db.py</code> 25〜30行</td><td>ADDED_COLUMNSへの追記条件をコメントで追加（コードの動作変更なし）</td><td>0cb35a8</td></tr>
+<tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
+<tr><td>1</td><td><code>core/idea_approval.py</code></td><td>戻す規則を<code>_release</code>に切り出し、<code>release_claim</code>と新設の<code>recover_interrupted_claims</code>で共用</td></tr>
+<tr><td>2</td><td><code>app/main.py</code></td><td>lifespanで<code>recover_interrupted_sessions</code>の直後に<code>recover_interrupted_claims</code>を呼び出し</td></tr>
+<tr><td>3</td><td><code>tests/test_idea_approval.py</code></td><td>状態ごとの復旧結果のテストを2件追加</td></tr>
+<tr><td>4</td><td><code>IMPLEMENTATION_PLAN.md</code></td><td>9章「人間の確認が必要な事項」の手動DB修正の記述を更新し、Issue重複の残存リスクを追記</td></tr>
 </table>
+<p>コミット：5f811d7（復旧処理＋テスト）、78cd315（起動時の呼び出し）、800265f（9章更新）</p>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>「既定値必須」を「NOT NULL列は既定値必須、既定値なしの列はNULL許容」と書いた</td><td>登録済みの<code>idea_jobs.idea_session_id</code>は既定値なしのNULL許容列であり、一律に既定値必須とすると既存登録と矛盾するため。提案の「NULL許容か既定値付き」とも整合する</td></tr>
-<tr><td>2</td><td>モデル定義との一致対象を「型・NULL可否・既定値・外部キー」と明記した</td><td>create_allで新規作成したDBと、列追加したDBの構造差を防ぐため</td></tr>
-<tr><td>3</td><td>9章No.19から追加済み列の列挙を削除した</td><td>列の一覧は<code>ADDED_COLUMNS</code>が正であり、二重管理を避けるため</td></tr>
-<tr><td>4</td><td>3章No.3の誤字「ガイデライン」を「ガイドライン」に修正した</td><td>同じセルを書き直すため合わせて修正した</td></tr>
-<tr><td>5</td><td>ドキュメントとコードコメントでコミットを分けた</td><td>コミットの分け方のルールに従った</td></tr>
+<tr><td>1</td><td>関数名を<code>recover_interrupted_claims</code>とした</td><td>既存の<code>recover_interrupted_sessions</code>と命名を揃え、<code>claim_idea</code>の対になる名前にした</td></tr>
+<tr><td>2</td><td>戻す規則を<code>_release</code>に共通化した</td><td>「release_claimと同じ規則」を重複なく保証するため</td></tr>
+<tr><td>3</td><td>復旧時に画面向けの通知や履歴は残さない</td><td>提案モデルに履歴欄が無く、状態が戻れば画面から再操作できるため</td></tr>
+<tr><td>4</td><td>Issue重複は自動検出せず、9章に人間の確認事項として記録した</td><td>指示どおり残存リスクの記録に留めた。GitHub側の検索による自動照合は範囲外と判断</td></tr>
 </table>
 
-<h2>5. テスト</h2>
-<p><code>./.venv/Scripts/python.exe -m pytest -q</code> を実行し、509件すべて成功した。</p>
-<p>変更はドキュメントとコメントのみで、コードの動作は変えていない。</p>
-
-<h2>6. 残課題・確認ポイント</h2>
+<h2>5. テスト結果</h2>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code>：511 passed</p>
 <ul>
-<li>3章No.3の方針は人間の運用判断を伴うため、確認不要とする範囲が意図どおりか確認してほしい。</li>
-<li>設計書本体（<code>Input\Claude監視塔_設計書.html</code>）の事前確認ルールは変更していない。</li>
-<li>既存の<code>ADDED_COLUMNS</code>5件がモデル定義と一致することは目視で確認済み。自動テストでの一致チェックは追加していない。</li>
+<li>APPROVED_ISSUE_ONLY／APPROVED_WITH_SUBTASK（Issue未作成）→ PROPOSED</li>
+<li>APPROVED_WITH_SUBTASK（Issue作成済み）→ ISSUE_CREATED</li>
+<li>PROPOSED・REJECTED・SUBTASK_CREATED は変更されない</li>
+</ul>
+<p>サーバー起動による実機確認は未実施（人間の使用中の可能性があるため）。</p>
+
+<h2>6. 残課題・レビュー観点</h2>
+<ul>
+<li>Issue作成成功後かつ番号記録前に停止した場合、再承認でIssueが重複しうる（9章に記録済み）。</li>
+<li>復旧は起動時のみ実行するため、承認処理と並行して走ることはない前提。</li>
+<li>レビュー時は<code>core/idea_approval.py</code>の<code>_release</code>切り出しで<code>release_claim</code>の挙動が変わっていないことを確認してほしい。</li>
 </ul>
 </body>
 </html>
