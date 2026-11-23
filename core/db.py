@@ -23,6 +23,11 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
 # create_allで追加されない既存テーブルへの後付け列（テーブル名, 列名, 列定義）
+#
+# 追記してよいのは既存データを消さない列追加のみ（IMPLEMENTATION_PLAN.md 3章No.3）。
+# NOT NULLの列は既定値(DEFAULT)を必須とし、既定値なしの列はNULL許容とする。
+# 列定義はcore/models.pyのモデル定義（型・NULL可否・既定値・外部キー）と一致させる。
+# 列の削除・型変更・テーブルの作り直し・データ移行はここで行わず、人間に事前確認する。
 ADDED_COLUMNS = [
     ("idea_jobs", "focus", "VARCHAR NOT NULL DEFAULT ''"),
     ("idea_jobs", "idea_session_id", "INTEGER REFERENCES idea_sessions(id)"),

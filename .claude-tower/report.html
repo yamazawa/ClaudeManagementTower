@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実装レポート #233 サブタスク1</title>
+<title>実装レポート #231 サブタスク1</title>
 <style>
 body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; }
@@ -19,39 +19,44 @@ code { background: #f4f4f4; padding: 0 .3em; }
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#233 [IdeaMan] アイデアマン設計案をgitに登録するか、9章の参照先を見直す</td></tr>
-<tr><th>サブタスク</th><td>アイデアマン設計案をgitに登録するか、9章の参照先を見直すー①</td></tr>
-<tr><th>ブランチ</th><td><code>issue-233-370cdd45-subtask-1</code></td></tr>
+<tr><th>Issue</th><td>#231 [IdeaMan] 運用中DBのスキーマ変更方針を3章に明文化する</td></tr>
+<tr><th>サブタスク</th><td>運用中DBのスキーマ変更方針を3章に明文化するー①</td></tr>
+<tr><th>ブランチ</th><td><code>issue-231-e6bb311b-subtask-1</code></td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
 <p><span class="ok">成功</span></p>
-<p>アイデアマン設計案をgitに登録し、CLAUDE.mdに設計案の位置づけを追記した。</p>
+<p>①3章No.3の採用方針を、変更の種類ごとに分けて書き直した。</p>
+<p>②<code>core/db.py</code>の<code>ADDED_COLUMNS</code>に追記条件のコメントを追加した。</p>
+<p>③9章No.19を3章No.3を参照する形に簡略化した。</p>
 
 <h2>3. 変更内容</h2>
 <table>
 <tr><th>No.</th><th>ファイル</th><th>変更</th><th>コミット</th></tr>
-<tr><td>1</td><td><code>Input/アイデアマン_設計案.html</code></td><td>本体フォルダの未登録ファイルを内容を変えずに複製し、新規登録</td><td>b310759</td></tr>
-<tr><td>2</td><td><code>CLAUDE.md</code></td><td>参照ドキュメントの優先順位の直後に、設計案を未確定のv0.1とし9章の採用方式を優先する旨を追記</td><td>109c338</td></tr>
+<tr><td>1</td><td><code>IMPLEMENTATION_PLAN.md</code> 117行</td><td>3章No.3を開発中・列追加（確認不要）・破壊的変更（事前確認）に分けて記載</td><td>3c0d45d</td></tr>
+<tr><td>2</td><td><code>IMPLEMENTATION_PLAN.md</code> 279行</td><td>9章No.19から個別列の列挙を削除し、3章No.3参照に変更</td><td>3c0d45d</td></tr>
+<tr><td>3</td><td><code>core/db.py</code> 25〜30行</td><td>ADDED_COLUMNSへの追記条件をコメントで追加（コードの動作変更なし）</td><td>0cb35a8</td></tr>
 </table>
 
 <h2>4. 自律判断した事項</h2>
 <table>
-<tr><th>No.</th><th>事項</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>登録するか書き写すか</td><td>gitに登録する</td><td>全文を確認し、実IP・ホスト名・トークン・認証情報・ユーザー名を含むパスが無かったため。記載のパスはリポジトリ相対の名称やAPIパスのみ。</td></tr>
-<tr><td>2</td><td>IMPLEMENTATION_PLAN.md 9章</td><td>変更しない</td><td>登録により253・268・269行目の参照先がclone先でも存在するようになるため。</td></tr>
-<tr><td>3</td><td>CLAUDE.mdへの追記</td><td>追記する（優先順位リストには加えず補足文とする）</td><td>未確定の設計案を確定事項の列に並べると誤読の恐れがあるため。採用方式は9章を優先と明記した。</td></tr>
+<tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
+<tr><td>1</td><td>「既定値必須」を「NOT NULL列は既定値必須、既定値なしの列はNULL許容」と書いた</td><td>登録済みの<code>idea_jobs.idea_session_id</code>は既定値なしのNULL許容列であり、一律に既定値必須とすると既存登録と矛盾するため。提案の「NULL許容か既定値付き」とも整合する</td></tr>
+<tr><td>2</td><td>モデル定義との一致対象を「型・NULL可否・既定値・外部キー」と明記した</td><td>create_allで新規作成したDBと、列追加したDBの構造差を防ぐため</td></tr>
+<tr><td>3</td><td>9章No.19から追加済み列の列挙を削除した</td><td>列の一覧は<code>ADDED_COLUMNS</code>が正であり、二重管理を避けるため</td></tr>
+<tr><td>4</td><td>3章No.3の誤字「ガイデライン」を「ガイドライン」に修正した</td><td>同じセルを書き直すため合わせて修正した</td></tr>
+<tr><td>5</td><td>ドキュメントとコードコメントでコミットを分けた</td><td>コミットの分け方のルールに従った</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<p>未実施。ドキュメントの追加・追記のみで、コードの変更が無いため。</p>
-<p><code>git status</code>で設計案が登録対象になったこと、コミット後に作業ツリーがクリーンなことを確認した。</p>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code> を実行し、509件すべて成功した。</p>
+<p>変更はドキュメントとコメントのみで、コードの動作は変えていない。</p>
 
 <h2>6. 残課題・確認ポイント</h2>
 <ul>
-<li>本体フォルダには同名の未登録ファイルが残っている。マージ後に本体でpullすると「untrackedファイルが上書きされる」エラーになる可能性がある。内容は同一のため、pull前に本体側の未登録ファイルを削除または退避する必要がある。</li>
-<li>設計案本文に「\」付きの改行表記が残っているが、元ファイルのまま変更していない。</li>
-<li>CLAUDE.mdの追記文言が意図に合うかを確認してほしい。</li>
+<li>3章No.3の方針は人間の運用判断を伴うため、確認不要とする範囲が意図どおりか確認してほしい。</li>
+<li>設計書本体（<code>Input\Claude監視塔_設計書.html</code>）の事前確認ルールは変更していない。</li>
+<li>既存の<code>ADDED_COLUMNS</code>5件がモデル定義と一致することは目視で確認済み。自動テストでの一致チェックは追加していない。</li>
 </ul>
 </body>
 </html>
