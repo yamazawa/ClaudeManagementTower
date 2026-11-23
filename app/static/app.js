@@ -2221,7 +2221,20 @@ async function createAndOpenIssue(form, projectId, title, statusEl) {
   const created = await createIssueWithSubtask(projectId, title, statusEl);
   if (!created) return;
   if (form.title.value === title) form.reset();
+  collapseCreatedIssueForm(form, statusEl, created);
   if (projectId === currentProjectId) await openCreatedIssueAndSubtask(created.issue, created.subtaskId);
+}
+
+/**
+ * IssueとMRの作成完了後にIssue作成欄を閉じる
+ *
+ * MR作成のみ失敗した場合は、失敗の表示を残すため閉じない。
+ * 次に開いた時に完了表示が残らないよう、状態表示を消す。
+ */
+function collapseCreatedIssueForm(form, statusEl, created) {
+  if (created.subtaskId === null) return;
+  statusEl.textContent = "";
+  collapseCreateBlock(form);
 }
 
 /**
@@ -2362,6 +2375,7 @@ async function onSubmitSubtaskForm(event) {
       form.querySelector("button").disabled = false;
       return;
     }
+    collapseCreateBlock(form);
     await openCreatedSubtask(issueNumber, body.id);
   });
 }
