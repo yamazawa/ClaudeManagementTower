@@ -1,65 +1,34 @@
-# サブタスク: [IdeaMan] 実装ジョブの状態表示を日本語・色分けにし、失敗理由を表示するー①
+# サブタスク: [IdeaMan] MR状態の定期同期をリポジトリごとに並行実行し、1件の失敗で他を止めないー①
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-実装ジョブの状態表示を日本語・色分けにし、失敗理由を表示する
+MR状態の定期同期をリポジトリごとに並行実行し、1件の失敗で他を止めない
 
 ## 概要
 
-MR内容ペインの実装ジョブの状態が「状態: failed」のように英語のまま、色分けなしで表示される。状態を日本語にして色分けし、失敗した場合はその理由を画面に出す。
+MR状態の同期は全リポジトリを1件ずつ順番に処理するため、リポジトリが増えるほど画面への反映が遅れる。リポジトリごとに並行して実行し、失敗もリポジトリ単位に閉じ込める。
 
 ## 詳細
 
-・ジョブ状態（queued/running/succeeded/failed/needs_attention等）の表示文言を定数にまとめ、日本語で表示する。
-・.job-statusに状態ごとのクラスを付け、実行中はスピナー、失敗・要確認は警告色、成功はアクセント色にする。
-・GET /api/jobs/{id} と _latest_job_summary の返却値に error_message を追加する。
-・失敗時は状態の下に error_message を表示し、長い文は末尾を省略してツールチップで全文を出す。
+- sync_all_projectsで、リポジトリごとのgh pr list実行をThreadPoolExecutorで並行して実行する。DBセッションはリポジトリごとに分ける。
+- 例外はリポジトリ単位で捕まえてログに残し、他のリポジトリの同期は続ける。
+- 同時実行数は定数にまとめ、GitHubのレート制限を考えて小さめにする。
+- 2リポジトリのうち1件が失敗しても、もう1件が反映されることをpytestで確認する。
 
 ## 根拠
 
-app.js:1812とapp.js:2258で job.status の値をそのまま「状態: ${job.status}」として出している。ガイドラインの「Enum定義は日本語にせず、表示はConverterで変換する」に合っていない。.job-status（style.css:954-957）には状態ごとの見た目の指定がない。ExecutionJobにはerror_message列がある（core/models.py:66）が、app/routes/jobs.py:20-30とapp/routes/projects.py:50の返却値に含まれず、MR内容ペインで失敗理由が見えない。アイデアマンのダイアログでは error_message をツールチップに出している（idea_dialog.js:166）ので、画面ごとに表示が揃っていない。最近の実行でも「JSON message exceeded maximum buffer size」「TLS handshake timeout」などの失敗が続いており、理由が画面で見えると原因を追いやすい。
+- core/pr_sync.py:121-125 のsync_all_projectsは、全リポジトリを内包表記で順番に処理している。1件あたりgh pr list --state all --limit 200にclosingIssuesReferences付きで実行するため、重い問い合わせになる。
+- core/pr_sync.py:142-149 では例外をループ全体で捕まえているため、途中のリポジトリで失敗すると、残りのリポジトリはその回の同期が行われない。
+- 同期間隔は5秒（core/config.py:21）だが、1周にかかる時間はリポジトリ数に比例して延びる。
+- app.js:179の「サーバー側のPR同期間隔と合わせて10秒以内に反映させる」という前提は、リポジトリが増えると守れなくなる。
 
 ## 関連ファイル
 
-- app/static/app.js:1805
-- app/static/app.js:2258
-- app/static/style.css:954
-- app/routes/jobs.py:20
-- app/routes/projects.py:40
-- core/models.py:66
-- app/static/idea_dialog.js:166
-## 実行指示（2026-11-23 06:44:20 UTC）
-
-アイデアマンの提案を実装する。
-
-## 提案タイトル
-
-実装ジョブの状態表示を日本語・色分けにし、失敗理由を表示する
-
-## 概要
-
-MR内容ペインの実装ジョブの状態が「状態: failed」のように英語のまま、色分けなしで表示される。状態を日本語にして色分けし、失敗した場合はその理由を画面に出す。
-
-## 詳細
-
-・ジョブ状態（queued/running/succeeded/failed/needs_attention等）の表示文言を定数にまとめ、日本語で表示する。
-・.job-statusに状態ごとのクラスを付け、実行中はスピナー、失敗・要確認は警告色、成功はアクセント色にする。
-・GET /api/jobs/{id} と _latest_job_summary の返却値に error_message を追加する。
-・失敗時は状態の下に error_message を表示し、長い文は末尾を省略してツールチップで全文を出す。
-
-## 根拠
-
-app.js:1812とapp.js:2258で job.status の値をそのまま「状態: ${job.status}」として出している。ガイドラインの「Enum定義は日本語にせず、表示はConverterで変換する」に合っていない。.job-status（style.css:954-957）には状態ごとの見た目の指定がない。ExecutionJobにはerror_message列がある（core/models.py:66）が、app/routes/jobs.py:20-30とapp/routes/projects.py:50の返却値に含まれず、MR内容ペインで失敗理由が見えない。アイデアマンのダイアログでは error_message をツールチップに出している（idea_dialog.js:166）ので、画面ごとに表示が揃っていない。最近の実行でも「JSON message exceeded maximum buffer size」「TLS handshake timeout」などの失敗が続いており、理由が画面で見えると原因を追いやすい。
-
-## 関連ファイル
-
-- app/static/app.js:1805
-- app/static/app.js:2258
-- app/static/style.css:954
-- app/routes/jobs.py:20
-- app/routes/projects.py:40
-- core/models.py:66
-- app/static/idea_dialog.js:166
-
+- core/pr_sync.py:107
+- core/pr_sync.py:121
+- core/pr_sync.py:142
+- core/config.py:21
+- core/github_client.py:187
+- app/static/app.js:179
