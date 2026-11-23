@@ -167,6 +167,11 @@ CLI_DIALOG_POLICY_PROMPT = """
 4. Issueのクローズ、PRのマージは利用者が明示的に指示した場合のみ行う。
 """
 
+# CLIタブの対話で拒否するツールと拒否理由（画面に回答の経路が無いため）
+CLI_DIALOG_DENIED_TOOLS = {
+    "AskUserQuestion": "CLIタブでは選択肢付きの質問に回答できません。質問は応答文で行い、利用者の次の発言を待ってください。",
+}
+
 
 IDEA_MAN_POLICY_PROMPT = """
 あなたはClaude管理塔のアイデアマンです。
@@ -289,14 +294,29 @@ def _worktree_check(rules: AccessRules) -> DenialCheck:
     return check
 
 
-def restrict_to_worktree(worktree: str, rules: AccessRules | None = None) -> Callable:
+def _with_denied_tools(check: DenialCheck, denied_tools: dict[str, str] | None) -> DenialCheck:
+    """指定ツールを理由付きで拒否し、それ以外は元の判定に委ねる"""
+    if not denied_tools:
+        return check
+
+    def denied_check(tool_name: str, tool_input: dict) -> str | None:
+        return denied_tools.get(tool_name) or check(tool_name, tool_input)
+
+    return denied_check
+
+
+def restrict_to_worktree(
+    worktree: str, rules: AccessRules | None = None, denied_tools: dict[str, str] | None = None
+) -> Callable:
     """Claude参照ルールに沿って、ツールの使用可否を判定する
 
     書き込みは対象worktreeと共有ルート配下（他worktree・管理塔自身を除く）に限る。
     読み取り系ツールは場所を問わず許可する。
     参照禁止のファイルは、読み取り・書き込み・シェルのいずれも拒否する。
+    denied_toolsに指定したツールは、対応する理由で拒否する。
     """
-    return _to_can_use_tool(_worktree_check(rules or default_access_rules(worktree)))
+    check = _worktree_check(rules or default_access_rules(worktree))
+    return _to_can_use_tool(_with_denied_tools(check, denied_tools))
 
 
 async def run_claude(
@@ -305,12 +325,13 @@ async def run_claude(
     resume: str | None = None,
     on_message: Callable[[object], None] | None = None,
     policy_prompt: str = AGENT_POLICY_PROMPT,
+    denied_tools: dict[str, str] | None = None,
 ) -> tuple[str | None, str | None]:
     rules = default_access_rules(worktree)
     options = ClaudeAgentOptions(
         cwd=worktree,
-        can_use_tool=restrict_to_worktree(worktree, rules),
-        hooks=_to_pre_tool_use_hooks(_worktree_check(rules)),
+        can_use_tool=restrict_to_worktree(worktree, rules, denied_tools),
+        hooks=_to_pre_tool_use_hooks(_with_denied_tools(_worktree_check(rules), denied_tools)),
         permission_mode="acceptEdits",
         resume=resume,
         max_buffer_size=MAX_BUFFER_SIZE,
