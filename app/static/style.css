@@ -47,6 +47,7 @@
   --state-merge-failed-bg: #fdf0e1;
   --state-merge-failed-fg: var(--warning);
   --cli-log-height: 60vh;
+  --cli-tool-error-bg: #fdf0e1;
   --repo-item-input-min-height: 90px;
 }
 
@@ -370,6 +371,28 @@ Issue名・入力欄・作成ボタンは折り返さず1行に並べる。
   padding: 2px 10px;
   color: var(--muted);
   font: 12.5px/1.5 ui-monospace, Consolas, monospace;
+}
+
+.cli-message-tool_result,
+.cli-message-tool_error {
+  margin-left: 16px;
+  padding: 2px 10px;
+  font: 12px/1.5 ui-monospace, Consolas, monospace;
+}
+
+.cli-message-tool_result {
+  color: var(--muted);
+  border-left: 2px solid var(--line);
+}
+
+.cli-message-tool_result summary {
+  cursor: pointer;
+}
+
+.cli-message-tool_error {
+  color: var(--warning);
+  border-left: 2px solid var(--warning);
+  background: var(--cli-tool-error-bg);
 }
 
 .cli-message-error {

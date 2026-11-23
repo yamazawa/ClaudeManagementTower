@@ -10,7 +10,16 @@
 const CLI_VIEW_POLL_MS = 1500;
 
 // 発言の種類（core/cli_session.pyのCliMessageRoleと合わせる）
-const CLI_MESSAGE_ROLES = { user: "user", assistant: "assistant", tool: "tool", error: "error" };
+const CLI_MESSAGE_ROLES = {
+  user: "user",
+  assistant: "assistant",
+  tool: "tool",
+  toolResult: "tool_result",
+  toolError: "tool_error",
+  error: "error",
+};
+// ツールの実行結果で、この行数を超えるものは折りたたんで表示する
+const CLI_TOOL_RESULT_FOLD_LINES = 3;
 // 対話の状態（core/cli_session.pyのCliSessionStatusと合わせる）
 const CLI_SESSION_STATUS = { idle: "idle", running: "running" };
 
@@ -148,12 +157,35 @@ function stopCliViewPolling() {
 function appendCliMessage(message) {
   const log = document.getElementById("cli-view-log");
   log.querySelector(".cli-log-empty")?.remove();
-  const el = document.createElement("div");
   const role = Object.values(CLI_MESSAGE_ROLES).includes(message.role) ? message.role : CLI_MESSAGE_ROLES.assistant;
+  const el = isFoldedCliMessage(role, message.content)
+    ? createFoldedCliMessage(message.content)
+    : document.createElement("div");
   el.className = `cli-message cli-message-${role}`;
-  el.textContent = message.content;
+  if (el.tagName !== "DETAILS") el.textContent = message.content;
   log.appendChild(el);
   log.scrollTop = log.scrollHeight;
+}
+
+// 拒否・失敗は目立たせるため折りたたまない
+function isFoldedCliMessage(role, content) {
+  return role === CLI_MESSAGE_ROLES.toolResult && content.split("\n").length > CLI_TOOL_RESULT_FOLD_LINES;
+}
+
+/**
+ * 長いツールの実行結果を、先頭行のみ見せて折りたたむ
+ *
+ * クリックで全体を開く。
+ */
+function createFoldedCliMessage(content) {
+  const [firstLine, ...rest] = content.split("\n");
+  const details = document.createElement("details");
+  const summary = document.createElement("summary");
+  summary.textContent = firstLine;
+  const body = document.createElement("div");
+  body.textContent = rest.join("\n");
+  details.append(summary, body);
+  return details;
 }
 
 /**
