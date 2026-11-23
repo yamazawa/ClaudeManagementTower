@@ -10,6 +10,7 @@ from core.cli_session import recover_interrupted_sessions
 from core.claude_usage import start_refresh_loop as start_usage_refresh_loop
 from core.config import settings
 from core.db import ensure_default_project, init_db
+from core.idea_approval import recover_interrupted_claims
 from core.merge_queue import start_merge_loop
 from core.pr_sync import start_sync_loop
 
@@ -22,6 +23,7 @@ async def lifespan(app: FastAPI):
     init_db()
     ensure_default_project()
     recover_interrupted_sessions()
+    recover_interrupted_claims()
     stop_pr_sync = start_sync_loop(settings.pr_sync_interval_seconds)
     stop_merge_loop = start_merge_loop()
     stop_usage_refresh = start_usage_refresh_loop(settings.claude_usage_refresh_interval_seconds)
