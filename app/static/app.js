@@ -61,8 +61,10 @@ const MR_STATUS_FILTER_BUTTONS = [
 ];
 const MR_STATUS_FILTER_TOOLTIP = "のMRで絞り込み（全リポジトリでMRが無い場合は選択不可）";
 const MR_STATUS_POLL_MS = 3000;
-// MRステータスフィルタの選択中に隠す要素（既存フィルタ・作成フォーム）
-const MR_STATUS_FILTER_HIDDEN_IDS = ["issue-filter", "subtask-filter", "issue-create-block", "subtask-create-block"];
+// MRステータスフィルタの選択中に隠す既存フィルタ
+const MR_STATUS_FILTER_HIDDEN_IDS = ["issue-filter", "subtask-filter"];
+// MRステータスフィルタの選択時に閉じる作成欄
+const MR_STATUS_FILTER_COLLAPSED_IDS = ["issue-create-block", "subtask-create-block"];
 
 // MR一覧フィルタの値ごとに表示対象のlifecycle_stateを定義する
 // 未完了はDraft〜Merging、完了はMerged〜Deployed、全てはCanceledも含め全状態を表示する
@@ -360,11 +362,25 @@ function setupExpanders() {
 function setupCreateExpanders() {
   document.querySelectorAll(".create-expander").forEach((button) => {
     const block = button.closest(".create-block");
-    button.addEventListener("click", () => {
-      const expanded = !block.classList.toggle("collapsed");
-      button.setAttribute("aria-expanded", String(expanded));
-    });
+    button.addEventListener("click", () => setCreateBlockExpanded(block, block.classList.contains("collapsed")));
   });
+}
+
+/**
+ * 作成欄の開閉状態の設定
+ */
+function setCreateBlockExpanded(block, expanded) {
+  block.classList.toggle("collapsed", !expanded);
+  block.querySelector(".create-expander").setAttribute("aria-expanded", String(expanded));
+}
+
+/**
+ * 作成欄を閉じる
+ *
+ * 作成フォームなど作成欄内の要素を受け取り、その作成欄を閉じる。
+ */
+function collapseCreateBlock(element) {
+  setCreateBlockExpanded(element.closest(".create-block"), false);
 }
 
 function escapeHtml(text) {
@@ -591,7 +607,8 @@ function isMrStatusFilterActive() {
 /**
  * MRステータスフィルタの選択変更をIssue一覧・MR一覧に反映する
  *
- * 選択中はIssue一覧・MR一覧の既存フィルタと、Issue作成・MR作成を隠す。
+ * 選択中はIssue一覧・MR一覧の既存フィルタを隠す。
+ * 選択時はIssue作成・MR作成の作成欄を閉じる。
  * リポジトリを選択し直した場合は、Issue一覧の読み込みを選択処理に任せる。
  * MR一覧はIssue一覧の読み込み後に、Issue一覧とまとめて描画し直す。
  * 再表示（失敗時も含む）の完了を待つPromiseを返す。
@@ -600,6 +617,7 @@ async function onMrStatusFilterChanged() {
   updateMrStatusFilterButtons();
   const active = isMrStatusFilterActive();
   MR_STATUS_FILTER_HIDDEN_IDS.forEach((id) => (document.getElementById(id).hidden = active));
+  if (active) MR_STATUS_FILTER_COLLAPSED_IDS.forEach((id) => setCreateBlockExpanded(document.getElementById(id), false));
   const reselected = refreshProjectCounts();
   if (reselected) return reselected;
   if (currentProjectId !== null) await reloadIssues().catch(() => {});
@@ -2203,7 +2221,20 @@ async function createAndOpenIssue(form, projectId, title, statusEl) {
   const created = await createIssueWithSubtask(projectId, title, statusEl);
   if (!created) return;
   if (form.title.value === title) form.reset();
+  collapseCreatedIssueForm(form, statusEl, created);
   if (projectId === currentProjectId) await openCreatedIssueAndSubtask(created.issue, created.subtaskId);
+}
+
+/**
+ * IssueとMRの作成完了後にIssue作成欄を閉じる
+ *
+ * MR作成のみ失敗した場合は、失敗の表示を残すため閉じない。
+ * 次に開いた時に完了表示が残らないよう、状態表示を消す。
+ */
+function collapseCreatedIssueForm(form, statusEl, created) {
+  if (created.subtaskId === null) return;
+  statusEl.textContent = "";
+  collapseCreateBlock(form);
 }
 
 /**
@@ -2344,6 +2375,7 @@ async function onSubmitSubtaskForm(event) {
       form.querySelector("button").disabled = false;
       return;
     }
+    collapseCreateBlock(form);
     await openCreatedSubtask(issueNumber, body.id);
   });
 }
