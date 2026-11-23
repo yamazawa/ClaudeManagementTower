@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>サブタスク実行レポート - 5時間枠の上限中はジョブを取得せず、リセット後に再開するー①</title>
+<title>サブタスク実行レポート - Open PR一覧の取得に件数上限を指定するー①</title>
 <style>
 body{font-family:sans-serif;margin:2em;line-height:1.6;color:#222;max-width:1100px}
 h1{font-size:1.4em}h2{font-size:1.1em;border-bottom:1px solid #ccc;margin-top:1.6em}
@@ -15,57 +15,44 @@ th{background:#f0f3f8}.ok{color:#13795b;font-weight:bold}.warn{color:#a4650a;fon
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#185 5時間枠の上限中はジョブを取得せず、リセット後に再開する</td></tr>
-<tr><th>サブタスク</th><td>5時間枠の上限中はジョブを取得せず、リセット後に再開するー①（PR #186、Draft）</td></tr>
-<tr><th>ブランチ</th><td>issue-185-subtask-1（base: master）</td></tr>
+<tr><th>Issue</th><td>#184 Open PR一覧の取得に件数上限を指定する</td></tr>
+<tr><th>サブタスク</th><td>Open PR一覧の取得に件数上限を指定するー①</td></tr>
+<tr><th>ブランチ</th><td>issue-184-subtask-1（base: master）</td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
-<p class="ok">成功（自動テストは全件成功。ワーカー起動での実機確認は未実施）</p>
-<p>ジョブ取得前に利用上限中かを確認し、上限中は実装・アイデア出しのどちらのジョブも取得しないようにしました。</p>
-<p>「hit your limit」系のエラーで失敗したジョブは、failedと区別して<code>rate_limited</code>にしました。</p>
-<p>実装ジョブは、上限が解除され一定時間が経過した後に自動で待機中へ戻します。</p>
+<p class="ok">成功</p>
+<p><code>list_open_pull_requests</code>に<code>--limit</code>で<code>PR_STATE_LIST_LIMIT</code>（200件）を指定しました。</p>
+<p>ghの既定値30件を超えたOpen PRが、自己更新のマージ対象から漏れなくなります。</p>
+<p>取得件数が上限に達した場合は、取りこぼしの可能性を警告ログに出力します。</p>
 
 <h2>3. 実施した変更</h2>
 <table>
-<tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td>core/rate_limits.py</td><td><code>blocked_until</code>（rejectedかつ未来のリセット時刻の最大値）と<code>is_rate_limit_error</code>（上限エラー判定）を追加</td></tr>
-<tr><td>2</td><td>core/job_queue.py</td><td><code>STATUS_RATE_LIMITED</code>と<code>requeue_rate_limited_jobs</code>を追加。後続ジョブがあるサブタスクは戻さない</td></tr>
-<tr><td>3</td><td>core/config.py・.env.example</td><td><code>rate_limit_retry_delay_seconds</code>（既定600秒）を追加</td></tr>
-<tr><td>4</td><td>worker/main.py</td><td><code>_process_next_job</code>の先頭で上限判定。上限中でなければ再投入。例外が上限エラーなら<code>rate_limited</code>で終了。<code>_load_subtask_and_project</code>を切り出し</td></tr>
-<tr><td>5</td><td>worker/idea_runner.py・core/idea_queue.py</td><td>アイデア出しジョブの上限失敗を<code>RATE_LIMITED</code>にする</td></tr>
-<tr><td>6</td><td>app/static/idea_dialog.js</td><td>「前回のアイデア出し：利用上限で中断」の表示を追加</td></tr>
-<tr><td>7</td><td>IMPLEMENTATION_PLAN.md</td><td>上限中の待機・再投入方針を追記</td></tr>
-<tr><td>8</td><td>tests/test_rate_limits.py・test_job_queue.py・test_worker_main.py・test_idea_runner.py</td><td>上記のテストを追加。既存の<code>_process_next_job</code>テストは上限判定をスタブ化</td></tr>
+<tr><th>No.</th><th>ファイル</th><th>変更</th><th>コミット</th></tr>
+<tr><td>1</td><td>core/github_client.py</td><td><code>list_open_pull_requests</code>の引数に<code>--limit</code>を追加</td><td>45cd28b</td></tr>
+<tr><td>2</td><td>tests/test_github_client.py</td><td>gh呼び出し引数の期待値に<code>--limit</code>を追加</td><td>45cd28b</td></tr>
+<tr><td>3</td><td>core/github_client.py</td><td><code>logger</code>を追加し、取得件数が上限以上なら警告ログを出力</td><td>3edfd18</td></tr>
+<tr><td>4</td><td>tests/test_github_client.py</td><td>上限到達時に警告が出る／未満時は出ないテストを追加</td><td>3edfd18</td></tr>
 </table>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>上限失敗の状態は<code>needs_attention</code>ではなく新設の<code>rate_limited</code>にした</td><td><code>needs_attention</code>は心拍途絶の意味で使用済みで、自動再実行しない方針のため</td></tr>
-<tr><td>2</td><td>実装ジョブは自動で再投入する（画面からの再実行も従来通り可能）</td><td>提案の目的が「リセット後に再開」のため。人手を介さず再開できる</td></tr>
-<tr><td>3</td><td>再投入は「上限中でない」かつ「中断から600秒経過」を条件とした</td><td>上限エラー時に<code>rejected</code>のRateLimitEventが届かない場合でも、3秒毎の失敗ループを避けるため</td></tr>
-<tr><td>4</td><td>同じサブタスクに後続ジョブがあれば再投入しない</td><td>画面から再実行済みの場合に二重実行を防ぐため</td></tr>
-<tr><td>5</td><td>アイデア出しジョブは自動再投入しない</td><td>画面から再実行でき、1プロジェクト1件の制約と重複しやすいため</td></tr>
-<tr><td>6</td><td>判定対象は全ての枠（five_hour以外も）とし、リセット時刻不明の上限は対象外</td><td>7日枠等の上限でも失敗するため。不明時に無期限停止しないため</td></tr>
-<tr><td>7</td><td>上限エラーの判定は例外メッセージのみとし、結果テキストは見ない</td><td>レポート要約等の正常な結果に同じ語句が含まれ得るため誤判定を避けた</td></tr>
-<tr><td>8</td><td>idea_contextの<code>FAILED_JOB_STATES</code>には<code>rate_limited</code>を含めない</td><td>上限失敗はコードの問題ではなく、アイデアマンへの材料として不要なため</td></tr>
-<tr><td>9</td><td>待機ログはリセット時刻が変わった時のみ出力</td><td>ポーリング毎の出力でログが埋まるのを避けるため</td></tr>
+<tr><td>1</td><td>上限値は新設せず<code>PR_STATE_LIST_LIMIT</code>を流用した</td><td>Issueの指示通り。他のPR一覧取得と値を揃えるため</td></tr>
+<tr><td>2</td><td>警告はlogging（<code>logger.warning</code>）で出力し、例外にはしない</td><td>上限内のPRは処理を継続できるため。既存のmerge_queue等と同じ方式に揃えた</td></tr>
+<tr><td>3</td><td>警告条件は「取得件数 ≧ 上限」とした</td><td>ちょうど上限件数の場合も超過の可能性を区別できないため</td></tr>
+<tr><td>4</td><td>他の一覧取得関数には警告を追加しない</td><td>Issueの対象外。変更範囲を最小に保つため</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<p class="ok"><code>./.venv/Scripts/python.exe -m pytest -q</code> : 372 passed</p>
-<p>途中コミット（3048d01）時点でも371 passedを確認済みです。</p>
-<p>ワーカーを起動した実機確認は未実施です（CLAUDE.mdの方針により人間に依頼）。</p>
+<p class="ok"><code>./.venv/Scripts/python.exe -m pytest -q</code> : 374 passed</p>
+<p>1コミット目時点でも<code>tests/test_github_client.py</code>の12件が成功することを確認済みです。</p>
 
 <h2>6. 残課題・リスク・確認ポイント</h2>
 <ul>
-<li>実際の上限エラーが例外（ProcessError）で届く前提です。結果メッセージ（is_error）で届く場合は<code>succeeded</code>扱いのままになります。</li>
-<li>上限エラーの文言は#165の実例と「usage limit reached」のみで判定しています。文言が変わると<code>failed</code>になります。</li>
-<li>再投入時に<code>append_instruction_history</code>が再度動くため、subtask.mdに同じ指示が追記され、コミットが1件増えます。</li>
-<li>実装ジョブの状態表示は<code>状態: rate_limited</code>と英語のまま表示されます（既存の表示方式に合わせ、文言化は未対応）。</li>
-<li>上限中もClaudeを使わないため新しいRateLimitEventが届きません。リセット時刻を過ぎると判定は自動で解除されます。</li>
-<li>確認ポイント：<code>worker/main.py</code>の<code>_is_rate_limited</code>、<code>core/job_queue.py</code>の<code>requeue_rate_limited_jobs</code>。</li>
+<li>Open PRが200件を超える場合は、引き続き超過分が対象外になります（警告ログのみ）。</li>
+<li>警告は画面には表示されず、サーバーログにのみ出力されます。</li>
+<li>確認ポイント：<code>core/github_client.py</code>の<code>list_open_pull_requests</code>。</li>
 </ul>
 </body>
 </html>
