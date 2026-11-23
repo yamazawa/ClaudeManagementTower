@@ -1,63 +1,72 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実装レポート：Issue、MRレイアウト改善ー③</title>
+<title>実行レポート: Claude参照ルールー②</title>
 <style>
-body { font-family: sans-serif; line-height: 1.6; margin: 16px; color: #1f2937; }
-h1 { font-size: 20px; }
-h2 { font-size: 16px; border-bottom: 1px solid #d1d5db; margin-top: 24px; }
-table { border-collapse: collapse; width: 100%; font-size: 13px; }
-th, td { border: 1px solid #d1d5db; padding: 4px 8px; text-align: left; vertical-align: top; }
-th { background: #f3f4f6; }
-code { background: #f3f4f6; padding: 0 3px; }
-.ok { color: #047857; font-weight: bold; }
+body { font-family: sans-serif; margin: 24px; line-height: 1.6; color: #222; }
+h1 { font-size: 1.4em; }
+h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-top: 28px; }
+table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; vertical-align: top; }
+th { background: #f3f3f3; }
+code { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; }
+.ok { color: #1a7f37; font-weight: bold; }
 </style>
 </head>
 <body>
-<h1>実装レポート：Issue、MRレイアウト改善ー③</h1>
+<h1>実行レポート: Claude参照ルールー②</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#153</td></tr>
-<tr><th>サブタスク（PR）</th><td>Issue、MRレイアウト改善ー③（PR #160、base: master）</td></tr>
-<tr><th>ブランチ</th><td><code>issue-153-subtask-3</code></td></tr>
+<tr><th>Issue</th><td>#180 Claude参照ルール</td></tr>
+<tr><th>サブタスク</th><td>Claude参照ルールー②（PR #183）</td></tr>
+<tr><th>ブランチ</th><td><code>issue-180-subtask-2</code></td></tr>
 </table>
 
-<h2>2. 実装結果</h2>
-<p class="ok">成功（目視確認は未実施）</p>
+<h2>2. 実装結果の要約</h2>
+<p class="ok">成功</p>
 <ul>
-<li>S1：MR作成フォームの1行化はmasterに反映済みでした。</li>
-<li>S2：Merge等の操作ボタンと状態表示が重なる不具合を修正しました。</li>
+<li>書き込みは対象worktreeを基本とし、<code>C:/git</code>配下の他リポジトリも許可した。</li>
+<li>秘密鍵・<code>.env</code>・認証情報ファイル等を名前パターンで登録し、場所を問わず読み書きを拒否するようにした。</li>
+<li>判定は<code>can_use_tool</code>とPreToolUseフックの両方で行う。</li>
 </ul>
 
 <h2>3. 実施した変更</h2>
 <table>
-<tr><th>No.</th><th>ファイル</th><th>変更</th><th>変更理由</th></tr>
-<tr><td>1</td><td>-</td><td>origin/masterをブランチにマージ</td><td>ブランチがmasterより140コミット遅れていたため。</td></tr>
-<tr><td>2</td><td>.claude-tower/subtask.md</td><td>マージ競合はブランチ側を採用</td><td>master側は別サブタスクの内容だったため。</td></tr>
-<tr><td>3</td><td>app/static/style.css</td><td><code>#subtask-action-status</code>に<code>margin: 6px 0 0</code>を追加</td><td>S2：見出し用の<code>.title-status</code>の負の上マージン（-8px）で状態表示がボタン行に重なっていたため。</td></tr>
+<tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
+<tr><td>1</td><td><code>core/claude_access_rules.py</code>（新規）</td><td>参照ルール（書き込み範囲・保護フォルダ・参照禁止の名前パターン）を集約</td></tr>
+<tr><td>2</td><td><code>core/config.py</code></td><td>設定<code>claude_shared_root</code>（既定<code>C:/git</code>）を追加</td></tr>
+<tr><td>3</td><td><code>core/claude_client.py</code></td><td>許可判定をルールベースに置換。PreToolUseフックを追加。アイデアマンにも参照禁止を適用</td></tr>
+<tr><td>4</td><td><code>tests/test_claude_access_rules.py</code>（新規）・<code>tests/test_claude_client.py</code></td><td>共有ルート書き込み・他worktree拒否・参照禁止・フックのテストを追加</td></tr>
+<tr><td>5</td><td><code>CLAUDE.md</code>・<code>README.md</code>・<code>IMPLEMENTATION_PLAN.md</code></td><td>ルールと残存リスクを追記</td></tr>
 </table>
-<p>コミット：<code>65246d2 #153 [MR操作] 状態表示が操作ボタンと重なる不具合を修正</code></p>
+<p>コミット：b682703（ルール定義）、e02b91b（許可判定へ適用）、c8e5a28（ドキュメント）。</p>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>S1では新たな変更を加えていません。</td><td>masterのf108686とe4a2278で、MR作成フォームはグリッド配置になっています。<br>Issue名は…で省略され、区切り文字「ー」は常に表示されます。<br>S1のスクリーンショットは古いビルドの画面だと判断しました（ボタン文言が「作成」のまま）。</td></tr>
-<tr><td>2</td><td>S2の修正は<code>#subtask-action-status</code>だけに限定しました。</td><td>他の<code>.title-status</code>要素は見出し直下にあり、負のマージンが意図どおり効いています。</td></tr>
+<tr><td>1</td><td><code>C:/git</code>配下でも、他のworktree（<code>worktree_base_dir</code>）と稼働中の管理塔フォルダへの書き込みは拒否</td><td>並列実行中の他サブタスクを壊さないため。稼働中のサーバーのコードとDBを直接書き換えずPR経由にするため</td></tr>
+<tr><td>2</td><td>参照禁止は<code>C:/git</code>の内外を問わず適用</td><td>ルールが単純になり、より安全側に倒れるため</td></tr>
+<tr><td>3</td><td>参照禁止の対象は、パスのいずれかの要素が名前パターンに一致するもの（<code>.ssh</code>等のフォルダは配下全体）。<code>.env.example</code>等の雛形は許可</td><td>リポジトリごとの登録なしで、汎用的にブラックボックス化するため</td></tr>
+<tr><td>4</td><td>PreToolUseフックでも同じ判定を実施</td><td>acceptEditsモードでは、worktree内の読み書きが<code>can_use_tool</code>を経ずに許可される。そのためworktree内の<code>.env</code>を守るにはフックが必要</td></tr>
+<tr><td>5</td><td>読み取り（worktree外）は従来通り許可。ディレクトリ逆参照（<code>..</code>）の拒否も維持</td><td>①の方針を維持するため。<code>..</code>は相対位置を確実に解決できないため</td></tr>
+<tr><td>6</td><td><code>READ_ONLY_TOOL_NAMES</code>の重複定義を解消（アイデアマン用を<code>IDEA_MAN_TOOL_NAMES</code>に改名）</td><td>後の定義が前の定義を上書きし、LS・NotebookReadがworktree外読み取りの許可から漏れていたため</td></tr>
+<tr><td>7</td><td>拒否する名前パターンはコード内の定数にした（設定化はしない）</td><td>一箇所にまとめるという規約を満たしつつ、実装をシンプルに保つため</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<ul>
-<li><code>pytest -q</code>：388件パス。</li>
-<li>ヘッドレスChromeによる表示確認：未実施です。worktree外の実行ファイルの起動が操作制限で拒否されたためです。</li>
-</ul>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code>：<span class="ok">359 passed</span>（変更前は341件。18件追加）</p>
+<p>実機（Claude Agent SDK経由での実行）でのフックの動作確認は未実施。worktree内からは本番ワーカーを起動できないため。</p>
 
-<h2>6. 残課題・レビュー確認ポイント</h2>
+<h2>6. 残課題・リスク・レビュー時の確認ポイント</h2>
 <ul>
-<li>スマホ幅でMR詳細を開いてMergeを押し、状態メッセージがボタン下に重ならず表示されるか確認してください。</li>
-<li>スマホ幅で長いIssue名のMR作成フォームが1行に収まり、Issue名が…で省略されるか確認してください（master反映済みの内容）。</li>
-<li>このPRにはmasterのマージコミットが含まれます。</li>
+<li>フォルダを指定したGrepは、その配下にある参照禁止ファイルの中身を拾う可能性がある。</li>
+<li>シェルの変数・ワイルドカード（<code>cat .e*</code>等）で参照禁止ファイルを指す操作は検出できない。</li>
+<li>名前パターンの誤検知がありうる（PowerShellの<code>$x.key</code>が<code>*.key</code>に一致する等）。</li>
+<li>PreToolUseフックの拒否が実際のSDK実行で効くことを、テスト用リポジトリで確認してほしい（worktree内の<code>.env</code>のReadが拒否されること）。</li>
+<li><code>BLOCKED_NAME_PATTERNS</code>の内容に過不足がないか確認してほしい。</li>
+<li><code>C:/git</code>配下の他リポジトリへの書き込みは、そのリポジトリのブランチ運用に依存する（直接masterを編集する可能性がある）。</li>
 </ul>
 </body>
 </html>

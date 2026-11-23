@@ -1,15 +1,22 @@
-import os
 import re
 from collections.abc import Callable
 
 from claude_agent_sdk import (
     ClaudeAgentOptions,
+    HookMatcher,
     PermissionResultAllow,
     PermissionResultDeny,
     query,
 )
 
 from core.attachments import MAX_ATTACHMENT_BYTES
+from core.claude_access_rules import (
+    AccessRules,
+    command_touches_blocked,
+    default_access_rules,
+    is_blocked_path,
+    is_inside,
+)
 
 # SDKとCLIプロセス間のJSONメッセージバッファ上限（SDK既定は1MB）
 # 添付画像をReadするとBase64化された内容が1メッセージで返るため既定値では溢れる。
@@ -36,16 +43,40 @@ DANGEROUS_COMMAND_PATTERNS = [
 DIRECTORY_TRAVERSAL_PATTERN = re.compile(r"(?:^|[\s\"'])\.\.(?:[\\/]|$|[\s\"'])")
 WINDOWS_ABS_PATH_PATTERN = re.compile(r"[A-Za-z]:[\\/]")
 
+# パスを受け取るツール入力のキー（Glob・Grepの絞り込みパターンを含む）
+PATH_INPUT_KEYS = ["file_path", "path", "notebook_path", "glob"]
 
-def _command_escapes_worktree(command: str, worktree_abs: str) -> bool:
+DenialCheck = Callable[[str, dict], str | None]
+
+
+def _command_escapes_writable(command: str, rules: AccessRules) -> bool:
     if DIRECTORY_TRAVERSAL_PATTERN.search(command):
         return True
-    for match in WINDOWS_ABS_PATH_PATTERN.finditer(command):
-        token = re.split(r'[\s"\'|]', command[match.start():], maxsplit=1)[0]
-        token_abs = os.path.abspath(token.rstrip("\\/"))
-        if not token_abs.lower().startswith(worktree_abs.lower()):
-            return True
-    return False
+    tokens = [
+        re.split(r'[\s"\'|]', command[match.start():], maxsplit=1)[0]
+        for match in WINDOWS_ABS_PATH_PATTERN.finditer(command)
+    ]
+    return any(not rules.is_writable(token.rstrip("\\/")) for token in tokens)
+
+
+def _shell_denial(command: str, rules: AccessRules) -> str | None:
+    if any(pattern.search(command) for pattern in DANGEROUS_COMMAND_PATTERNS):
+        return f"危険な操作のため拒否: {command}"
+    if command_touches_blocked(command):
+        return f"参照禁止のファイルを含むため拒否: {command}"
+    if _command_escapes_writable(command, rules):
+        return f"書き込み許可範囲外を操作する可能性があるため拒否: {command}"
+    return None
+
+
+def _input_paths(tool_name: str, tool_input: dict) -> list[str]:
+    keys = PATH_INPUT_KEYS + (["pattern"] if tool_name == "Glob" else [])
+    return [tool_input[key] for key in keys if isinstance(tool_input.get(key), str) and tool_input[key]]
+
+
+def _blocked_input_denial(tool_name: str, tool_input: dict) -> str | None:
+    blocked = [path for path in _input_paths(tool_name, tool_input) if is_blocked_path(path)]
+    return f"参照禁止のファイルのため拒否: {blocked[0]}" if blocked else None
 
 AGENT_POLICY_PROMPT = """
 あなたはClaude管理塔の自律実装ワーカーです。
@@ -107,29 +138,62 @@ IDEA_MAN_POLICY_PROMPT = """
 """
 
 # アイデアマンが使えるツール（読み取り専用）
-READ_ONLY_TOOL_NAMES = ["Read", "Glob", "Grep"]
+IDEA_MAN_TOOL_NAMES = ["Read", "Glob", "Grep"]
 
 
-def _is_inside(path: str, root_abs: str) -> bool:
-    return os.path.abspath(path).lower().startswith(root_abs.lower())
+def _to_can_use_tool(check: DenialCheck) -> Callable:
+    async def can_use_tool(tool_name, tool_input, context):
+        reason = check(tool_name, tool_input)
+        if reason is not None:
+            return PermissionResultDeny(message=reason)
+        return PermissionResultAllow(updated_input=tool_input)
+
+    return can_use_tool
+
+
+def _to_pre_tool_use_hooks(check: DenialCheck) -> dict:
+    """許可確認を経ずに実行されるツールにも、同じ拒否判定を適用するフック
+
+    acceptEdits等では作業フォルダ内の操作がcan_use_toolを経ずに許可されるため。
+    """
+
+    async def hook(input_data, tool_use_id, context):
+        reason = check(input_data.get("tool_name", ""), input_data.get("tool_input") or {})
+        if reason is None:
+            return {}
+        return {
+            "hookSpecificOutput": {
+                "hookEventName": "PreToolUse",
+                "permissionDecision": "deny",
+                "permissionDecisionReason": reason,
+            }
+        }
+
+    return {"PreToolUse": [HookMatcher(matcher=None, hooks=[hook])]}
+
+
+def _read_only_check(root: str) -> DenialCheck:
+    def check(tool_name: str, tool_input: dict) -> str | None:
+        if tool_name not in IDEA_MAN_TOOL_NAMES:
+            return f"読み取り専用のため拒否: {tool_name}"
+        blocked = _blocked_input_denial(tool_name, tool_input)
+        if blocked is not None:
+            return blocked
+        path = tool_input.get("file_path") or tool_input.get("path")
+        if path and not is_inside(path, root):
+            return f"対象フォルダ外の参照を拒否: {path}"
+        return None
+
+    return check
 
 
 def restrict_to_read_only(root: str) -> Callable:
     """読み取り専用ツールを、対象フォルダ内に限って許可する
 
     シェル・ファイル変更・Web取得などは全て拒否する。
+    参照禁止のファイルは対象フォルダ内でも拒否する。
     """
-    root_abs = os.path.abspath(root)
-
-    async def can_use_tool(tool_name, tool_input, context):
-        if tool_name not in READ_ONLY_TOOL_NAMES:
-            return PermissionResultDeny(message=f"読み取り専用のため拒否: {tool_name}")
-        path = tool_input.get("file_path") or tool_input.get("path")
-        if path and not _is_inside(path, root_abs):
-            return PermissionResultDeny(message=f"対象フォルダ外の参照を拒否: {path}")
-        return PermissionResultAllow(updated_input=tool_input)
-
-    return can_use_tool
+    return _to_can_use_tool(_read_only_check(root))
 
 
 async def run_read_only_claude(
@@ -144,8 +208,9 @@ async def run_read_only_claude(
     """
     options = ClaudeAgentOptions(
         cwd=root,
-        tools=READ_ONLY_TOOL_NAMES,
+        tools=IDEA_MAN_TOOL_NAMES,
         can_use_tool=restrict_to_read_only(root),
+        hooks=_to_pre_tool_use_hooks(_read_only_check(root)),
         permission_mode="default",
         max_buffer_size=MAX_BUFFER_SIZE,
         system_prompt={"type": "preset", "preset": "claude_code", "append": policy_prompt},
@@ -167,27 +232,29 @@ async def _collect_result(messages, on_message) -> tuple[str | None, str | None]
     return session_id, result_text
 
 
-def restrict_to_worktree(worktree: str) -> Callable:
-    worktree_abs = os.path.abspath(worktree)
-
-    async def can_use_tool(tool_name, tool_input, context):
+def _worktree_check(rules: AccessRules) -> DenialCheck:
+    def check(tool_name: str, tool_input: dict) -> str | None:
         if tool_name in SHELL_TOOL_NAMES:
-            command = tool_input.get("command", "")
-            if any(pattern.search(command) for pattern in DANGEROUS_COMMAND_PATTERNS):
-                return PermissionResultDeny(message=f"危険な操作のため拒否: {command}")
-            if _command_escapes_worktree(command, worktree_abs):
-                return PermissionResultDeny(message=f"worktree外を操作する可能性があるため拒否: {command}")
-            return PermissionResultAllow(updated_input=tool_input)
+            return _shell_denial(tool_input.get("command", ""), rules)
+        blocked = _blocked_input_denial(tool_name, tool_input)
+        if blocked is not None or tool_name in READ_ONLY_TOOL_NAMES:
+            return blocked
+        path = tool_input.get("file_path") or tool_input.get("path") or tool_input.get("notebook_path")
+        if path and not rules.is_writable(path):
+            return f"書き込み許可範囲外への操作を拒否: {path}"
+        return None
 
-        if tool_name in READ_ONLY_TOOL_NAMES:
-            return PermissionResultAllow(updated_input=tool_input)
+    return check
 
-        path = tool_input.get("file_path") or tool_input.get("path")
-        if path and not os.path.abspath(path).startswith(worktree_abs):
-            return PermissionResultDeny(message=f"worktree外への操作を拒否: {path}")
-        return PermissionResultAllow(updated_input=tool_input)
 
-    return can_use_tool
+def restrict_to_worktree(worktree: str, rules: AccessRules | None = None) -> Callable:
+    """Claude参照ルールに沿って、ツールの使用可否を判定する
+
+    書き込みは対象worktreeと共有ルート配下（他worktree・管理塔自身を除く）に限る。
+    読み取り系ツールは場所を問わず許可する。
+    参照禁止のファイルは、読み取り・書き込み・シェルのいずれも拒否する。
+    """
+    return _to_can_use_tool(_worktree_check(rules or default_access_rules(worktree)))
 
 
 async def run_claude(
@@ -197,9 +264,11 @@ async def run_claude(
     on_message: Callable[[object], None] | None = None,
     policy_prompt: str = AGENT_POLICY_PROMPT,
 ) -> tuple[str | None, str | None]:
+    rules = default_access_rules(worktree)
     options = ClaudeAgentOptions(
         cwd=worktree,
-        can_use_tool=restrict_to_worktree(worktree),
+        can_use_tool=restrict_to_worktree(worktree, rules),
+        hooks=_to_pre_tool_use_hooks(_worktree_check(rules)),
         permission_mode="acceptEdits",
         resume=resume,
         max_buffer_size=MAX_BUFFER_SIZE,
