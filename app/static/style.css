@@ -734,6 +734,10 @@ section {
   padding: 16px 20px;
 }
 
+section[hidden] {
+  display: none;
+}
+
 /* ペインの見出し行
 
 見出しの前にエキスパンダを置き、下線は行全体に引く。

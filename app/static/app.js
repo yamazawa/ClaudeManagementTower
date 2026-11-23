@@ -195,27 +195,14 @@ function isSectionExpanded(sectionId) {
   return !document.getElementById(sectionId).classList.contains("collapsed");
 }
 
-// 選択項目が無くなったため閉じたペインのID（選択項目ができた場合に開き直す）
-const emptyCollapsedSectionIds = new Set();
-
 /**
- * 選択項目が無くなったペインを閉じる
+ * ペインの表示・非表示を切り替える
  *
- * 縦長表示・横長表示を問わず閉じる。
+ * 親項目が未選択で表示内容が無いペインは、見出し行ごと非表示にする。
+ * 縦長表示・横長表示を問わず切り替える。
  */
-function collapseEmptySection(sectionId) {
-  setSectionExpanded(sectionId, false);
-  emptyCollapsedSectionIds.add(sectionId);
-}
-
-/**
- * 選択項目が無くなったため閉じたペインを、選択項目ができた際に開き直す
- *
- * 縦長表示では各選択処理の自動開閉に任せる。
- */
-function reopenEmptyCollapsedSection(sectionId) {
-  if (!emptyCollapsedSectionIds.delete(sectionId)) return;
-  if (!isPortrait()) setSectionExpanded(sectionId, true);
+function setSectionShown(sectionId, shown) {
+  document.getElementById(sectionId).hidden = !shown;
 }
 
 // 選択の切り替え要求の通番（後発の要求があれば、先発の取得結果で表示を上書きしない）
@@ -307,7 +294,6 @@ function setupExpanders() {
   document.querySelectorAll("section .expander").forEach((button) => {
     const section = button.closest("section");
     button.addEventListener("click", () => {
-      emptyCollapsedSectionIds.delete(section.id);
       setSectionExpanded(section.id, !isSectionExpanded(section.id));
     });
   });
@@ -684,7 +670,7 @@ async function waitForNewBootId(oldBootId) {
 /**
  * Issueの選択を外し、Issue・MRを未選択の表示に戻す
  *
- * Issue内容・MR内容のペインは閉じる。
+ * Issue内容・MR内容のペインは非表示にする。
  */
 function clearIssueSelection() {
   currentIssueNumber = null;
@@ -695,16 +681,16 @@ function clearIssueSelection() {
   highlightSelectedIssue();
   document.getElementById("issue-heading").textContent = "Issue";
   document.getElementById("subtask-list-body").innerHTML =
-    '<p class="empty">左の一覧からIssueを選択してください。</p>';
+    '<p class="empty">一覧からIssueを選択してください。</p>';
   document.getElementById("subtask-panel").hidden = true;
-  collapseEmptySection(SECTION_IDS.issue);
+  setSectionShown(SECTION_IDS.issue, false);
   renderSubtaskDetail(null);
 }
 
 /**
  * リポジトリの選択を外し、Issue一覧以降を未選択の表示に戻す
  *
- * Issue一覧・Issue内容・MR内容のペインは閉じる。
+ * Issue一覧・Issue内容・MR内容のペインは非表示にする。
  */
 function clearProjectSelection() {
   nextSelectionRequest();
@@ -714,7 +700,7 @@ function clearProjectSelection() {
   document.getElementById("issue-list-placeholder").hidden = false;
   document.getElementById("issue-panel").hidden = true;
   document.getElementById("issue-list-items").innerHTML = "";
-  collapseEmptySection(SECTION_IDS.repo);
+  setSectionShown(SECTION_IDS.repo, false);
   clearIssueSelection();
 }
 
@@ -756,7 +742,7 @@ function showProject(project) {
   highlightSelectedProject();
   autoSetSectionExpanded(SECTION_IDS.projects, false);
   autoSetSectionExpanded(SECTION_IDS.repo, true);
-  reopenEmptyCollapsedSection(SECTION_IDS.repo);
+  setSectionShown(SECTION_IDS.repo, true);
   document.getElementById("issue-list-placeholder").hidden = true;
   document.getElementById("issue-panel").hidden = false;
   renderRepoHeading(project);
@@ -1496,7 +1482,7 @@ function highlightSelectedIssue() {
  * 選択し直したIssueの内容を表示する
  *
  * MR一覧に表示中の先頭MRを自動選択する。
- * 表示中のMRが無い場合は未選択とし、MR内容を閉じる。
+ * 表示中のMRが無い場合は未選択とし、MR内容を非表示にする。
  * 縦長表示ではIssue内容を開き、MR一覧の表示が1件のみの場合は閉じる。
  * 表示が複数件の場合は、MRを選択し直せるよう開いたままにする。
  * 開閉は内容の切り替え後に行い、切り替え前の内容で開閉しないようにする。
@@ -1504,7 +1490,7 @@ function highlightSelectedIssue() {
 function showIssueDetail(issue) {
   currentSelectedSubtaskId = null;
   renderIssueDetail(issue);
-  reopenEmptyCollapsedSection(SECTION_IDS.issue);
+  setSectionShown(SECTION_IDS.issue, true);
   autoSetSectionExpanded(SECTION_IDS.issue, filterSubtasks(currentSubtasks).length !== 1);
 }
 
@@ -1634,11 +1620,11 @@ function renderSubtaskDetail(s) {
   const heading = document.getElementById("subtask-heading");
   if (!s) {
     heading.textContent = "MR";
-    el.innerHTML = '<p class="empty">左の一覧からMRを選択してください。</p>';
-    collapseEmptySection(SECTION_IDS.mr);
+    el.innerHTML = '<p class="empty">一覧からMRを選択してください。</p>';
+    setSectionShown(SECTION_IDS.mr, false);
     return;
   }
-  reopenEmptyCollapsedSection(SECTION_IDS.mr);
+  setSectionShown(SECTION_IDS.mr, true);
 
   heading.innerHTML =
     `${renderSubtaskNumber(s)}${renderMrTitle(s, { id: "subtask-title" })}${renderSubtaskState(s)}`;

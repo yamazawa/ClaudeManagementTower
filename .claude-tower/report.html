@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実行レポート: 待機中の表示ー①</title>
+<title>実行レポート: 文言見直しー①</title>
 <style>
 body { font-family: sans-serif; margin: 24px; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; }
@@ -15,55 +15,56 @@ code { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; }
 </style>
 </head>
 <body>
-<h1>実行レポート: 待機中の表示ー①</h1>
+<h1>実行レポート: 文言見直しー①</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#196 待機中の表示</td></tr>
-<tr><th>サブタスク</th><td>待機中の表示ー①（ステータストグル以外でも、更新に時間が掛かる場合は待機中の表示を出す）</td></tr>
-<tr><th>ブランチ</th><td><code>issue-new-d8081196-subtask-1</code>（PR #197、base: <code>master</code>）</td></tr>
+<tr><th>Issue</th><td>#198 文言見直し</td></tr>
+<tr><th>サブタスク</th><td>文言見直しー①（スマホ表示で「左の」はおかしいので文言を見直す。親項目が未選択で空のペインはエキスパンダごと非表示にする）</td></tr>
+<tr><th>ブランチ</th><td><code>issue-new-711a1c5d-subtask-1</code>（base: <code>master</code>）</td></tr>
 </table>
 
 <h2>2. 実装結果の要約</h2>
 <p class="ok">成功</p>
 <ul>
-<li>#153で追加した選択切替の更新中表示（オーバーレイ）を、操作の更新待ちでも使えるよう共通化した。</li>
-<li>Issueのクローズ・再開、MRのCancel・ReOpen・Merge、タイトル保存、MR作成、添付ファイル操作に適用した。</li>
+<li>Repo・Issue・MRの各ペインは、対象が未選択の間は見出し行（エキスパンダ）ごと非表示にした。</li>
+<li>初期表示ではリポジトリ一覧のみ表示し、選択に応じて下位ペインを表示する。</li>
+<li>未選択時の文言「左の一覧から〜」を「一覧から〜」に変更した。</li>
 </ul>
 
 <h2>3. 実施した変更と主な変更ファイル</h2>
 <table>
-<tr><th>No.</th><th>コミット</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td><code>#196 [待機中の表示] 操作の更新待ち表示を共通化</code></td><td><code>app/static/app.js</code><br><code>app/static/style.css</code></td><td><code>runBusyAction</code>を追加した。操作数を数え、選択切替の更新中と合わせてオーバーレイの表示を決める。</td></tr>
-<tr><td>2</td><td><code>#196 [待機中の表示] Issue・MRの状態変更中に更新中を表示</code></td><td><code>app/static/app.js</code></td><td><code>toggleIssue</code>は送信から一覧の再取得まで、<code>runSubtaskStateAction</code>は応答待ちの間に表示する。</td></tr>
-<tr><td>3</td><td><code>#196 [待機中の表示] タイトル保存中に更新中を表示</code></td><td><code>app/static/app.js</code></td><td><code>makeTitleEditable</code>の保存処理を囲った。</td></tr>
-<tr><td>4</td><td><code>#196 [待機中の表示] MR作成中に更新中を表示</code></td><td><code>app/static/app.js</code></td><td>MRの作成から作成したMRを開くまで表示する。</td></tr>
-<tr><td>5</td><td><code>#196 [待機中の表示] 添付ファイル操作中に更新中を表示</code></td><td><code>app/static/app.js</code></td><td>アップロード・削除で、一覧を読み直すまで表示する。</td></tr>
+<tr><th>No.</th><th>ファイル</th><th>変更</th><th>変更理由</th></tr>
+<tr><td>1</td><td><code>app/static/app.js</code></td><td>空ペインを閉じる処理（<code>collapseEmptySection</code>／<code>reopenEmptyCollapsedSection</code>）を、表示切替の<code>setSectionShown</code>に置き換えた。</td><td>未選択で空のペインを非表示にするため。</td></tr>
+<tr><td>2</td><td><code>app/static/app.js</code></td><td>リポジトリ選択・解除、Issue表示・解除、MR表示・解除で各ペインの表示を切り替えた。</td><td>選択状態に応じて表示するため。</td></tr>
+<tr><td>3</td><td><code>app/static/index.html</code></td><td>Repo・Issue・MRのペインに初期状態で<code>hidden</code>を付与した。</td><td>起動直後は何も未選択のため。</td></tr>
+<tr><td>4</td><td><code>app/static/index.html</code>、<code>app/static/app.js</code></td><td>「左の一覧から〜」を「一覧から〜」に変更した。MRの初期文言も同じ文言に揃えた。</td><td>縦並びのスマホ表示で「左」が不正確なため。</td></tr>
+<tr><td>5</td><td><code>app/static/style.css</code></td><td><code>section[hidden]</code>に<code>display: none</code>を追加した。</td><td>sectionのスタイルで<code>hidden</code>が効かなくならないよう明示するため。</td></tr>
 </table>
 
 <h2>4. 自律判断した事項・採用理由・前提</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>新しい表示は作らず、既存の更新中オーバーレイを流用した。</td><td>共通する機能は同じUIで提供する方針のため。表示の遅延（0.2秒）により、すぐ終わる操作ではちらつかない。</td></tr>
-<tr><td>2</td><td>「ステータストグル」はIssueのClose/ReOpenボタンとヘッダーのMRステータスフィルタの両方と解釈した。</td><td>フィルタは#153で対応済み。Close/ReOpenは一覧の再取得中しか表示されなかったため、送信中から表示するようにした。</td></tr>
-<tr><td>3</td><td>Issue作成は対象外とした。</td><td>既存実装で「作成中は利用者の操作を妨げない」方針が明記されているため。状態欄の「IssueとMRを作成中...」表示は従来どおり。</td></tr>
-<tr><td>4</td><td>デプロイ・実装の実行・定期更新は対象外とした。</td><td>デプロイと実装は長時間かかり、画面のブロックは不適切なため。それぞれヘッダー・MR詳細に状態表示が既にある。</td></tr>
-<tr><td>5</td><td>MR操作のオーバーレイは応答待ちの間のみとし、マージ自体の完了は待たない。</td><td>マージはサーバー側でキュー実行され、状態はMergingで表示されるため。</td></tr>
+<tr><td>1</td><td>「親項目」は各ペインが表示する対象（Repo＝リポジトリ、Issue＝Issue、MR＝MR）と解釈した。MRペインはIssue選択中でもMR未選択なら非表示にする。</td><td>添付S1でMR未選択時のMRペインが問題箇所として示されているため。</td></tr>
+<tr><td>2</td><td>非表示はスマホ（縦長）表示に限らず、PC（横長）表示にも適用した。</td><td>「そもそも表示する意味がない」との指示であるため。非表示になるペインは常に右端（後続）側のため、PCの列配置はずれない。</td></tr>
+<tr><td>3</td><td>未選択時の文言は削除せず「一覧から〜」として残した。</td><td>非表示中は見えないが、文言見直しの指示にも対応し、表示経路が残った場合の保険とするため。</td></tr>
+<tr><td>4</td><td>横長表示で空ペインを自動で開き直す処理は廃止した。</td><td>空ペインを閉じずに非表示にするため不要になった。利用者が手動で閉じた開閉状態はそのまま保持される。</td></tr>
 </table>
 
 <h2>5. 実行したテストと結果</h2>
 <ul>
-<li><code>node --check app/static/app.js</code>: 構文エラーなし。</li>
-<li><code>./.venv/Scripts/python.exe -m pytest -q</code>: 425 passed。</li>
-<li>JSの自動テストは存在しないため、ブラウザでの動作確認は未実施（人間による確認を依頼）。</li>
+<li><code>node --check app/static/app.js</code>：構文エラーなし。</li>
+<li><code>./.venv/Scripts/python.exe -m pytest -q</code>：425 passed。</li>
+<li>ブラウザでの動作確認は未実施（ガイドラインに従い、起動しての確認は人間に依頼）。</li>
 </ul>
 
-<h2>6. 残課題、リスク、レビュー時の確認ポイント</h2>
+<h2>6. 残課題・リスク・レビュー時の確認ポイント</h2>
 <ul>
-<li>Close/ReOpen・MR操作・タイトル保存・MR作成・添付のアップロード/削除で、更新中表示が出て終了時に消えることを確認してほしい。</li>
-<li>操作中もヘッダー（MRステータスフィルタ・Deploy）は従来どおり操作できる。</li>
-<li>Issue作成を対象外としたことが意図に合うか確認してほしい。</li>
-<li>大きなファイルの複数アップロード中は、その間ずっと画面がブロックされる。</li>
+<li>スマホ表示で、起動直後にリポジトリ一覧のみ表示されることを確認する。</li>
+<li>リポジトリ選択→Issue選択→MR選択の順に、各ペインが表示されることを確認する。</li>
+<li>MRが0件のIssueを選択した場合、MRペインが非表示になることを確認する。</li>
+<li>MRステータスのフィルタでリポジトリ選択が外れた場合、Repo・Issue・MRのペインが非表示になることを確認する。</li>
+<li>PC表示で、MR未選択時に右端の列が空白になる見た目が許容できるか確認する。</li>
 </ul>
 </body>
 </html>
