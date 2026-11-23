@@ -182,6 +182,45 @@ def test_execute_subtask_rejects_while_merge_queued(session_factory):
     assert exc.value.status_code == 409
 
 
+def _job_statuses(factory) -> list[str]:
+    with factory() as session:
+        return [j.status for j in session.query(ExecutionJob).order_by(ExecutionJob.id)]
+
+
+def test_execute_subtask_rejects_second_request_while_queued(session_factory):
+    subtask_id = _add_subtask(session_factory, "draft")
+    first = subtasks.execute_subtask(subtask_id)
+
+    with pytest.raises(HTTPException) as exc:
+        subtasks.execute_subtask(subtask_id)
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["job_id"] == first["job_id"]
+    assert exc.value.detail["status"] == "queued"
+    assert _job_statuses(session_factory) == ["queued"]
+
+
+def test_execute_subtask_rejects_while_running(session_factory):
+    subtask_id = _add_subtask(session_factory, "draft", job_status="running")
+
+    with pytest.raises(HTTPException) as exc:
+        subtasks.execute_subtask(subtask_id)
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail["status"] == "running"
+    assert _job_statuses(session_factory) == ["running"]
+
+
+@pytest.mark.parametrize("job_status", ["succeeded", "failed", "needs_attention"])
+def test_execute_subtask_allows_after_job_finished(session_factory, job_status):
+    subtask_id = _add_subtask(session_factory, "draft", job_status=job_status)
+
+    result = subtasks.execute_subtask(subtask_id)
+
+    assert result["status"] == "queued"
+    assert _job_statuses(session_factory) == [job_status, "queued"]
+
+
 def test_get_merges_lists_running_and_queued_in_order(session_factory, merge_calls):
     first = _add_subtask(session_factory, "resolved", pr_number=7, branch="a")
     second = _add_subtask(session_factory, "resolved", pr_number=8, branch="b")

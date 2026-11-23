@@ -19,7 +19,8 @@ from core.idea_queue import claim_next_idea_job, recover_stale_idea_jobs
 from core.lifecycle import LifecycleState
 from core.logging_config import configure_logging
 from core.job_queue import (
-    STATUS_RATE_LIMITED,
+    ExecutionJobStatus,
+    WorkerState,
     claim_next_job,
     cleanup_stale_workers,
     finish_job,
@@ -96,18 +97,18 @@ def _finalize_success(
         record_event(job_id, event_type="warning", content=".claude-tower/report.htmlが見つからない")
 
     if not subtask.github_pr_number:
-        return "succeeded", None
+        return ExecutionJobStatus.SUCCEEDED, None
     try:
         mark_pr_ready(project.github_repo, subtask.github_pr_number)
     except GitHubClientError as exc:
         message = f"PRのDraft解除に失敗: {exc}"
         record_event(job_id, event_type="error", content=message)
-        return "needs_attention", message
+        return ExecutionJobStatus.NEEDS_ATTENTION, message
     with SessionLocal() as session:
         db_subtask = session.get(Subtask, subtask.id)
         db_subtask.lifecycle_state = LifecycleState.RESOLVED
         session.commit()
-    return "succeeded", None
+    return ExecutionJobStatus.SUCCEEDED, None
 
 
 def _execute_job(job_id: int, subtask: Subtask, project: Project) -> None:
@@ -143,7 +144,7 @@ def process_job(job: dict, worker_id: int) -> None:
     """
     job_id = job["job_id"]
     logger.info("job %s (subtask %s) を実行開始", job_id, job["subtask_id"])
-    set_worker_state(worker_id, state="busy", current_job_id=job_id)
+    set_worker_state(worker_id, state=WorkerState.BUSY, current_job_id=job_id)
 
     subtask, project = _load_subtask_and_project(job["subtask_id"])
     record_event(job_id, event_type="instruction", content=subtask.instruction)
@@ -152,7 +153,11 @@ def process_job(job: dict, worker_id: int) -> None:
         _run_with_heartbeat(job_id, worker_id, lambda: _execute_job(job_id, subtask, project))
     except Exception as exc:  # noqa: BLE001
         record_event(job_id, event_type="error", content=str(exc))
-        status = STATUS_RATE_LIMITED if is_rate_limit_error(str(exc)) else "failed"
+        status = (
+            ExecutionJobStatus.RATE_LIMITED
+            if is_rate_limit_error(str(exc))
+            else ExecutionJobStatus.FAILED
+        )
         finish_job(job_id, status=status, exit_code=1, error_message=str(exc))
         logger.warning("job %s 失敗（%s）: %s", job_id, status, exc)
 
@@ -206,7 +211,7 @@ def run_loop(worker_id: int) -> None:
     再登録はしないため、停止されたワーカーが設定数を超えて残ることはない。
     """
     while True:
-        if not set_worker_state(worker_id, state="idle", current_job_id=None):
+        if not set_worker_state(worker_id, state=WorkerState.IDLE, current_job_id=None):
             logger.info("自分のワーカー行が削除されたため終了します")
             return
         _cleanup_stale_records()

@@ -24,12 +24,47 @@ async function executeSubtask(subtask) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ instruction }),
   }).catch(() => null);
+  const activeJob = await findActiveJobFromConflict(response);
+  if (activeJob) {
+    followActiveJob(activeJob, subtask.id, statusEl);
+    return;
+  }
   if (!response || !response.ok) {
     setJobStatusText(statusEl, "実行を開始できませんでした", JOB_STATUS_CLASS.warning);
     setSubtaskBusy(subtask.id, false);
     return;
   }
   pollJob((await response.json()).job_id, subtask.id);
+}
+
+/**
+ * 実行拒否の応答から既存の実装ジョブを取り出す
+ *
+ * 別端末などで実行済みの場合、409の詳細にジョブIDと状態が入る。
+ * それ以外の応答ではnullを返す。
+ */
+async function findActiveJobFromConflict(response) {
+  if (!response || response.status !== 409) return null;
+  const body = await response.json().catch(() => null);
+  const detail = body && body.detail;
+  if (!detail || typeof detail !== "object" || !detail.job_id) return null;
+  return { id: detail.job_id, status: detail.status };
+}
+
+/**
+ * 既存の実装ジョブの監視に切り替える
+ *
+ * 実行中であることを表示し、終了までポーリングする。
+ */
+function followActiveJob(job, subtaskId, statusEl) {
+  followedJobIds.add(job.id);
+  renderPolledJobStatus(statusEl, job, job.id);
+  pollJob(job.id, subtaskId);
+}
+
+function renderPolledJobStatus(statusEl, job, jobId) {
+  renderJobStatus(statusEl, job);
+  if (followedJobIds.has(jobId) && isJobActive(job)) statusEl.prepend(JOB_ALREADY_ACTIVE_NOTE);
 }
 
 /**
@@ -49,7 +84,7 @@ async function pollJobLoop(jobId, subtaskId) {
     .then((r) => r.json())
     .catch(() => null);
   const statusEl = document.querySelector(`.job-status[data-subtask-id="${subtaskId}"]`);
-  if (statusEl && job) renderJobStatus(statusEl, job);
+  if (statusEl && job) renderPolledJobStatus(statusEl, job, jobId);
 
   // 取得失敗時（サーバー再起動中など）も監視を継続する
   if (!job || isJobActive(job)) {
@@ -57,6 +92,7 @@ async function pollJobLoop(jobId, subtaskId) {
     return;
   }
   pollingJobIds.delete(jobId);
+  followedJobIds.delete(jobId);
   busySubtaskIds.delete(subtaskId);
   await onJobFinished(job, jobId, subtaskId);
 }

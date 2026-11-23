@@ -17,7 +17,7 @@ from core.db import SessionLocal
 from core.idea_context import build_idea_prompt
 from core.idea_queue import IdeaJobStatus, finish_idea_job, heartbeat_idea_job
 from core.ideas import IdeaParseError, parse_proposals, save_proposals
-from core.job_queue import set_worker_state
+from core.job_queue import WorkerState, set_worker_state
 from core.models import Project
 from core.rate_limits import is_rate_limit_error, record_rate_limit
 
@@ -79,7 +79,7 @@ def process_idea_job(job: dict, worker_id: int, claude_runner: Callable = _run_c
     """
     idea_job_id = job["idea_job_id"]
     logger.info("idea job %s (project %s) を実行開始", idea_job_id, job["project_id"])
-    set_worker_state(worker_id, state="busy", current_job_id=None)
+    set_worker_state(worker_id, state=WorkerState.BUSY, current_job_id=None)
     focus = job.get("focus", "")
     try:
         _with_heartbeat(idea_job_id, worker_id, lambda: _execute(idea_job_id, job["project_id"], focus, claude_runner))

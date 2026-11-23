@@ -86,5 +86,17 @@ def test_get_sync_self_result_404_when_never_run(monkeypatch):
 def test_rate_limits_returns_snapshot(monkeypatch):
     limits = {"five_hour": {"utilization": 0.4}, "seven_day": None}
     monkeypatch.setattr(system, "get_rate_limits", lambda: limits)
+    monkeypatch.setattr(system, "latest_event_at", lambda: None)
 
     assert system.rate_limits() == limits
+
+
+def test_rate_limits_refreshes_usage_after_event(monkeypatch):
+    calls = []
+    monkeypatch.setattr(system, "get_rate_limits", lambda: calls.append("get") or {})
+    monkeypatch.setattr(system, "latest_event_at", lambda: "event-at")
+    monkeypatch.setattr(system, "refresh_usage_if_older", lambda since: calls.append(since))
+
+    system.rate_limits()
+
+    assert calls == ["event-at", "get"]
