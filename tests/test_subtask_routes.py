@@ -168,6 +168,60 @@ def test_branch_name_unique_for_same_title(monkeypatch):
     assert branch_1 != branch_2
 
 
+@pytest.fixture
+def stage_stubs(monkeypatch):
+    """作成段階をスタブ化し、後始末に渡された完了段階を記録する"""
+    rollbacks = []
+    for name in ("create_worktree", "commit_subtask_instruction", "push_branch"):
+        monkeypatch.setattr(subtasks, name, lambda *a, **k: None)
+    monkeypatch.setattr(subtasks, "create_draft_pr", lambda **k: {"number": 1, "url": "u"})
+
+    def fake_rollback(repo_path, worktree_path, branch_name, completed):
+        rollbacks.append(set(completed))
+        return ["ローカルブランチ b"]
+
+    monkeypatch.setattr(subtasks, "rollback_subtask_creation", fake_rollback)
+    return rollbacks
+
+
+def _fail(exc_type):
+    def raise_error(*args, **kwargs):
+        raise exc_type("boom")
+
+    return raise_error
+
+
+def test_push_failure_rolls_back_created_stages(stage_stubs, monkeypatch):
+    monkeypatch.setattr(subtasks, "push_branch", _fail(subtasks.GitClientError))
+
+    with pytest.raises(subtasks.GitClientError) as exc:
+        subtasks._push_draft_pr(_project(), "b", "t", "", "body")
+
+    stages = subtasks.SubtaskCreationStage
+    assert stage_stubs == [{stages.WORKTREE_CREATED, stages.INSTRUCTION_COMMITTED}]
+    assert "boom" in str(exc.value)
+    assert "ローカルブランチ b" in str(exc.value)
+
+
+def test_draft_pr_failure_rolls_back_pushed_branch(stage_stubs, monkeypatch):
+    monkeypatch.setattr(subtasks, "create_draft_pr", _fail(subtasks.GitHubClientError))
+
+    with pytest.raises(subtasks.GitHubClientError):
+        subtasks._push_draft_pr(_project(), "b", "t", "", "body")
+
+    assert stage_stubs == [set(subtasks.SubtaskCreationStage)]
+
+
+def test_worktree_failure_skips_rollback(stage_stubs, monkeypatch):
+    monkeypatch.setattr(subtasks, "create_worktree", _fail(subtasks.GitClientError))
+
+    with pytest.raises(subtasks.GitClientError) as exc:
+        subtasks._push_draft_pr(_project(), "b", "t", "", "body")
+
+    assert stage_stubs == []
+    assert str(exc.value) == "boom"
+
+
 def _add_subtask(session_factory):
     with session_factory() as session:
         session.add(
