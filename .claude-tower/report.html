@@ -2,82 +2,71 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>サブタスク実行レポート - アイデアマンー①</title>
+<title>実行レポート: Claude参照ルールー②</title>
 <style>
-body{font-family:sans-serif;margin:2em;line-height:1.6;color:#222;max-width:1100px}
-h1{font-size:1.4em}h2{font-size:1.1em;border-bottom:1px solid #ccc;margin-top:1.6em}
-table{border-collapse:collapse;width:100%}td,th{border:1px solid #bbb;padding:4px 8px;text-align:left;vertical-align:top}
-th{background:#f0f3f8}.ok{color:#13795b;font-weight:bold}code{background:#f3f3f3;padding:0 3px}
+body { font-family: sans-serif; margin: 24px; line-height: 1.6; color: #222; }
+h1 { font-size: 1.4em; }
+h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-top: 28px; }
+table { border-collapse: collapse; width: 100%; margin: 8px 0; }
+th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; vertical-align: top; }
+th { background: #f3f3f3; }
+code { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; }
+.ok { color: #1a7f37; font-weight: bold; }
 </style>
 </head>
 <body>
-<h1>サブタスク実行レポート</h1>
+<h1>実行レポート: Claude参照ルールー②</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#178 アイデアマン</td></tr>
-<tr><th>サブタスク</th><td>アイデアマンー①（PR #179）</td></tr>
-<tr><th>ブランチ</th><td>issue-new-8c80b423-subtask-1</td></tr>
-<tr><th>設計書</th><td>Input\アイデアマン_設計案.html（v0.1）</td></tr>
+<tr><th>Issue</th><td>#180 Claude参照ルール</td></tr>
+<tr><th>サブタスク</th><td>Claude参照ルールー②（PR #183）</td></tr>
+<tr><th>ブランチ</th><td><code>issue-180-subtask-2</code></td></tr>
 </table>
 
-<h2>2. 実装結果</h2>
-<p class="ok">一部成功</p>
-<p>設計案9章のPhase I（ideasテーブル）とPhase II（読み取り専用のアイデア出しジョブ）を実装しました。</p>
-<p>あわせて、投入・一覧・却下のAPIを追加しました。</p>
-<p>Phase III（提案一覧画面）とPhase IV（承認時のIssue・サブタスク作成）は、後続サブタスクの範囲として未着手です。</p>
+<h2>2. 実装結果の要約</h2>
+<p class="ok">成功</p>
+<ul>
+<li>書き込みは対象worktreeを基本とし、<code>C:/git</code>配下の他リポジトリも許可した。</li>
+<li>秘密鍵・<code>.env</code>・認証情報ファイル等を名前パターンで登録し、場所を問わず読み書きを拒否するようにした。</li>
+<li>判定は<code>can_use_tool</code>とPreToolUseフックの両方で行う。</li>
+</ul>
 
 <h2>3. 実施した変更</h2>
 <table>
 <tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td>core/models.py</td><td><code>IdeaJob</code>・<code>Idea</code>モデルを追加</td></tr>
-<tr><td>2</td><td>core/ideas.py（新規）</td><td>状態・分類の定数、応答JSONの解釈、保存、一覧、却下</td></tr>
-<tr><td>3</td><td>core/idea_queue.py（新規）</td><td>アイデア出しジョブの投入・取得・心拍・完了・心拍途絶の回収</td></tr>
-<tr><td>4</td><td>core/claude_client.py</td><td>アイデアマン用ポリシー、読み取り専用の許可確認と実行関数を追加。応答の集約処理を共通化</td></tr>
-<tr><td>5</td><td>core/idea_context.py（新規）</td><td>Open Issue・失敗した実行・レポート要約・既存提案を含む指示文の組み立て</td></tr>
-<tr><td>6</td><td>core/config.py</td><td><code>idea_max_proposals</code>（5）・<code>idea_history_limit</code>（10）を追加</td></tr>
-<tr><td>7</td><td>worker/idea_runner.py（新規）・worker/main.py</td><td>実装ジョブが無い時にアイデア出しジョブを実行</td></tr>
-<tr><td>8</td><td>app/routes/ideas.py（新規）・app/main.py</td><td>API 4本を追加</td></tr>
-<tr><td>9</td><td>IMPLEMENTATION_PLAN.md</td><td>9章に採用方式と人間の確認が必要な事項を追記</td></tr>
-<tr><td>10</td><td>tests/test_ideas.py ほか4ファイル</td><td>新規テストを追加</td></tr>
+<tr><td>1</td><td><code>core/claude_access_rules.py</code>（新規）</td><td>参照ルール（書き込み範囲・保護フォルダ・参照禁止の名前パターン）を集約</td></tr>
+<tr><td>2</td><td><code>core/config.py</code></td><td>設定<code>claude_shared_root</code>（既定<code>C:/git</code>）を追加</td></tr>
+<tr><td>3</td><td><code>core/claude_client.py</code></td><td>許可判定をルールベースに置換。PreToolUseフックを追加。アイデアマンにも参照禁止を適用</td></tr>
+<tr><td>4</td><td><code>tests/test_claude_access_rules.py</code>（新規）・<code>tests/test_claude_client.py</code></td><td>共有ルート書き込み・他worktree拒否・参照禁止・フックのテストを追加</td></tr>
+<tr><td>5</td><td><code>CLAUDE.md</code>・<code>README.md</code>・<code>IMPLEMENTATION_PLAN.md</code></td><td>ルールと残存リスクを追記</td></tr>
 </table>
-<p>追加したAPIは次のとおりです。</p>
-<ul>
-<li><code>POST /api/projects/{id}/ideas/run</code>：ジョブを投入する（実行中なら409を返す）</li>
-<li><code>GET /api/projects/{id}/ideas?tab=pending|approved|rejected|all</code>：提案一覧</li>
-<li><code>GET /api/projects/{id}/idea-jobs/latest</code>：最新ジョブの状態</li>
-<li><code>POST /api/ideas/{id}/reject</code>：却下する（理由を記録）</li>
-</ul>
+<p>コミット：b682703（ルール定義）、e02b91b（許可判定へ適用）、c8e5a28（ドキュメント）。</p>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>①の範囲をPhase I・IIとAPIまでとした</td><td>サブタスク名が「ー①」なので、段階的に進める前提にしました。画面と承認は後続に回しました。</td></tr>
-<tr><td>2</td><td><code>execution_jobs</code>を流用せず<code>idea_jobs</code>を新設した</td><td>DBは<code>create_all</code>のみで既存テーブルに列を追加できません。また<code>subtask_id</code>が必須です。</td></tr>
-<tr><td>3</td><td>既存ワーカーが実装ジョブを優先し、空き時にアイデア出しを取得する</td><td>設計案2章の「ワーカープールに相乗り」に合わせました。ユーザーの実装作業を妨げないためです。</td></tr>
-<tr><td>4</td><td>worktreeを割り当てず、<code>repo_path</code>を読み取り専用で参照する</td><td>書き込みをしないためブランチは不要です。割り当て機構を変えずに済みます。</td></tr>
-<tr><td>5</td><td>ツールをRead・Glob・Grepのみに絞った</td><td>シェルを許すと読み取り専用を確実に担保できません。<code>tools</code>指定と<code>can_use_tool</code>の二重で制限しています。</td></tr>
-<tr><td>6</td><td>Open Issue・実行履歴は管理塔側で集めて指示文に含める</td><td>No.5の制限で、Claudeはghコマンドを実行できないためです。</td></tr>
-<tr><td>7</td><td>提案は最終応答のJSON配列で受け取る</td><td>ファイル書き込みが禁止なのでレポートファイル方式は使えません。解釈できなければ失敗として応答を残します。</td></tr>
-<tr><td>8</td><td>却下APIは①に含めた</td><td>アプリ内のDB更新のみでGitHubへの書き込みがなく、安全なためです。</td></tr>
-<tr><td>9</td><td>PRレビューコメントの参照は見送った</td><td>MVPの必須ではなく、取得量の設計が必要なため後続に回しました。</td></tr>
+<tr><td>1</td><td><code>C:/git</code>配下でも、他のworktree（<code>worktree_base_dir</code>）と稼働中の管理塔フォルダへの書き込みは拒否</td><td>並列実行中の他サブタスクを壊さないため。稼働中のサーバーのコードとDBを直接書き換えずPR経由にするため</td></tr>
+<tr><td>2</td><td>参照禁止は<code>C:/git</code>の内外を問わず適用</td><td>ルールが単純になり、より安全側に倒れるため</td></tr>
+<tr><td>3</td><td>参照禁止の対象は、パスのいずれかの要素が名前パターンに一致するもの（<code>.ssh</code>等のフォルダは配下全体）。<code>.env.example</code>等の雛形は許可</td><td>リポジトリごとの登録なしで、汎用的にブラックボックス化するため</td></tr>
+<tr><td>4</td><td>PreToolUseフックでも同じ判定を実施</td><td>acceptEditsモードでは、worktree内の読み書きが<code>can_use_tool</code>を経ずに許可される。そのためworktree内の<code>.env</code>を守るにはフックが必要</td></tr>
+<tr><td>5</td><td>読み取り（worktree外）は従来通り許可。ディレクトリ逆参照（<code>..</code>）の拒否も維持</td><td>①の方針を維持するため。<code>..</code>は相対位置を確実に解決できないため</td></tr>
+<tr><td>6</td><td><code>READ_ONLY_TOOL_NAMES</code>の重複定義を解消（アイデアマン用を<code>IDEA_MAN_TOOL_NAMES</code>に改名）</td><td>後の定義が前の定義を上書きし、LS・NotebookReadがworktree外読み取りの許可から漏れていたため</td></tr>
+<tr><td>7</td><td>拒否する名前パターンはコード内の定数にした（設定化はしない）</td><td>一箇所にまとめるという規約を満たしつつ、実装をシンプルに保つため</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<ul>
-<li><code>./.venv/Scripts/python.exe -m pytest -q</code>：338件成功（既存297件＋新規41件）</li>
-<li>一時DBでFastAPIを起動し、API呼び出しを確認：投入202、重複投入409、最新ジョブqueued、一覧空、未知IDの却下404</li>
-<li>実際のClaude実行（テストリポジトリでの1回実行）は未実施です。ワーカー再起動が必要で、デプロイ後に人間が確認する必要があります。</li>
-</ul>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code>：<span class="ok">359 passed</span>（変更前は341件。18件追加）</p>
+<p>実機（Claude Agent SDK経由での実行）でのフックの動作確認は未実施。worktree内からは本番ワーカーを起動できないため。</p>
 
-<h2>6. 残課題・リスク・レビュー観点</h2>
+<h2>6. 残課題・リスク・レビュー時の確認ポイント</h2>
 <ul>
-<li>Phase IIの完了条件（テストリポジトリで1回実行し、提案が保存される）は未確認です。</li>
-<li>デプロイ後に<code>POST /api/projects/{id}/ideas/run</code>を呼び、<code>idea-jobs/latest</code>がsucceededになるか確認してください。</li>
-<li>Claudeの応答がJSON形式に従わない場合は失敗になります。失敗が続く場合は<code>output_format</code>（構造化出力）への切り替えを検討します。</li>
-<li>読み取り専用の担保（<code>core/claude_client.py</code>の<code>restrict_to_read_only</code>・<code>run_read_only_claude</code>）を重点的にレビューしてください。</li>
-<li>アイデア出しジョブ実行中のワーカーは<code>current_job_id</code>が空のbusyになります。稼働状況パネルでの表示はPhase IIIで調整予定です。</li>
-<li>設計案10章No.1・No.2（対象リポジトリ・サブタスク提案の承認要否）は、人間の確認事項としてIMPLEMENTATION_PLAN.md 9章に記録しました。</li>
+<li>フォルダを指定したGrepは、その配下にある参照禁止ファイルの中身を拾う可能性がある。</li>
+<li>シェルの変数・ワイルドカード（<code>cat .e*</code>等）で参照禁止ファイルを指す操作は検出できない。</li>
+<li>名前パターンの誤検知がありうる（PowerShellの<code>$x.key</code>が<code>*.key</code>に一致する等）。</li>
+<li>PreToolUseフックの拒否が実際のSDK実行で効くことを、テスト用リポジトリで確認してほしい（worktree内の<code>.env</code>のReadが拒否されること）。</li>
+<li><code>BLOCKED_NAME_PATTERNS</code>の内容に過不足がないか確認してほしい。</li>
+<li><code>C:/git</code>配下の他リポジトリへの書き込みは、そのリポジトリのブランチ運用に依存する（直接masterを編集する可能性がある）。</li>
 </ul>
 </body>
 </html>
