@@ -57,15 +57,53 @@ def test_record_rate_limit_ignores_info_without_type(tmp_path):
 
 def test_get_rate_limits_prefers_usage_api(tmp_path):
     factory = _session_factory(tmp_path)
-    record_rate_limit(RateLimitInfo(status="allowed_warning", rate_limit_type="five_hour", utilization=0.2, resets_at=100), factory)
-    usage = {"five_hour": {"utilization": 35.0, "resets_at": "1970-01-01T00:16:40+00:00"}, "seven_day": None}
+    record_rate_limit(RateLimitInfo(status="allowed_warning", rate_limit_type="five_hour", utilization=0.2, resets_at=FUTURE), factory)
+    usage = {"five_hour": {"utilization": 35.0, "resets_at": "2100-01-01T00:16:40+00:00"}, "seven_day": None}
 
     limits = get_rate_limits(factory, lambda: usage)
 
     assert limits["five_hour"]["status"] == "allowed_warning"
     assert limits["five_hour"]["utilization"] == 0.35
-    assert limits["five_hour"]["resets_at"] == 1000
+    assert limits["five_hour"]["resets_at"] == FUTURE + 1000
     assert limits["seven_day"] is None
+
+
+def test_get_rate_limits_drops_status_of_past_window(tmp_path):
+    factory = _session_factory(tmp_path)
+    record_rate_limit(RateLimitInfo(status="allowed_warning", rate_limit_type="five_hour", utilization=0.9, resets_at=100), factory)
+    usage = {"five_hour": {"utilization": 0.0, "resets_at": None}}
+
+    assert get_rate_limits(factory, lambda: usage)["five_hour"]["status"] is None
+    assert get_rate_limits(factory, _no_usage)["five_hour"]["status"] is None
+
+
+def test_get_rate_limits_judges_status_without_resets_by_window_start(tmp_path):
+    factory = _session_factory(tmp_path)
+    record_rate_limit(RateLimitInfo(status="allowed_warning", rate_limit_type="five_hour"), factory)
+    usage = {"five_hour": {"utilization": 80.0, "resets_at": "2100-01-01T00:00:00Z"}}
+
+    # 受信時刻が現在の枠の開始より前のため前の枠の状態とみなす
+    assert get_rate_limits(factory, lambda: usage)["five_hour"]["status"] is None
+    assert get_rate_limits(factory, _no_usage)["five_hour"]["status"] == "allowed_warning"
+
+
+def test_get_rate_limits_drops_status_without_resets_when_window_not_started(tmp_path):
+    factory = _session_factory(tmp_path)
+    record_rate_limit(RateLimitInfo(status="allowed_warning", rate_limit_type="five_hour"), factory)
+    usage = {"five_hour": {"utilization": 0.0, "resets_at": None}}
+
+    assert get_rate_limits(factory, lambda: usage)["five_hour"]["status"] is None
+
+
+def test_get_rate_limits_marks_rejected_when_usage_full(tmp_path):
+    factory = _session_factory(tmp_path)
+    record_rate_limit(RateLimitInfo(status="allowed_warning", rate_limit_type="five_hour", resets_at=FUTURE), factory)
+    usage = {"five_hour": {"utilization": 100.0, "resets_at": None}, "seven_day": {"utilization": 100.0, "resets_at": None}}
+
+    limits = get_rate_limits(factory, lambda: usage)
+
+    assert limits["five_hour"]["status"] == "rejected"
+    assert limits["seven_day"]["status"] == "rejected"
 
 
 def test_get_rate_limits_uses_usage_api_without_event(tmp_path):
