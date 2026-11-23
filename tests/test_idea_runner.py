@@ -10,6 +10,11 @@ from core.ideas import save_proposals
 from core.models import Idea, IdeaJob, Project
 
 
+@pytest.fixture(autouse=True)
+def not_rate_limited(monkeypatch):
+    monkeypatch.setattr(worker_main, "_is_rate_limited", lambda: False)
+
+
 @pytest.fixture
 def session_factory(tmp_path, monkeypatch):
     engine = make_engine(str(tmp_path / "test.db"))
@@ -86,6 +91,14 @@ def test_process_idea_job_records_exception(session_factory):
     job = _job(session_factory)
     assert job.status == IdeaJobStatus.FAILED
     assert job.error_message == "claude down"
+
+
+def test_process_next_job_skips_claim_while_rate_limited(monkeypatch):
+    monkeypatch.setattr(worker_main, "_is_rate_limited", lambda: True)
+    monkeypatch.setattr(worker_main, "claim_next_job", lambda worker_id: pytest.fail("not expected"))
+    monkeypatch.setattr(worker_main, "claim_next_idea_job", lambda worker_id: pytest.fail("not expected"))
+
+    assert worker_main._process_next_job(1) is False
 
 
 def test_process_next_job_prefers_execution_job(monkeypatch):
