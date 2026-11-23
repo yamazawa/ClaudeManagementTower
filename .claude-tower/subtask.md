@@ -1,77 +1,79 @@
-# サブタスク: [IdeaMan] Issue一覧の取得結果をサーバー側で短時間キャッシュするー①
+# サブタスク: [IdeaMan] Issue選択時のGitHub問い合わせを省き、DB上のMR一覧のみで表示するー①
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-Issue一覧の取得結果をサーバー側で短時間キャッシュする
+Issue選択時のGitHub問い合わせを省き、DB上のMR一覧のみで表示する
 
 ## 概要
 
-Issue一覧APIは呼ばれるたびにgh issue listを実行するため、リポジトリ切り替えやフィルタ変更のたびにGitHubとの通信を待つ。リポジトリと状態ごとに短時間キャッシュし、Issueを変更した時に破棄する。
+Issueを選択するたびにgh issue viewを実行しているが、画面はIssue本文を使っていない。Issue一覧で取得済みの値とDB上のMR一覧で表示し、選択時の待ち時間をなくす。
 
 ## 詳細
 
-- core/github_client.pyのlist_issues・list_issues_closed_sinceの結果を、(リポジトリ, 状態)をキーにしてメモリ上に保持する。保持時間はconfigで設定し、目安は30〜60秒とする。
-- Issueの作成・Close・ReOpen・名前変更が成功したら、そのリポジトリのキャッシュを破棄する。
-- 画面の60秒ごとの定期取得（pollOpenIssues）も同じキャッシュを使うようにする。
-- 管理塔の外でIssueが変更された場合は、保持時間が過ぎるまで画面に反映されない。この遅れを許容するかを人間に確認する。
-- キャッシュの有効期限と破棄の動きをpytestで確認する。
+- Issue選択時は、Issue一覧で取得済みのnumber・title・state・urlと、既存のDB専用API（/issues/{number}/subtasks）でIssue内容を組み立てる。
+- 対象はselectIssue、fetchIssueSelection、refreshIssueDetail（ジョブ完了時）、openCreatedIssueAndSubtaskとする。
+- Issue一覧に無い番号（fetchUnlistedIssue）は、従来どおり詳細APIで取得する。
+- 詳細API（get_issue_detail）は残すが、画面の通常操作では呼ばないようにする。
+- 効果は、Issue切り替え時に出る「更新中…」の時間の短縮を、手動で計測して確認する。
 
 ## 根拠
 
-- app/routes/projects.py:75-88 のget_issuesは、毎回_list_issues_by_state経由でgh issue list（--limit 200）を実行している。
-- core/github_client.py:66-80 では、一時エラー時に最大3回まで、待ち時間を伸ばしながら再試行するため、通信状況が悪いと1回の表示が長引く。
-- app.js:762-774（リポジトリ選択）、1084-1090（フィルタ変更・Close/ReOpen後の再読込）、827-831（全リポジトリを60秒ごとに取得）が、すべてこのAPIを呼んでいる。
-- MRステータスフィルタの選択中は、app.js:1170でopenとclosedの2回のgh呼び出しが発生する。
-- 実行履歴に「TLS handshake timeout」での失敗があり、GitHubへの問い合わせ回数を減らすことは安定性にも効く。
+- app/routes/projects.py:243-249 のget_issue_detailは、毎回get_issue（gh issue view）を実行している。
+- core/github_client.py:114-118 のget_issueはbodyを取得しているが、app.jsでIssueの.bodyを参照している箇所は無い（grepで確認）。
+- 画面で使っているtitle・state・urlは、Issue一覧API（gh issue list --json number,title,state,url）の結果にすでにある。
+- app.js:1506-1515 のselectIssueは、詳細取得が終わるまで画面をブロックして「更新中…」を表示する。
+- app.js:2350 ではジョブ完了のたびにrefreshIssueDetailでgh問い合わせが発生している。
+- MR一覧は、GitHubに問い合わせないAPI（projects.py:286-291）が既にある。
 
 ## 関連ファイル
 
-- app/routes/projects.py:75
-- app/routes/projects.py:142
-- app/routes/projects.py:252
-- app/routes/projects.py:275
-- core/github_client.py:83
-- core/github_client.py:96
-- app/static/app.js:827
-- app/static/app.js:1157
-## 実行指示（2026-11-23 07:17:27 UTC）
+- app/routes/projects.py:243
+- core/github_client.py:114
+- app/static/app.js:1124
+- app/static/app.js:1506
+- app/static/app.js:1549
+- app/static/app.js:1558
+- app/static/app.js:2175
+- app/static/app.js:2350
+## 実行指示（2026-11-23 07:17:53 UTC）
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-Issue一覧の取得結果をサーバー側で短時間キャッシュする
+Issue選択時のGitHub問い合わせを省き、DB上のMR一覧のみで表示する
 
 ## 概要
 
-Issue一覧APIは呼ばれるたびにgh issue listを実行するため、リポジトリ切り替えやフィルタ変更のたびにGitHubとの通信を待つ。リポジトリと状態ごとに短時間キャッシュし、Issueを変更した時に破棄する。
+Issueを選択するたびにgh issue viewを実行しているが、画面はIssue本文を使っていない。Issue一覧で取得済みの値とDB上のMR一覧で表示し、選択時の待ち時間をなくす。
 
 ## 詳細
 
-- core/github_client.pyのlist_issues・list_issues_closed_sinceの結果を、(リポジトリ, 状態)をキーにしてメモリ上に保持する。保持時間はconfigで設定し、目安は30〜60秒とする。
-- Issueの作成・Close・ReOpen・名前変更が成功したら、そのリポジトリのキャッシュを破棄する。
-- 画面の60秒ごとの定期取得（pollOpenIssues）も同じキャッシュを使うようにする。
-- 管理塔の外でIssueが変更された場合は、保持時間が過ぎるまで画面に反映されない。この遅れを許容するかを人間に確認する。
-- キャッシュの有効期限と破棄の動きをpytestで確認する。
+- Issue選択時は、Issue一覧で取得済みのnumber・title・state・urlと、既存のDB専用API（/issues/{number}/subtasks）でIssue内容を組み立てる。
+- 対象はselectIssue、fetchIssueSelection、refreshIssueDetail（ジョブ完了時）、openCreatedIssueAndSubtaskとする。
+- Issue一覧に無い番号（fetchUnlistedIssue）は、従来どおり詳細APIで取得する。
+- 詳細API（get_issue_detail）は残すが、画面の通常操作では呼ばないようにする。
+- 効果は、Issue切り替え時に出る「更新中…」の時間の短縮を、手動で計測して確認する。
 
 ## 根拠
 
-- app/routes/projects.py:75-88 のget_issuesは、毎回_list_issues_by_state経由でgh issue list（--limit 200）を実行している。
-- core/github_client.py:66-80 では、一時エラー時に最大3回まで、待ち時間を伸ばしながら再試行するため、通信状況が悪いと1回の表示が長引く。
-- app.js:762-774（リポジトリ選択）、1084-1090（フィルタ変更・Close/ReOpen後の再読込）、827-831（全リポジトリを60秒ごとに取得）が、すべてこのAPIを呼んでいる。
-- MRステータスフィルタの選択中は、app.js:1170でopenとclosedの2回のgh呼び出しが発生する。
-- 実行履歴に「TLS handshake timeout」での失敗があり、GitHubへの問い合わせ回数を減らすことは安定性にも効く。
+- app/routes/projects.py:243-249 のget_issue_detailは、毎回get_issue（gh issue view）を実行している。
+- core/github_client.py:114-118 のget_issueはbodyを取得しているが、app.jsでIssueの.bodyを参照している箇所は無い（grepで確認）。
+- 画面で使っているtitle・state・urlは、Issue一覧API（gh issue list --json number,title,state,url）の結果にすでにある。
+- app.js:1506-1515 のselectIssueは、詳細取得が終わるまで画面をブロックして「更新中…」を表示する。
+- app.js:2350 ではジョブ完了のたびにrefreshIssueDetailでgh問い合わせが発生している。
+- MR一覧は、GitHubに問い合わせないAPI（projects.py:286-291）が既にある。
 
 ## 関連ファイル
 
-- app/routes/projects.py:75
-- app/routes/projects.py:142
-- app/routes/projects.py:252
-- app/routes/projects.py:275
-- core/github_client.py:83
-- core/github_client.py:96
-- app/static/app.js:827
-- app/static/app.js:1157
+- app/routes/projects.py:243
+- core/github_client.py:114
+- app/static/app.js:1124
+- app/static/app.js:1506
+- app/static/app.js:1549
+- app/static/app.js:1558
+- app/static/app.js:2175
+- app/static/app.js:2350
 

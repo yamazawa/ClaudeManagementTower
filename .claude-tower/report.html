@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実行レポート: Issue一覧の取得結果をサーバー側で短時間キャッシュするー①</title>
+<title>実行レポート: Issue選択時のGitHub問い合わせを省き、DB上のMR一覧のみで表示するー①</title>
 <style>
 body { font-family: sans-serif; margin: 24px; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; }
@@ -12,64 +12,63 @@ th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; vertical-al
 th { background: #f3f3f3; }
 code { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; }
 .ok { color: #1a7f37; font-weight: bold; }
-.warn { color: #9a6700; font-weight: bold; }
 </style>
 </head>
 <body>
-<h1>実行レポート: Issue一覧の取得結果をサーバー側で短時間キャッシュするー①</h1>
+<h1>実行レポート: Issue選択時のGitHub問い合わせを省き、DB上のMR一覧のみで表示するー①</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#210 [IdeaMan] Issue一覧の取得結果をサーバー側で短時間キャッシュする</td></tr>
-<tr><th>サブタスク</th><td>Issue一覧の取得結果をサーバー側で短時間キャッシュするー①（Draft PR #211）</td></tr>
-<tr><th>ブランチ</th><td><code>issue-210-974df826-subtask-1</code>（base: <code>master</code>）</td></tr>
+<tr><th>Issue</th><td>#212 [IdeaMan] Issue選択時のGitHub問い合わせを省き、DB上のMR一覧のみで表示する</td></tr>
+<tr><th>サブタスク</th><td>Issue選択時のGitHub問い合わせを省き、DB上のMR一覧のみで表示するー①（PR #213）</td></tr>
+<tr><th>ブランチ</th><td><code>issue-212-9cc11bbb-subtask-1</code>（base: <code>master</code>）</td></tr>
 </table>
 
 <h2>2. 実装結果の要約</h2>
-<p class="ok">成功</p>
+<p class="ok">成功（効果の手動計測は未実施）</p>
 <ul>
-<li><code>list_issues</code>・<code>list_issues_closed_since</code>の結果を(リポジトリ, 種類)ごとにメモリ上で保持するようにした。</li>
-<li>保持時間は<code>issue_list_cache_ttl_seconds</code>で設定する（既定45秒、0以下でキャッシュ無効）。</li>
-<li>Issueの作成・名前変更・Close・ReOpenが成功したら、そのリポジトリのキャッシュを破棄する。</li>
-<li>画面の60秒ごとの定期取得（<code>pollOpenIssues</code>）は同じAPIを呼ぶため、変更なしで同じキャッシュを使う。</li>
+<li>Issue一覧で取得済みのnumber・title・state・urlと、DB専用API（<code>/issues/{number}/subtasks</code>）でIssue内容を組み立てるようにした。</li>
+<li>対象は<code>selectIssue</code>・<code>fetchIssueSelection</code>・<code>refreshIssueDetail</code>・<code>openCreatedIssueAndSubtask</code>の4箇所。</li>
+<li>Issue一覧に無い番号（<code>fetchUnlistedIssue</code>・一覧外の<code>selectIssue</code>）は、従来どおり詳細APIで取得する。</li>
+<li>詳細API（<code>get_issue_detail</code>）はサーバー側に残した。</li>
 </ul>
-<p class="warn">要確認: 管理塔の外でのIssue変更は、最大で保持時間（45秒）だけ画面への反映が遅れる。この遅れを許容するか判断してほしい。</p>
 
 <h2>3. 実施した変更と主な変更ファイル</h2>
 <table>
 <tr><th>No.</th><th>コミット</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td><code>#210 [Issue一覧キャッシュ] Issue一覧を短時間キャッシュ</code></td><td><code>core/issue_list_cache.py</code>（新規）, <code>core/config.py</code>, <code>core/github_client.py</code></td><td>保持時間付きキャッシュ<code>IssueListCache</code>を追加した（スレッドセーフ、取得失敗は保持しない、返却時に要素を複製）。<code>list_issues</code>・<code>list_issues_closed_since</code>をキャッシュ経由にした。</td></tr>
-<tr><td>2</td><td><code>#210 [Issue一覧キャッシュ] Issue変更時にキャッシュを破棄</code></td><td><code>core/github_client.py</code></td><td><code>create_issue</code>・<code>edit_issue_title</code>・<code>close_issue</code>・<code>reopen_issue</code>の成功後に<code>invalidate_issue_list_cache</code>を呼ぶ。</td></tr>
-<tr><td>3</td><td><code>#210 [Issue一覧キャッシュ] キャッシュの有効期限と破棄のテスト</code></td><td><code>tests/test_issue_list_cache.py</code>（新規）, <code>tests/conftest.py</code>（新規）</td><td>有効期限・キー分離・無効化設定・破棄の動きを確認するテストを追加した。テスト間でキャッシュを持ち越さないよう、conftestで毎回クリアする。</td></tr>
+<tr><td>1</td><td><code>#212 [Issue選択高速化] Issue選択時のgh問い合わせを省略</code></td><td><code>app/static/app.js</code></td><td>
+<code>listedIssues</code>（一覧表示中のIssueの番号→概要のMap）と<code>currentIssueUrl</code>を追加した。<br>
+<code>fetchIssueContent</code>（概要＋DB上のMR一覧で内容を組み立て）・<code>toIssueSummary</code>・<code>fetchIssueSubtasks</code>を追加した。<br>
+<code>refreshSubtaskStates</code>のMR一覧取得を<code>fetchIssueSubtasks</code>に共通化した。<br>
+Issue名の変更時に<code>listedIssues</code>のタイトルも更新するようにした。</td></tr>
+<tr><td>2</td><td>（本レポート）</td><td><code>.claude-tower/report.html</code></td><td>実行レポートを更新。</td></tr>
 </table>
 
 <h2>4. 自律判断した事項・採用理由・前提</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>保持時間の既定値を45秒にした。</td><td>提案の目安30〜60秒の中間。画面の定期取得（60秒）より短いため、定期取得のたびに最新化される。</td></tr>
-<tr><td>2</td><td>キャッシュをルート層ではなく<code>core/github_client.py</code>に組み込んだ。</td><td>提案どおり。Issue作成はアイデア承認（<code>app/routes/ideas.py</code>）からも行われるため、github_client側で破棄すれば呼び出し元を問わず破棄できる。</td></tr>
-<tr><td>3</td><td><code>closed_since</code>は起点日時をキーに含めた。</td><td>日付が変わったとき、前日の「本日クローズ」一覧を返さないため。</td></tr>
-<tr><td>4</td><td>破棄はリポジトリ単位（全状態）とした。</td><td>Close・ReOpenはopen・closed両方の一覧に影響するため。</td></tr>
-<tr><td>5</td><td>保持時間0以下をキャッシュ無効とした。</td><td>反映遅れを許容しない判断になった場合に、設定だけで元の動きに戻せるようにするため。</td></tr>
-<tr><td>6</td><td>app.jsは変更しなかった。</td><td><code>pollOpenIssues</code>は既に同じ<code>/api/projects/{id}/issues?state=open</code>を呼んでおり、サーバー側のキャッシュが自動的に効くため。</td></tr>
-<tr><td>7</td><td>反映遅れの許容可否は、人間への問い合わせを待たずレポートとPRで確認事項として残した。</td><td>自律実行ワーカーは応答待ちをしない方針のため。</td></tr>
+<tr><td>1</td><td>一覧の取得値は<code>renderIssueItem</code>で<code>listedIssues</code>に登録する。</td><td>通常の一覧描画と、作成直後に一覧へ補う行（<code>supplementCreatedIssue</code>）の両方を1箇所で拾えるため。</td></tr>
+<tr><td>2</td><td>Issue名の変更時に<code>listedIssues</code>のタイトルも書き換える。</td><td>一覧の再取得まで古いタイトルで選択されるのを防ぐため。閉じる・再開は一覧を再取得するため対応不要。</td></tr>
+<tr><td>3</td><td><code>refreshIssueDetail</code>は表示中の値（<code>currentIssueTitle</code>・<code>currentIssueState</code>・<code>currentIssueUrl</code>）を使う。</td><td>作成直後でフィルタにより一覧に無いIssueを表示中の場合もあるため。見出しの値は既に名前変更・開閉に追従している。</td></tr>
+<tr><td>4</td><td><code>openCreatedIssueAndSubtask</code>は作成APIの応答（number・url・title）にstate=OPENを補って使う。</td><td>作成APIは<code>{number, url, title}</code>を返し、作成直後は必ずOpenのため。</td></tr>
+<tr><td>5</td><td><code>fetchIssueSubtasks</code>は応答がエラーの場合に例外を投げる。</td><td>エラー本文をMR一覧として描画しないため。<code>runSelectionRequest</code>は<code>finally</code>で更新中表示を解除する。<code>refreshSubtaskStates</code>の呼び出し元は既に<code>catch</code>している。</td></tr>
+<tr><td>6</td><td>一覧に無い番号を<code>selectIssue</code>した場合は詳細APIにフォールバックする。</td><td>通常操作では発生しないが、一覧の再描画とのずれに備えるため。</td></tr>
+<tr><td>7</td><td>コミットは1つにまとめた。</td><td>呼び出し元の切り替えと補助関数の追加が相互依存しており、分けると途中のコミットが不整合になるため。</td></tr>
 </table>
 
 <h2>5. 実行したテストと結果</h2>
-<table>
-<tr><th>テスト</th><th>結果</th></tr>
-<tr><td><code>./.venv/Scripts/python.exe -m pytest -q</code>（全体）</td><td class="ok">461 passed</td></tr>
-<tr><td><code>tests/test_issue_list_cache.py</code>（新規14件）</td><td class="ok">全件成功（全体に含む）</td></tr>
-</table>
-<p>サーバーを起動しての画面確認は行っていない（運用中のアプリへの影響を避けるため）。</p>
+<ul>
+<li><code>node --check app/static/app.js</code>：構文エラーなし。</li>
+<li><code>./.venv/Scripts/python.exe -m pytest -q</code>：447 passed。</li>
+<li>JSの自動テストが無いため、ブラウザでの動作確認と「更新中…」時間の手動計測は未実施（人間の確認が必要）。</li>
+</ul>
 
 <h2>6. 残課題、リスク、レビュー時の確認ポイント</h2>
 <ul>
-<li>管理塔の外（GitHub画面など）でのIssue変更は、最大45秒反映が遅れる。許容できない場合は保持時間を短くするか0にする。</li>
-<li>キャッシュはプロセスごとのメモリ上にある。Webサーバーとワーカーは別プロセスのため、ワーカー側で取得した一覧（アイデア用コンテキスト）は、Webサーバーでの変更による破棄の影響を受けない（保持時間で更新される）。</li>
-<li>アイデア用コンテキスト（<code>core/idea_context.py</code>）の<code>list_issues</code>もキャッシュ対象になる。最大45秒古い一覧が使われうるが、重複提案の防止用途のため影響は小さいと判断した。</li>
-<li>確認ポイント: <code>core/github_client.py</code>の破棄タイミング（成功後のみ）と、<code>core/issue_list_cache.py</code>のロック範囲。</li>
-<li>Issue・PRの自動クローズ・マージは行っていない。</li>
+<li>Issue切り替え時の「更新中…」の時間が短くなることを、手動で計測して確認してほしい。</li>
+<li>Issue選択・リポジトリ切り替え・フィルタ変更・Issue作成直後・ジョブ完了時に、見出し（タイトル・GitHubリンク・Close/ReOpen）が正しく表示されること。</li>
+<li>GitHub側でタイトルや状態が変わっても、一覧の再取得（定期更新など）までは画面に反映されない。従来は選択時に最新化されていた。</li>
+<li>Issue名の変更直後に別Issue→元Issueと選択し直した場合も、新しいタイトルが表示されること。</li>
 </ul>
 </body>
 </html>
