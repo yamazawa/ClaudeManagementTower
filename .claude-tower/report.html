@@ -2,16 +2,12 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実装レポート Issue/CLI/Ideaの表示ー①</title>
+<title>実装レポート #243 サブタスク1</title>
 <style>
-body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
-h1 { font-size: 1.4em; }
-h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; padding-bottom: .2em; margin-top: 1.6em; }
-table { border-collapse: collapse; margin: .5em 0; }
-th, td { border: 1px solid #bbb; padding: .3em .6em; text-align: left; vertical-align: top; }
-th { background: #f0f0f0; }
-.ok { color: #fff; background: #2a7a2a; padding: .1em .6em; border-radius: 4px; }
-code { background: #f4f4f4; padding: 0 .3em; }
+body{font-family:sans-serif;margin:24px;line-height:1.6;color:#222}
+h1{font-size:1.4em}h2{font-size:1.15em;border-bottom:1px solid #ccc;padding-bottom:4px;margin-top:28px}
+table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:6px;text-align:left;vertical-align:top}
+th{background:#f3f3f3}.ok{color:#1a7f37;font-weight:bold}code{background:#f3f3f3;padding:0 3px}
 </style>
 </head>
 <body>
@@ -19,52 +15,51 @@ code { background: #f4f4f4; padding: 0 .3em; }
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>未採番（サブタスク作成時点でIssue番号なし）</td></tr>
-<tr><th>サブタスク</th><td>Issue/CLI/Ideaの表示ー①</td></tr>
-<tr><th>ブランチ</th><td><code>issue-new-944cf386-subtask-1</code></td></tr>
+<tr><th>Issue</th><td>#243</td></tr>
+<tr><th>サブタスク</th><td>実装ジョブが実行中・待機中のMRに対して、実装の再実行を受け付けない</td></tr>
+<tr><th>ブランチ</th><td><code>issue-243-b8b11f44-subtask-1</code></td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
-<p><span class="ok">成功</span>（ブラウザでの動作確認は未実施）</p>
-<p>①Issueのタブ表示中のみIssue内容・MR内容のペインを表示するようにした。</p>
-<p>CLI・Ideaのタブでは、それぞれの項目の内容のペインのみ表示する。</p>
-<p>②ヘッダーのMRステータスフィルタの切替時に、Issueのタブへ自動で切り替えるようにした。</p>
-<p>CLI・Ideaのタブへ切り替えた際は、MRステータスフィルタの選択を自動で解除するようにした。</p>
+<p class="ok">成功</p>
+<p>実装実行APIは、待機中・実行中の実装ジョブがあるMRへの実行を409で拒否する。<br>
+画面は409を受けると既存ジョブのポーリングに切り替え、実行済みジョブを表示中である旨を出す。</p>
 
 <h2>3. 変更内容</h2>
 <table>
-<tr><th>No.</th><th>ファイル</th><th>変更</th><th>コミット</th></tr>
-<tr><td>1</td><td><code>app/static/app.js</code></td><td><code>setSectionShown</code>で表示指定を保持し、<code>applySectionShown</code>でタブを考慮して反映</td><td>67bc3b0</td></tr>
-<tr><td>2</td><td><code>app/static/repo_items.js</code></td><td><code>isSectionHiddenByTab</code>を追加し、タブ切替時は表示指定に従いペインを再反映</td><td>67bc3b0</td></tr>
-<tr><td>3</td><td><code>app/static/app.js</code></td><td><code>toggleMrStatusFilter</code>でIssueのタブへ切替</td><td>bc5f289</td></tr>
-<tr><td>4</td><td><code>app/static/app.js</code>・<code>repo_items.js</code></td><td><code>clearMrStatusFilter</code>を追加し、CLI・Ideaのタブ選択時に呼び出す</td><td>b32e97f</td></tr>
+<tr><th>No.</th><th>ファイル</th><th>変更</th><th>変更理由</th></tr>
+<tr><td>1</td><td>app/routes/subtasks.py</td><td><code>_find_active_job</code>を追加し、<code>_has_active_job</code>はこれを使う形に変更</td><td>409応答に既存ジョブのIDを含めるため</td></tr>
+<tr><td>2</td><td>app/routes/subtasks.py</td><td><code>execute_subtask</code>で<code>_ensure_no_active_job</code>を呼び、待機中・実行中なら409</td><td>二重実行の防止</td></tr>
+<tr><td>3</td><td>tests/test_subtask_merge.py</td><td>連続実行の2件目拒否、実行中の拒否、終了済ジョブ後の受付をテスト</td><td>提案のテスト要件</td></tr>
+<tr><td>4</td><td>app/static/job_runner.js</td><td>409の詳細からジョブを取り出し、既存ジョブの監視に切替</td><td>別端末・再読込後の画面からの再送対策</td></tr>
+<tr><td>5</td><td>app/static/common.js</td><td>表示文言<code>JOB_ALREADY_ACTIVE_NOTE</code>と<code>followedJobIds</code>を追加</td><td>既存ジョブが実行中である旨の表示</td></tr>
 </table>
+<p>コミット：<code>6861d70</code>（API・テスト）、<code>0f4f3c1</code>（画面）</p>
 
-<h2>4. 自律判断した事項</h2>
+<h2>4. 自律判断事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>「ステータストグル」はヘッダーのMRステータスフィルタ（Draft〜Merged）と解釈</td><td>画面上でトグル選択するステータスはこれのみのため</td></tr>
-<tr><td>2</td><td>①の原因は、CLI・Ideaのタブ表示中に定期更新等で<code>setSectionShown</code>がIssue・MRのペインを再表示することと判断</td><td>従来はタブ切替時のみ隠しており、その後の再描画で表示されていたため</td></tr>
-<tr><td>3</td><td>ペインの「表示指定」を<code>data-shown</code>に保持し、タブとの組み合わせで表示を決める方式を採用</td><td>Issueのタブへ戻した際、未選択のペインを表示しない（従来は無条件に表示していた）ため</td></tr>
-<tr><td>4</td><td>ステータスの選択・選択解除のどちらでもIssueのタブへ切り替える</td><td>指示が「変更時」のため（選択解除はIssueのタブでのみ起こり得る）</td></tr>
-<tr><td>5</td><td>フィルタ解除後のIssue一覧の再取得は、既存の<code>onMrStatusFilterChanged</code>に任せる</td><td>Issueのタブへ戻った際に、通常のフィルタの一覧を表示するため</td></tr>
+<tr><td>1</td><td>409の<code>detail</code>を<code>{message, job_id, status}</code>のオブジェクトにした</td><td>画面が追加のAPI呼び出しなしで既存ジョブの監視へ切り替えられるため。他の409は従来どおり文字列のまま。</td></tr>
+<tr><td>2</td><td>拒否時は指示内容をDBへ保存しない</td><td>実行中ジョブの指示を書き換えないため。入力欄の内容は画面に残る。</td></tr>
+<tr><td>3</td><td>拒否対象は<code>queued</code>・<code>running</code>のみ（既存の<code>ACTIVE_JOB_STATUSES</code>）</td><td>提案の範囲に合わせ、画面側のボタン無効化条件とも一致させた。</td></tr>
+<tr><td>4</td><td>「実行済みのジョブを表示中 / 状態: 実行中」の形で表示</td><td>ポーリングのたびに状態表示が描き直されるため、監視中ジョブを記録して毎回文言を前置する。</td></tr>
+<tr><td>5</td><td>テストは既存の<code>tests/test_subtask_merge.py</code>に追加</td><td>同ファイルに<code>execute_subtask</code>の409テストとフィクスチャが既にあるため。</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<table>
-<tr><th>テスト</th><th>結果</th></tr>
-<tr><td><code>./.venv/Scripts/python.exe -m pytest -q</code></td><td>509 passed</td></tr>
-<tr><td><code>node --check</code>（app.js・repo_items.js）</td><td>構文エラーなし</td></tr>
-<tr><td>ブラウザでの動作確認</td><td>未実施（フロントエンドのJSテスト基盤が無いため、人間による確認を依頼）</td></tr>
-</table>
-
-<h2>6. 残課題・レビュー時の確認ポイント</h2>
 <ul>
-<li>CLI・Ideaのタブ表示中に定期更新が走っても、Issue内容・MR内容のペインが表示されないこと。</li>
-<li>Issueのタブへ戻した際、Issue選択済みならIssue内容・MR内容が表示されること。</li>
-<li>CLI・Ideaのタブでステータスを押すと、Issueのタブに切り替わり絞り込み表示されること。</li>
-<li>ステータス選択中にCLI・Ideaのタブへ切り替えると、選択が解除されること。</li>
-<li>選択解除時にIssue一覧を再取得するため、一時的に「更新中」の表示が出る。</li>
+<li><code>./.venv/Scripts/python.exe -m pytest -q</code>：527 passed</li>
+<li><code>node --check</code>で変更JSの構文確認：OK</li>
+<li>409応答の解析関数をNodeで簡易確認（409+オブジェクト／409+文字列／200／通信失敗）：期待どおり</li>
+<li>ブラウザでの動作確認は未実施（起動確認は人間に依頼する運用のため）</li>
+</ul>
+
+<h2>6. 残課題・リスク・レビュー観点</h2>
+<ul>
+<li>確認→登録の間にロックがないため、ほぼ同時の2リクエストは両方通る可能性が残る（SQLite・同期エンドポイント）。厳密に防ぐにはDB側の制約や排他が必要。</li>
+<li><code>rate_limited</code>のジョブは上限リセット後に自動で再投入されるが、本対応では拒否対象外。その間に実行すると再投入後に2件となる可能性がある。</li>
+<li>アイデア承認からの<code>execute_subtask</code>呼び出しは新規MRに対してのみ行うため影響なしと判断。</li>
+<li>レビュー時は、2つのタブで同じMRを実行し、2つ目のタブが既存ジョブの監視に切り替わることを確認してほしい。</li>
 </ul>
 </body>
 </html>
