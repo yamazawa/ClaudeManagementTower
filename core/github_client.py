@@ -4,6 +4,9 @@ import subprocess
 import time
 from datetime import datetime
 
+from core.config import settings
+from core.issue_list_cache import IssueListCache
+
 logger = logging.getLogger(__name__)
 
 GH_TIMEOUT_SECONDS = 60
@@ -29,6 +32,10 @@ GH_TRANSIENT_ERROR_PATTERNS = (
     "503 service unavailable",
     "504 gateway timeout",
 )
+# closed_sinceのキャッシュキーの接頭辞（後ろに起点日時を付ける）
+CLOSED_SINCE_CACHE_KIND = "closed_since:"
+
+_issue_list_cache = IssueListCache(lambda: settings.issue_list_cache_ttl_seconds)
 
 
 class GitHubClientError(RuntimeError):
@@ -80,7 +87,24 @@ def _run_gh(args: list[str], retryable: bool = True) -> str:
     raise AssertionError("unreachable")
 
 
+def invalidate_issue_list_cache(repo: str) -> None:
+    """指定リポジトリのIssue一覧キャッシュを破棄する"""
+    _issue_list_cache.invalidate_repo(repo)
+
+
+def clear_issue_list_cache() -> None:
+    _issue_list_cache.clear()
+
+
 def list_issues(repo: str, state: str = "open") -> list[dict]:
+    """Issue一覧
+
+    保持時間内の再取得はキャッシュを返す。
+    """
+    return _issue_list_cache.get_or_load((repo, state), lambda: _fetch_issues(repo, state))
+
+
+def _fetch_issues(repo: str, state: str) -> list[dict]:
     output = _run_gh(
         [
             "issue", "list",
@@ -97,13 +121,20 @@ def list_issues_closed_since(repo: str, since: datetime) -> list[dict]:
     """指定日時以降にクローズされたIssue一覧
 
     sinceはタイムゾーン付きで指定する。
+    保持時間内の再取得はキャッシュを返す。
     """
+    since_text = since.isoformat(timespec="seconds")
+    key = (repo, CLOSED_SINCE_CACHE_KIND + since_text)
+    return _issue_list_cache.get_or_load(key, lambda: _fetch_issues_closed_since(repo, since_text))
+
+
+def _fetch_issues_closed_since(repo: str, since_text: str) -> list[dict]:
     output = _run_gh(
         [
             "issue", "list",
             "--repo", repo,
             "--state", "closed",
-            "--search", f"closed:>={since.isoformat(timespec='seconds')}",
+            "--search", f"closed:>={since_text}",
             "--limit", str(ISSUE_LIST_LIMIT),
             "--json", "number,title,state,url",
         ]
