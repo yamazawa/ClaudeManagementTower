@@ -155,19 +155,23 @@ def create_issue(repo: str, title: str, body: str) -> dict:
     )
     url = output.strip()
     number = int(url.rsplit("/", 1)[-1])
+    invalidate_issue_list_cache(repo)
     return {"number": number, "url": url}
 
 
 def edit_issue_title(repo: str, number: int, title: str) -> None:
     _run_gh(["issue", "edit", str(number), "--repo", repo, "--title", title])
+    invalidate_issue_list_cache(repo)
 
 
 def close_issue(repo: str, number: int) -> None:
     _run_gh(["issue", "close", str(number), "--repo", repo])
+    invalidate_issue_list_cache(repo)
 
 
 def reopen_issue(repo: str, number: int) -> None:
     _run_gh(["issue", "reopen", str(number), "--repo", repo])
+    invalidate_issue_list_cache(repo)
 
 
 def close_pr(repo: str, number: int) -> None:
