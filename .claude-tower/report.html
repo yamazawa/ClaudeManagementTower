@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>作業レポート: ワーカーの例外保護</title>
+<title>作業レポート: Issue/CLI/Ideaの表示ー②</title>
 <style>
 body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; } h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; margin-top: 1.6em; }
@@ -12,49 +12,50 @@ th { background: #f0f0f0; } code { background: #f4f4f4; padding: 0 3px; }
 </style>
 </head>
 <body>
-<h1>作業レポート: ワーカーのジョブ処理で想定外の例外が起きても、ワーカーを停止させない</h1>
+<h1>作業レポート: Issue/CLI/Ideaの表示ー②</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#245（アイデアマン提案）</td></tr>
-<tr><th>サブタスク</th><td>ワーカーのジョブ処理で想定外の例外が起きても、ワーカーを停止させない ①</td></tr>
-<tr><th>ブランチ</th><td><code>issue-245-9bee1daf-subtask-1</code>（push済み）</td></tr>
+<tr><th>Issue</th><td>#225 Issue/CLI/Ideaの表示</td></tr>
+<tr><th>サブタスク</th><td>Issue/CLI/Ideaの表示ー②（PR #247）</td></tr>
+<tr><th>ブランチ</th><td><code>issue-225-subtask-2</code>（push済み）</td></tr>
+<tr><th>指示</th><td>Issue/CLI/Ideaの切替はヘッダーで出来るようにする。<br>リポジトリ表示ではタブを表示せず、一覧を表示する。</td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
 <p class="ok">成功</p>
-<p>提案の詳細4項目（前処理のtry内移動・failed記録・run_loop保護・テスト追加）をすべて実装した。</p>
+<p>リポジトリ表示内のタブを削除し、ヘッダーに切替ボタンを追加した。<br>リポジトリ表示には、選択中の種類（Issue・CLI・Idea）の作成欄と一覧のみ表示される。</p>
 
 <h2>3. 変更内容</h2>
 <table>
 <tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td><code>worker/main.py</code> <code>_load_subtask_and_project</code></td><td>サブタスク・プロジェクトが削除済みの場合、原因を示すRuntimeErrorを送出する。</td></tr>
-<tr><td>2</td><td><code>worker/main.py</code> <code>_start_job</code>（新規）/ <code>process_job</code></td><td>set_worker_state・読込・record_event・実行を<code>_start_job</code>にまとめ、tryの中で呼ぶ。<br>失敗は実際のエラー内容でfailed（利用上限ならrate_limited）として記録する。</td></tr>
-<tr><td>3</td><td><code>worker/main.py</code> <code>run_loop</code> / <code>_run_iteration</code>（新規）</td><td>1周分を<code>_run_iteration</code>に切り出し、run_loopで例外を保護する。<br>例外時はログを出し、ポーリング間隔だけ待って次の周回へ進む。</td></tr>
-<tr><td>4</td><td><code>tests/test_worker_main.py</code></td><td>サブタスク削除済み・プロジェクト削除済み・前処理でのDBエラー・run_loopの継続のテストを追加。</td></tr>
+<tr><td>1</td><td><code>app/static/index.html</code></td><td>ヘッダー下段の先頭にIssue・CLI・Ideaの切替ボタン群（<code>#repo-item-switch</code>）を追加。<br>リポジトリ表示のタブ（<code>#repo-item-tabs</code>）と、tab/tabpanelのrole属性を削除。</td></tr>
+<tr><td>2</td><td><code>app/static/repo_items.js</code></td><td>切替ボタンのクラス名変更に追従し、選択状態を<code>aria-pressed</code>で表すよう変更。<br>切替の処理（<code>selectRepoItemTab</code>）自体は変更なし。</td></tr>
+<tr><td>3</td><td><code>app/static/style.css</code></td><td>旧タブのスタイルを削除し、ヘッダー用の切替ボタンのスタイルを追加。</td></tr>
+<tr><td>4</td><td><code>IMPLEMENTATION_PLAN.md</code></td><td>リポジトリ表示の方針に、切替をヘッダーで行う旨を追記。</td></tr>
 </table>
-<p>コミット: 8de67ff（前処理）、3d5c672（run_loop）、96bd283（テスト）</p>
+<p>コミット: bd891a9（UI）、a329c8b（ドキュメント）</p>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>削除済み時はAttributeErrorではなく明示的なRuntimeErrorを送出する。</td><td>ジョブのerror_messageに本当の原因が分かる文言を残すため。</td></tr>
-<tr><td>2</td><td>ログは<code>logging</code>ではなく<code>print</code>を使う。</td><td>worker配下は既存でprintによるログ出力に統一されているため。</td></tr>
-<tr><td>3</td><td>run_loopの例外時はポーリング間隔だけsleepしてから再試行する。</td><td>DBロックの継続時にビジーループでログが溢れるのを防ぐため。_merge_loopの待機と同等の挙動。</td></tr>
-<tr><td>4</td><td>process_jobのexcept内でrecord_event/finish_jobが失敗した場合は、run_loop側の保護に任せる。</td><td>二重のtryで複雑化させないため。この場合ジョブはハートビート途絶で従来通りneeds_attentionとなるが、ワーカーは停止しない。</td></tr>
-<tr><td>5</td><td>process_idea_jobには手を入れない。</td><td>提案の範囲外。run_loopの保護によりワーカー停止は防がれる。</td></tr>
+<tr><td>1</td><td>切替ボタンはヘッダー下段の先頭（MRステータスフィルタの左）に置く。</td><td>表示対象を決める操作のため、絞り込み・デプロイより前に置くのが自然と判断。</td></tr>
+<tr><td>2</td><td>見た目は角丸のセグメントボタンとし、選択中をアクセント色にする。</td><td>ヘッダーの既存部品（MRステータスフィルタ・Deployボタン）と統一するため。</td></tr>
+<tr><td>3</td><td>role=tablist/tabをやめ、role=group＋aria-pressedにする。</td><td>タブとパネルが離れた位置になるため。MRステータスフィルタと同じ方式に揃えた。</td></tr>
+<tr><td>4</td><td>リポジトリ未選択時も切替ボタンは表示・操作可能とする。</td><td>既存の<code>selectRepoItemTab</code>がリポジトリ未選択時の一覧取得を抑止しており、選択後に切替状態が反映されるため。</td></tr>
+<tr><td>5</td><td>JS内の関数名・変数名（Tab）はそのまま残す。</td><td>差分を最小にするため。概念としての「タブ」は維持し、表示位置のみ変更した。</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<p><code>./.venv/Scripts/python.exe -m pytest -q</code> → <span class="ok">526 passed</span></p>
-<p>実ワーカー起動での動作確認は未実施（ガイドラインに従い人間に依頼）。</p>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code> → <span class="ok">544 passed</span></p>
+<p><code>node --check app/static/repo_items.js</code> → 構文エラーなし</p>
+<p>ブラウザでの表示確認は未実施（ガイドラインに従い人間に依頼）。</p>
 
 <h2>6. 残課題・レビュー観点</h2>
 <ul>
-<li>process_jobの例外処理中（record_event/finish_job）にDBエラーが起きた場合、ジョブの失敗理由は記録されない（判断No.4）。</li>
-<li>DBが恒久的に使えない状態では、ワーカーはポーリング間隔ごとにログを出し続ける。終了させる仕組みは入れていない。</li>
-<li>process_idea_jobの前処理にも同種の問題がないか、別途確認するとよい。</li>
-<li>確認ポイント: <code>worker/main.py</code>の<code>_start_job</code>・<code>run_loop</code>・<code>_run_iteration</code>。</li>
+<li>ヘッダーでの切替ボタンの見た目・配置（狭い画面での折り返し含む）を実機で確認してほしい。</li>
+<li>Issue作成の見出しは<code>section-heading-top</code>のまま。タブ削除後にリポジトリ見出しとの余白が適切か確認ポイント。</li>
+<li>MRステータスフィルタ選択時にIssueへ自動で切り替わる既存挙動は維持（ヘッダーの切替ボタンにも反映される）。</li>
 </ul>
 </body>
 </html>
