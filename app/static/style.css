@@ -48,6 +48,19 @@
   --state-merge-failed-fg: var(--warning);
   --cli-log-height: 60vh;
   --cli-tool-error-bg: #fdf0e1;
+  --markdown-block-gap: 8px;
+  --markdown-list-indent: 22px;
+  --markdown-code-font: 12.5px/1.5 ui-monospace, Consolas, monospace;
+  --markdown-code-bg: #f6f8fb;
+  --markdown-code-border: var(--line);
+  --markdown-code-padding: 8px 10px;
+  --markdown-inline-code-bg: #eef1f5;
+  --markdown-inline-code-padding: 1px 4px;
+  --markdown-table-border: var(--line);
+  --markdown-table-header-bg: #f1f4f9;
+  --markdown-table-cell-padding: 4px 8px;
+  --markdown-quote-border: #c3ccd9;
+  --markdown-quote-padding-left: 10px;
   --repo-item-input-min-height: 90px;
 }
 
@@ -365,6 +378,101 @@ Issue名・入力欄・作成ボタンは折り返さず1行に並べる。
 .cli-message-assistant {
   background: var(--surface);
   border: 1px solid var(--line);
+  white-space: normal;
+}
+
+/* CLIタブのClaudeの応答文（Markdownを描画したもの） */
+.cli-message-assistant > :first-child {
+  margin-top: 0;
+}
+
+.cli-message-assistant > :last-child {
+  margin-bottom: 0;
+}
+
+.cli-message-assistant :is(p, ul, ol, pre, blockquote, .md-table-wrap, h1, h2, h3, h4, h5, h6) {
+  margin: var(--markdown-block-gap) 0;
+}
+
+.cli-message-assistant :is(h1, h2, h3, h4, h5, h6) {
+  font-size: 1em;
+}
+
+.cli-message-assistant h1 {
+  font-size: 1.25em;
+}
+
+.cli-message-assistant h2 {
+  font-size: 1.12em;
+}
+
+.cli-message-assistant :is(ul, ol) {
+  padding-left: var(--markdown-list-indent);
+}
+
+.cli-message-assistant :is(ul, ol) :is(ul, ol) {
+  margin: 0;
+}
+
+.cli-message-assistant code {
+  font: var(--markdown-code-font);
+  padding: var(--markdown-inline-code-padding);
+  border-radius: 4px;
+  background: var(--markdown-inline-code-bg);
+}
+
+.cli-message-assistant pre {
+  overflow-x: auto;
+  padding: var(--markdown-code-padding);
+  border: 1px solid var(--markdown-code-border);
+  border-radius: 4px;
+  background: var(--markdown-code-bg);
+  white-space: pre;
+  overflow-wrap: normal;
+}
+
+.cli-message-assistant pre code {
+  padding: 0;
+  background: none;
+}
+
+.cli-message-assistant .md-table-wrap {
+  overflow-x: auto;
+}
+
+.cli-message-assistant table {
+  border-collapse: collapse;
+  overflow-wrap: normal;
+}
+
+.cli-message-assistant :is(th, td) {
+  padding: var(--markdown-table-cell-padding);
+  border: 1px solid var(--markdown-table-border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.cli-message-assistant th {
+  background: var(--markdown-table-header-bg);
+}
+
+.cli-message-assistant .md-align-center {
+  text-align: center;
+}
+
+.cli-message-assistant .md-align-right {
+  text-align: right;
+}
+
+.cli-message-assistant blockquote {
+  padding-left: var(--markdown-quote-padding-left);
+  border-left: 3px solid var(--markdown-quote-border);
+  color: var(--muted);
+}
+
+.cli-message-assistant hr {
+  border: 0;
+  border-top: 1px solid var(--line);
 }
 
 .cli-message-tool {
@@ -399,6 +507,41 @@ Issue名・入力欄・作成ボタンは折り返さず1行に並べる。
   color: var(--warning);
   border: 1px solid var(--warning);
   background: var(--surface);
+}
+
+/* CLIの添付（送信前の添付欄・発言内の添付ファイル名） */
+.cli-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.cli-attachments:empty {
+  display: none;
+}
+
+.cli-message .cli-attachments {
+  margin-top: 6px;
+}
+
+.cli-attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  white-space: nowrap;
+}
+
+.cli-attachment-remove {
+  padding: 0 2px;
+  border: none;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
 }
 
 /* Ideaタブの項目の提案一覧 */

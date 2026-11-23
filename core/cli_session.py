@@ -23,7 +23,8 @@ from claude_agent_sdk import (
 )
 from sqlalchemy.orm import sessionmaker
 
-from core.claude_client import CLI_DIALOG_POLICY_PROMPT, run_claude
+from core.claude_client import CLI_DIALOG_DENIED_TOOLS, CLI_DIALOG_POLICY_PROMPT, run_claude
+from core.cli_attachments import build_cli_prompt, resolve_cli_attachments
 from core.db import SessionLocal
 from core.models import CliMessage, CliSession, Project
 from core.rate_limits import record_rate_limit
@@ -142,8 +143,29 @@ def message_entries(message: object) -> list[tuple[str, str]]:
     return []
 
 
-def _add_message(session, cli_session_id: int, role: str, content: str) -> None:
-    session.add(CliMessage(cli_session_id=cli_session_id, role=role, content=content))
+# 発言一覧に記録する添付ファイルの項目（パスは画面に出さない）
+MESSAGE_ATTACHMENT_KEYS = ("id", "filename", "is_image")
+
+
+def _add_message(session, cli_session_id: int, role: str, content: str, attachments: list[dict] = ()) -> None:
+    recorded = [{key: a[key] for key in MESSAGE_ATTACHMENT_KEYS} for a in attachments]
+    session.add(
+        CliMessage(
+            cli_session_id=cli_session_id,
+            role=role,
+            content=content,
+            attachments=json.dumps(recorded, ensure_ascii=False),
+        )
+    )
+
+
+def _message_to_dict(message: CliMessage) -> dict:
+    return {
+        "id": message.id,
+        "role": message.role,
+        "content": message.content,
+        "attachments": json.loads(message.attachments or "[]"),
+    }
 
 
 def session_to_dict(cli_session: CliSession) -> dict:
@@ -189,10 +211,13 @@ def update_session(
         return session_to_dict(session.get(CliSession, cli_session_id))
 
 
-def _claim_turn(cli_session_id: int, text: str, session_factory: sessionmaker) -> dict:
+def _claim_turn(
+    cli_session_id: int, text: str, session_factory: sessionmaker, attachments: list[dict] = ()
+) -> dict:
     """発言を記録して応答中にし、Claude実行に必要な値を返す
 
     応答中・Closeの対話には発言させない。
+    添付ファイルは発言と一緒に記録する。
     """
     with session_factory() as session:
         cli_session = get_item_or_raise(session, CliSession, cli_session_id)
@@ -200,7 +225,7 @@ def _claim_turn(cli_session_id: int, text: str, session_factory: sessionmaker) -
         if cli_session.status == CliSessionStatus.RUNNING:
             raise CliSessionBusy("Claudeの応答中です")
         cli_session.status = CliSessionStatus.RUNNING
-        _add_message(session, cli_session_id, CliMessageRole.USER, text)
+        _add_message(session, cli_session_id, CliMessageRole.USER, text, attachments)
         session.commit()
         project = session.get(Project, cli_session.project_id)
         return {"repo_path": project.repo_path, "resume": cli_session.claude_session_id}
@@ -231,7 +256,12 @@ def _finish_turn(cli_session_id: int, claude_session_id: str | None, error: Exce
 
 async def _run_claude_for_dialog(text: str, repo_path: str, resume: str | None, on_message) -> str | None:
     session_id, _ = await run_claude(
-        text, repo_path, resume=resume, on_message=on_message, policy_prompt=CLI_DIALOG_POLICY_PROMPT
+        text,
+        repo_path,
+        resume=resume,
+        on_message=on_message,
+        policy_prompt=CLI_DIALOG_POLICY_PROMPT,
+        denied_tools=CLI_DIALOG_DENIED_TOOLS,
     )
     return session_id
 
@@ -258,12 +288,32 @@ def run_turn(
     _finish_turn(cli_session_id, claude_session_id, error, session_factory)
 
 
-def send_message(cli_session_id: int, text: str, session_factory: sessionmaker = SessionLocal) -> None:
-    """発言を受け付け、Claudeの応答を別スレッドで開始する"""
-    target = _claim_turn(cli_session_id, text, session_factory)
+def send_message(
+    cli_session_id: int,
+    text: str,
+    attachment_ids: list[str] = (),
+    session_factory: sessionmaker = SessionLocal,
+) -> None:
+    """発言を受け付け、Claudeの応答を別スレッドで開始する
+
+    添付ファイルは、MRの実装指示と同じ形で対応表を発言に付け加えてClaudeに渡す。
+    存在しない添付のIDはAttachmentErrorとし、発言を記録しない。
+    """
+    attachments = resolve_cli_attachments(cli_session_id, list(attachment_ids))
+    target = _claim_turn(cli_session_id, text, session_factory, attachments)
+    prompt = build_cli_prompt(text, attachments)
     threading.Thread(
-        target=run_turn, args=(cli_session_id, text, target, session_factory), daemon=True
+        target=run_turn, args=(cli_session_id, prompt, target, session_factory), daemon=True
     ).start()
+
+
+def ensure_session_open(cli_session_id: int, session_factory: sessionmaker = SessionLocal) -> None:
+    """添付ファイルを追加できる対話か確認する
+
+    存在しない・Closeの対話はそれぞれの例外とする。
+    """
+    with session_factory() as session:
+        ensure_open(get_item_or_raise(session, CliSession, cli_session_id))
 
 
 def get_session(cli_session_id: int, after_id: int = 0, session_factory: sessionmaker = SessionLocal) -> dict:
@@ -278,7 +328,7 @@ def get_session(cli_session_id: int, after_id: int = 0, session_factory: session
         )
         return {
             **session_to_dict(cli_session),
-            "messages": [{"id": m.id, "role": m.role, "content": m.content} for m in messages],
+            "messages": [_message_to_dict(m) for m in messages],
         }
 
 
