@@ -27,6 +27,7 @@ def get_job(job_id: int):
             "exit_code": job.exit_code,
             "worker_id": job.worker_id,
             "claude_session_id": job.claude_session_id,
+            "error_message": job.error_message,
         }
 
 
