@@ -999,16 +999,10 @@ section.collapsed > .section-title-row {
 
 ペインの見出しの直下に置くため、上の余白と区切り線は付けない。
 */
-.section-heading-top,
-.create-block[hidden] + .section-heading {
+.section-heading-top {
   margin-top: 0;
   padding-top: 0;
   border-top: none;
-}
-
-/* MRステータスフィルタの選択中に隠す作成フォーム */
-.create-block[hidden] {
-  display: none;
 }
 
 /* 作成欄の見出し
