@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実装レポート #220 サブタスク4</title>
+<title>実装レポート #231 サブタスク1</title>
 <style>
 body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; }
@@ -19,50 +19,44 @@ code { background: #f4f4f4; padding: 0 .3em; }
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#220 エキスパンダルール見直し</td></tr>
-<tr><th>サブタスク</th><td>エキスパンダルール見直しー④</td></tr>
-<tr><th>ブランチ</th><td><code>issue-220-subtask-4</code></td></tr>
+<tr><th>Issue</th><td>#231 [IdeaMan] 運用中DBのスキーマ変更方針を3章に明文化する</td></tr>
+<tr><th>サブタスク</th><td>運用中DBのスキーマ変更方針を3章に明文化するー①</td></tr>
+<tr><th>ブランチ</th><td><code>issue-231-e6bb311b-subtask-1</code></td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
-<p><span class="ok">成功</span>（ブラウザでの見た目の確認は未実施）</p>
-<p>①Issue・CLI・Idea・MR一覧の見出しの右隣に、作成欄と同様の一覧エキスパンダを追加した。</p>
-<p>②一覧エキスパンダは開いた状態を既定とした。</p>
-<p>③リポジトリ一覧・リポジトリ・Issue・MR・CLI/Idea内容のペインのエキスパンダを、開閉処理ごと削除した。</p>
+<p><span class="ok">成功</span></p>
+<p>①3章No.3の採用方針を、変更の種類ごとに分けて書き直した。</p>
+<p>②<code>core/db.py</code>の<code>ADDED_COLUMNS</code>に追記条件のコメントを追加した。</p>
+<p>③9章No.19を3章No.3を参照する形に簡略化した。</p>
 
 <h2>3. 変更内容</h2>
 <table>
 <tr><th>No.</th><th>ファイル</th><th>変更</th><th>コミット</th></tr>
-<tr><td>1</td><td><code>app/static/index.html</code></td><td>ペイン見出し行のエキスパンダを5箇所削除</td><td>c405714</td></tr>
-<tr><td>2</td><td><code>app/static/app.js</code></td><td>ペインの開閉・縦長表示時の自動展開の処理（<code>setSectionExpanded</code>・<code>autoExpandSection</code>・<code>setupExpanders</code>等）を削除</td><td>c405714</td></tr>
-<tr><td>3</td><td><code>app/static/repo_items.js</code></td><td>CLI・Idea選択時の自動展開呼び出しを削除</td><td>c405714</td></tr>
-<tr><td>4</td><td><code>app/static/style.css</code></td><td>閉じたペインのスタイル・無効時スタイルを削除し、エキスパンダの大きさを16pxに統一</td><td>c405714</td></tr>
-<tr><td>5</td><td><code>app/static/*.js/html/css</code></td><td>作成欄専用の開閉の仕組みを「開閉欄」（<code>fold-block</code>）として汎用化</td><td>11b42b5</td></tr>
-<tr><td>6</td><td><code>app/static/index.html</code></td><td>各一覧の見出しと一覧を開閉欄で囲み、エキスパンダ（既定で開）を追加</td><td>4a99f2b</td></tr>
-<tr><td>7</td><td><code>app/static/style.css</code></td><td>状態フィルタを<code>margin-left:auto</code>で右寄せにし、<code>.section-heading-with-filter</code>を削除</td><td>4a99f2b</td></tr>
+<tr><td>1</td><td><code>IMPLEMENTATION_PLAN.md</code> 117行</td><td>3章No.3を開発中・列追加（確認不要）・破壊的変更（事前確認）に分けて記載</td><td>3c0d45d</td></tr>
+<tr><td>2</td><td><code>IMPLEMENTATION_PLAN.md</code> 279行</td><td>9章No.19から個別列の列挙を削除し、3章No.3参照に変更</td><td>3c0d45d</td></tr>
+<tr><td>3</td><td><code>core/db.py</code> 25〜30行</td><td>ADDED_COLUMNSへの追記条件をコメントで追加（コードの動作変更なし）</td><td>0cb35a8</td></tr>
 </table>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>CLI・Idea一覧にも一覧エキスパンダを付けた</td><td>作成欄はIssue・CLI・Idea・MRの4箇所にあり、共通操作は同じUIで提供する規約に従った。</td></tr>
-<tr><td>2</td><td>CLI・Idea内容のペインのエキスパンダも削除した</td><td>Issue表示・MR表示と同じ「表示」ペインであり、開閉処理を残さず「ロジックごと削除」の指示に沿うため。</td></tr>
-<tr><td>3</td><td>作成欄の開閉処理を汎用化して一覧でも共用した</td><td>同一処理の重複を避けるため。クラス名・関数名を作成欄専用から汎用名に変更した。</td></tr>
-<tr><td>4</td><td>エキスパンダの配置は「見出し文字列の右隣」、フィルタは右端</td><td>作成欄のエキスパンダと同じ配置にそろえた。</td></tr>
-<tr><td>5</td><td>未使用となった<code>.expander:disabled</code>スタイルも削除</td><td>エキスパンダを無効化する処理が存在しないため。</td></tr>
+<tr><td>1</td><td>「既定値必須」を「NOT NULL列は既定値必須、既定値なしの列はNULL許容」と書いた</td><td>登録済みの<code>idea_jobs.idea_session_id</code>は既定値なしのNULL許容列であり、一律に既定値必須とすると既存登録と矛盾するため。提案の「NULL許容か既定値付き」とも整合する</td></tr>
+<tr><td>2</td><td>モデル定義との一致対象を「型・NULL可否・既定値・外部キー」と明記した</td><td>create_allで新規作成したDBと、列追加したDBの構造差を防ぐため</td></tr>
+<tr><td>3</td><td>9章No.19から追加済み列の列挙を削除した</td><td>列の一覧は<code>ADDED_COLUMNS</code>が正であり、二重管理を避けるため</td></tr>
+<tr><td>4</td><td>3章No.3の誤字「ガイデライン」を「ガイドライン」に修正した</td><td>同じセルを書き直すため合わせて修正した</td></tr>
+<tr><td>5</td><td>ドキュメントとコードコメントでコミットを分けた</td><td>コミットの分け方のルールに従った</td></tr>
 </table>
 
-<h2>5. テスト結果</h2>
-<p><code>./.venv/Scripts/python.exe -m pytest -q</code>：509件すべて成功。</p>
-<p><code>app.js</code>・<code>repo_items.js</code>の構文チェック（Node.js）：問題なし。</p>
-<p>フロントエンドの自動テストは無いため、画面での確認は未実施。</p>
+<h2>5. テスト</h2>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code> を実行し、509件すべて成功した。</p>
+<p>変更はドキュメントとコメントのみで、コードの動作は変えていない。</p>
 
 <h2>6. 残課題・確認ポイント</h2>
 <ul>
-<li>一覧の見出し行で「〇〇一覧 &gt;」とフィルタの並びが崩れていないか、スマホ・PCで確認してほしい。</li>
-<li>一覧を閉じた状態は、リポジトリやIssueを切り替えても維持される（自動では開かない）。</li>
-<li>MRステータスフィルタ選択中もIssue一覧・MR一覧のエキスパンダは操作できる。</li>
-<li>縦長表示でペインを自動で開く処理を削除したため、各ペインは常に展開表示となる。</li>
+<li>3章No.3の方針は人間の運用判断を伴うため、確認不要とする範囲が意図どおりか確認してほしい。</li>
+<li>設計書本体（<code>Input\Claude監視塔_設計書.html</code>）の事前確認ルールは変更していない。</li>
+<li>既存の<code>ADDED_COLUMNS</code>5件がモデル定義と一致することは目視で確認済み。自動テストでの一致チェックは追加していない。</li>
 </ul>
 </body>
 </html>
