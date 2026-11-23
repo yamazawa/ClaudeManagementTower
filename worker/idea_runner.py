@@ -5,6 +5,7 @@ GitHubへの書き込み・コミット・pushは行わない。
 """
 
 import asyncio
+import logging
 import threading
 from collections.abc import Callable
 
@@ -16,9 +17,11 @@ from core.db import SessionLocal
 from core.idea_context import build_idea_prompt
 from core.idea_queue import IdeaJobStatus, finish_idea_job, heartbeat_idea_job
 from core.ideas import IdeaParseError, parse_proposals, save_proposals
-from core.job_queue import set_worker_state
+from core.job_queue import WorkerState, set_worker_state
 from core.models import Project
 from core.rate_limits import is_rate_limit_error, record_rate_limit
+
+logger = logging.getLogger(__name__)
 
 ERROR_EXCERPT_MAX_LENGTH = 2000
 RESULT_SUMMARY_FORMAT = "{count}件の提案を保存しました"
@@ -75,12 +78,12 @@ def process_idea_job(job: dict, worker_id: int, claude_runner: Callable = _run_c
     失敗はジョブのエラーとして残し、ワーカーは次のジョブに進む。
     """
     idea_job_id = job["idea_job_id"]
-    print(f"[worker] idea job {idea_job_id} (project {job['project_id']}) を実行開始")
-    set_worker_state(worker_id, state="busy", current_job_id=None)
+    logger.info("idea job %s (project %s) を実行開始", idea_job_id, job["project_id"])
+    set_worker_state(worker_id, state=WorkerState.BUSY, current_job_id=None)
     focus = job.get("focus", "")
     try:
         _with_heartbeat(idea_job_id, worker_id, lambda: _execute(idea_job_id, job["project_id"], focus, claude_runner))
     except Exception as exc:  # noqa: BLE001
         status = IdeaJobStatus.RATE_LIMITED if is_rate_limit_error(str(exc)) else IdeaJobStatus.FAILED
         finish_idea_job(idea_job_id, status, error_message=str(exc))
-        print(f"[worker] idea job {idea_job_id} 失敗（{status}）: {exc}")
+        logger.warning("idea job %s 失敗（%s）: %s", idea_job_id, status, exc)

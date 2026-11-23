@@ -7,6 +7,7 @@
 """
 
 import json
+import logging
 import subprocess
 import threading
 from collections.abc import Callable
@@ -16,6 +17,8 @@ from core.config import settings
 from core.deploy_tracking import mark_all_merged_deployed, mark_deployed
 from core.git_client import GitClientError, pull_latest
 from core.supervisor_control import COMMAND_RESTART_SERVER, COMMAND_RESTART_WORKERS, request_command
+
+logger = logging.getLogger(__name__)
 
 DEPLOY_FILE = Path(".claude-tower") / "deploy.json"
 
@@ -187,7 +190,7 @@ def mark_deployed_safely(mark: Callable[[], list[int]]) -> None:
     try:
         mark()
     except Exception as exc:  # noqa: BLE001
-        print(f"[deploy] MRのDeployed反映に失敗しました: {exc}")
+        logger.warning("MRのDeployed反映に失敗しました: %s", exc)
 
 
 def _run_step(repo_path: str, branch: str, step: dict) -> None:

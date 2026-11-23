@@ -6,21 +6,24 @@ SDKのRateLimitEventは状態変化時しか通知されず使用率も欠ける
 """
 
 import json
+import logging
 import os
 import threading
 import urllib.request
 from collections.abc import Callable
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 from core.config import settings
+
+logger = logging.getLogger(__name__)
 
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 OAUTH_BETA_HEADER = "oauth-2025-04-20"
 USER_AGENT = "claude-tower"
 REQUEST_TIMEOUT_SECONDS = 5
 
-_cache: dict = {"usage": None}
+_cache: dict = {"usage": None, "attempted_at": None}
 
 
 def credentials_path() -> Path:
@@ -104,11 +107,24 @@ def refresh_usage(fetcher: Callable[[], dict | None] = fetch_usage) -> bool:
     取得に失敗した場合は前回の取得値を残す。
     更新できたかを返す。
     """
+    _cache["attempted_at"] = datetime.now(timezone.utc)
     usage = fetcher()
     if usage is None:
         return False
     _cache["usage"] = usage
     return True
+
+
+def refresh_usage_if_older(since: datetime | None, fetcher: Callable[[], dict | None] = fetch_usage) -> bool:
+    """指定時刻より後に取得を試みていなければ使用率APIを取得し直す
+
+    上限到達などのレート制限通知を受けた直後に、使用率を通知に追従させるために使う。
+    通知毎に1回だけ取得を試み、失敗しても画面のポーリング毎には再試行しない。
+    """
+    attempted_at = _cache["attempted_at"]
+    if since is None or (attempted_at is not None and attempted_at >= since):
+        return False
+    return refresh_usage(fetcher)
 
 
 def get_usage() -> dict | None:
@@ -121,6 +137,7 @@ def get_usage() -> dict | None:
 
 def clear_cache() -> None:
     _cache["usage"] = None
+    _cache["attempted_at"] = None
 
 
 def _refresh_loop(
@@ -131,7 +148,7 @@ def _refresh_loop(
             refresh_usage(fetcher)
         except Exception as exc:  # noqa: BLE001
             # 一時的な失敗で定期更新を止めない
-            print(f"[claude_usage] 使用率の取得に失敗しました: {exc}")
+            logger.warning("使用率の取得に失敗しました: %s", exc)
         stop_event.wait(interval_seconds)
 
 

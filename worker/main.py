@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 import threading
 import time
@@ -16,8 +17,10 @@ from core.git_client import append_instruction_history, push_branch
 from core.github_client import GitHubClientError, mark_pr_ready
 from core.idea_queue import claim_next_idea_job, recover_stale_idea_jobs
 from core.lifecycle import LifecycleState
+from core.logging_config import configure_logging
 from core.job_queue import (
-    STATUS_RATE_LIMITED,
+    ExecutionJobStatus,
+    WorkerState,
     claim_next_job,
     cleanup_stale_workers,
     finish_job,
@@ -32,6 +35,9 @@ from core.models import ExecutionJob, Project, Subtask
 from core.rate_limits import blocked_until, is_rate_limit_error, record_rate_limit
 from core.reports import save_report
 from worker.idea_runner import process_idea_job
+
+# python -m worker.main で起動すると__name__が__main__になるため、名前を固定する
+logger = logging.getLogger("worker.main")
 
 
 def _previous_session_id(subtask_id: int, current_job_id: int) -> str | None:
@@ -91,18 +97,18 @@ def _finalize_success(
         record_event(job_id, event_type="warning", content=".claude-tower/report.htmlが見つからない")
 
     if not subtask.github_pr_number:
-        return "succeeded", None
+        return ExecutionJobStatus.SUCCEEDED, None
     try:
         mark_pr_ready(project.github_repo, subtask.github_pr_number)
     except GitHubClientError as exc:
         message = f"PRのDraft解除に失敗: {exc}"
         record_event(job_id, event_type="error", content=message)
-        return "needs_attention", message
+        return ExecutionJobStatus.NEEDS_ATTENTION, message
     with SessionLocal() as session:
         db_subtask = session.get(Subtask, subtask.id)
         db_subtask.lifecycle_state = LifecycleState.RESOLVED
         session.commit()
-    return "succeeded", None
+    return ExecutionJobStatus.SUCCEEDED, None
 
 
 def _execute_job(job_id: int, subtask: Subtask, project: Project) -> None:
@@ -119,7 +125,7 @@ def _execute_job(job_id: int, subtask: Subtask, project: Project) -> None:
         session.commit()
     status, error_message = _finalize_success(job_id, subtask, project, worktree_path, result_text or "")
     finish_job(job_id, status=status, exit_code=0, error_message=error_message)
-    print(f"[worker] job {job_id} 完了({status}): {result_text}")
+    logger.info("job %s 完了(%s): %s", job_id, status, result_text)
 
 
 def _load_subtask_and_project(subtask_id: int) -> tuple[Subtask, Project]:
@@ -140,7 +146,7 @@ def _load_subtask_and_project(subtask_id: int) -> tuple[Subtask, Project]:
 
 
 def _start_job(job_id: int, subtask_id: int, worker_id: int) -> None:
-    set_worker_state(worker_id, state="busy", current_job_id=job_id)
+    set_worker_state(worker_id, state=WorkerState.BUSY, current_job_id=job_id)
     subtask, project = _load_subtask_and_project(subtask_id)
     record_event(job_id, event_type="instruction", content=subtask.instruction)
     _run_with_heartbeat(job_id, worker_id, lambda: _execute_job(job_id, subtask, project))
@@ -153,34 +159,38 @@ def process_job(job: dict, worker_id: int) -> None:
     Claudeの利用上限による失敗は、failedと区別してrate_limitedにする。
     """
     job_id = job["job_id"]
-    print(f"[worker] job {job_id} (subtask {job['subtask_id']}) を実行開始")
+    logger.info("job %s (subtask %s) を実行開始", job_id, job["subtask_id"])
     try:
         _start_job(job_id, job["subtask_id"], worker_id)
     except Exception as exc:  # noqa: BLE001
         record_event(job_id, event_type="error", content=str(exc))
-        status = STATUS_RATE_LIMITED if is_rate_limit_error(str(exc)) else "failed"
+        status = (
+            ExecutionJobStatus.RATE_LIMITED
+            if is_rate_limit_error(str(exc))
+            else ExecutionJobStatus.FAILED
+        )
         finish_job(job_id, status=status, exit_code=1, error_message=str(exc))
-        print(f"[worker] job {job_id} 失敗（{status}）: {exc}")
+        logger.warning("job %s 失敗（%s）: %s", job_id, status, exc)
 
 
 def _cleanup_stale_records() -> None:
     recovered = recover_stale_jobs(settings.job_stale_timeout_seconds)
     if recovered:
-        print(f"[worker] 要確認にしたジョブ: {recovered}")
+        logger.warning("要確認にしたジョブ: %s", recovered)
 
     recovered_ideas = recover_stale_idea_jobs(settings.job_stale_timeout_seconds)
     if recovered_ideas:
-        print(f"[worker] 要確認にしたアイデア出しジョブ: {recovered_ideas}")
+        logger.warning("要確認にしたアイデア出しジョブ: %s", recovered_ideas)
 
     removed_workers = cleanup_stale_workers(settings.worker_offline_timeout_seconds)
     if removed_workers:
-        print(f"[worker] 削除したオフラインワーカー行: {removed_workers}")
+        logger.info("削除したオフラインワーカー行: %s", removed_workers)
 
 
 def _requeue_rate_limited() -> None:
     requeued = requeue_rate_limited_jobs(settings.rate_limit_retry_delay_seconds)
     if requeued:
-        print(f"[worker] 利用上限から再投入したジョブ: {requeued}")
+        logger.info("利用上限から再投入したジョブ: %s", requeued)
 
 
 _notified_resets_at: int | None = None
@@ -201,7 +211,7 @@ def _is_rate_limited() -> bool:
     if resets_at != _notified_resets_at:
         _notified_resets_at = resets_at
         reset_text = datetime.fromtimestamp(resets_at).strftime("%m/%d %H:%M")
-        print(f"[worker] 利用上限中のためジョブを取得しません（{reset_text}にリセット）")
+        logger.info("利用上限中のためジョブを取得しません（%sにリセット）", reset_text)
     return True
 
 
@@ -218,7 +228,7 @@ def run_loop(worker_id: int) -> None:
                 return
         except Exception as exc:  # noqa: BLE001
             # DBの一時的な失敗等でワーカーを止めない
-            print(f"[worker] ジョブ処理の周回で例外が発生しました: {exc!r}")
+            logger.warning("ジョブ処理の周回で例外が発生しました: %r", exc)
             time.sleep(settings.worker_poll_interval_seconds)
 
 
@@ -227,8 +237,8 @@ def _run_iteration(worker_id: int) -> bool:
 
     自分のワーカー行が削除されていた場合はFalseを返す。
     """
-    if not set_worker_state(worker_id, state="idle", current_job_id=None):
-        print("[worker] 自分のワーカー行が削除されたため終了します")
+    if not set_worker_state(worker_id, state=WorkerState.IDLE, current_job_id=None):
+        logger.info("自分のワーカー行が削除されたため終了します")
         return False
     _cleanup_stale_records()
 
@@ -257,10 +267,11 @@ def _process_next_job(worker_id: int) -> bool:
 
 
 def main() -> None:
+    configure_logging()
     init_db()
     process_identifier = make_process_identifier(os.getpid())
     worker_id = register_worker(process_identifier)
-    print(f"[worker] 起動しました: {process_identifier} (id={worker_id})")
+    logger.info("起動しました: %s (id=%s)", process_identifier, worker_id)
     run_loop(worker_id)
 
 

@@ -3,11 +3,9 @@
 画面の表示ステータス（app/static/common.jsのMR_STATUS、subtask_view.jsのmrStatus）と値・導出方法を合わせる。
 """
 
+from core.job_queue import ExecutionJobStatus
 from core.lifecycle import LifecycleState
 from core.merge_queue import MergeJobStatus
-
-# 実行中とみなす実装ジョブの状態
-ACTIVE_JOB_STATUSES = ("queued", "running")
 
 
 class MrStatus:
@@ -43,7 +41,7 @@ def derive_mr_status(
     job_status・merge_statusは最新の実装ジョブ・マージ待ち行列の状態とする。
     deployingはMRのリポジトリでデプロイ実行中かを表す。
     """
-    if lifecycle_state in LifecycleState.OPEN_STATES and job_status in ACTIVE_JOB_STATUSES:
+    if lifecycle_state in LifecycleState.OPEN_STATES and job_status in ExecutionJobStatus.ACTIVE_STATES:
         return MrStatus.RESOLVING
     if lifecycle_state == LifecycleState.RESOLVED and merge_status in MergeJobStatus.ACTIVE_STATES:
         return MrStatus.MERGING

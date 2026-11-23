@@ -1,3 +1,4 @@
+import logging
 import re
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -7,6 +8,8 @@ from core.db import SessionLocal
 from core.github_client import list_pull_request_states
 from core.lifecycle import LifecycleState
 from core.models import Project, Subtask
+
+logger = logging.getLogger(__name__)
 
 # マージ済は終端状態のため同期対象から外す
 SYNC_TARGET_STATES = (*LifecycleState.OPEN_STATES, LifecycleState.CANCELED)
@@ -144,7 +147,7 @@ def _sync_repo_safely(factory, repo: str, project_ids: list[int]) -> list[dict]:
         return _sync_repo(factory, repo, project_ids)
     except Exception as exc:  # noqa: BLE001
         # 1リポジトリの失敗で他のリポジトリの同期を止めない
-        print(f"[pr_sync] {repo} のPR状態の同期に失敗しました: {exc}")
+        logger.warning("%s のPR状態の同期に失敗しました: %s", repo, exc)
         return []
 
 
@@ -180,7 +183,7 @@ def _sync_loop(stop_event: threading.Event, interval_seconds: float) -> None:
             sync_all_projects()
         except Exception as exc:  # noqa: BLE001
             # GitHub・DBの一時的な失敗で同期ループを止めない
-            print(f"[pr_sync] PR状態の同期に失敗しました: {exc}")
+            logger.warning("PR状態の同期に失敗しました: %s", exc)
         stop_event.wait(interval_seconds)
 
 

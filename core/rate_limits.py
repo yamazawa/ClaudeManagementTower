@@ -9,6 +9,7 @@ import re
 from collections.abc import Callable
 from datetime import datetime, timezone
 
+from sqlalchemy import func
 from sqlalchemy.orm import sessionmaker
 
 from core.claude_usage import get_usage, normalize_window
@@ -18,10 +19,13 @@ from core.models import RateLimitSnapshot
 # 画面に表示する枠（SDKのRateLimitTypeの値）
 FIVE_HOUR = "five_hour"
 SEVEN_DAY = "seven_day"
-DISPLAY_TYPES = (FIVE_HOUR, SEVEN_DAY)
+# 画面に表示する枠と枠の長さ（秒）
+DISPLAY_WINDOW_SECONDS = {FIVE_HOUR: 5 * 60 * 60, SEVEN_DAY: 7 * 24 * 60 * 60}
 
 # 上限に達している状態（SDKのRateLimitStatusの値）
 STATUS_REJECTED = "rejected"
+# 上限に達しているとみなす使用率（0〜1の割合）
+FULL_UTILIZATION = 1.0
 
 # 利用上限で失敗したとみなすClaudeのエラーメッセージ
 RATE_LIMIT_ERROR_PATTERN = re.compile(r"hit your .*limit|usage limit reached", re.IGNORECASE)
@@ -85,20 +89,69 @@ def _future_resets_at(resets_at: int | None, now: float) -> int | None:
     return resets_at if resets_at is not None and resets_at > now else None
 
 
-def _merge_usage(snapshot: dict | None, usage_window: dict | None, now: float) -> dict | None:
+def _to_timestamp(value: datetime) -> float:
+    """日時をUNIX秒に変換する
+
+    SQLiteから読んだタイムゾーン無しの日時はUTCとみなす。
+    """
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value.timestamp()
+
+
+def _is_current_status(snapshot: dict, usage_window: dict | None, window_seconds: int, now: float) -> bool:
+    """SDK通知の状態が現在の枠のものかを判定する
+
+    リセット時刻があれば、それが未来の場合のみ現在の枠とする。
+    リセット時刻が無ければ、受信時刻が現在の枠の開始以降かで判定する。
+    使用率APIにリセット時刻が無い場合は、枠が始まっていないとみなす。
+    """
+    if snapshot["resets_at"] is not None:
+        return snapshot["resets_at"] > now
+    if usage_window is not None and usage_window["resets_at"] is None:
+        return False
+    window_end = usage_window["resets_at"] if usage_window is not None else now
+    return _to_timestamp(snapshot["updated_at"]) >= window_end - window_seconds
+
+
+def _current_snapshot(snapshot: dict | None, usage_window: dict | None, window_seconds: int, now: float) -> dict | None:
+    """SDK通知の状況から前の枠の状態・リセット時刻を除く"""
+    if snapshot is None:
+        return None
+    current = _is_current_status(snapshot, usage_window, window_seconds, now)
+    return {
+        **snapshot,
+        "status": snapshot["status"] if current else None,
+        "resets_at": _future_resets_at(snapshot["resets_at"], now),
+    }
+
+
+def _merge_usage(snapshot: dict | None, usage_window: dict | None, window_seconds: int, now: float) -> dict | None:
     """SDK通知の状況に使用率APIの値を重ねる
 
-    使用率・リセット時刻は使用率APIを優先し、状態はSDK通知の値を使う。
+    使用率・リセット時刻は使用率APIを優先し、状態は現在の枠のSDK通知の値を使う。
     使用率APIにリセット時刻が無い場合は、SDK通知の未来のリセット時刻で補う。
+    使用率APIで上限に達している場合は、SDK通知を待たず上限中の状態とする。
     """
-    if snapshot is not None:
-        snapshot = {**snapshot, "resets_at": _future_resets_at(snapshot["resets_at"], now)}
+    snapshot = _current_snapshot(snapshot, usage_window, window_seconds, now)
     if usage_window is None:
         return snapshot
     merged = {**(snapshot or {"status": None, "updated_at": None, "resets_at": None}), **usage_window}
     if usage_window["resets_at"] is None:
         merged["resets_at"] = snapshot["resets_at"] if snapshot else None
+    if usage_window["utilization"] >= FULL_UTILIZATION:
+        merged["status"] = STATUS_REJECTED
     return merged
+
+
+def latest_event_at(session_factory: sessionmaker = SessionLocal) -> datetime | None:
+    """SDK通知を最後に受信した日時を返す
+
+    受信が無ければNoneを返す。
+    """
+    with session_factory() as session:
+        updated = session.query(func.max(RateLimitSnapshot.updated_at)).scalar()
+    return datetime.fromtimestamp(_to_timestamp(updated), timezone.utc) if updated else None
 
 
 def get_rate_limits(
@@ -116,7 +169,8 @@ def get_rate_limits(
             rate_limit_type: _merge_usage(
                 _to_dict(session.get(RateLimitSnapshot, rate_limit_type)),
                 normalize_window(usage.get(rate_limit_type)),
+                window_seconds,
                 now,
             )
-            for rate_limit_type in DISPLAY_TYPES
+            for rate_limit_type, window_seconds in DISPLAY_WINDOW_SECONDS.items()
         }

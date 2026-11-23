@@ -155,6 +155,8 @@ const JOB_STATUS_LABELS = {
   [JOB_STATUS.rateLimited]: "利用上限で中断（上限リセット後に自動で再実行）",
 };
 const JOB_STATUS_PREFIX = "状態: ";
+// 別端末などで実行済みのジョブを監視している場合に、状態の前へ付ける文言
+const JOB_ALREADY_ACTIVE_NOTE = "実行済みのジョブを表示中 / ";
 
 // ジョブ状態の見た目（style.cssの.job-status-*と合わせる）
 const JOB_STATUS_CLASS = {
@@ -179,6 +181,8 @@ const ACTIVE_JOB_STATUSES = [JOB_STATUS.queued, JOB_STATUS.running];
 const busySubtaskIds = new Set();
 // 監視中のジョブID
 const pollingJobIds = new Set();
+// 実行を拒否され、既存ジョブの監視に切り替えたジョブID
+const followedJobIds = new Set();
 const JOB_POLL_MS = 3000;
 
 // Issue一覧のMR数で解決済とみなす状態と、数えない状態（マージされずクローズ）
