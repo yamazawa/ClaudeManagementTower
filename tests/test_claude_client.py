@@ -132,6 +132,26 @@ def test_denies_write_outside_shared_root(tmp_path):
     assert isinstance(_check(str(worktree), "Write", {"file_path": str(target)}), PermissionResultDeny)
 
 
+def test_denies_write_to_sibling_with_same_prefix_as_shared_root(tmp_path):
+    worktree = _worktree(tmp_path)
+    target = tmp_path / "git-other" / "a.txt"
+    assert isinstance(_check(str(worktree), "Write", {"file_path": str(target)}), PermissionResultDeny)
+    assert isinstance(_check(str(worktree), "Bash", {"command": f"rm {target}"}), PermissionResultDeny)
+
+
+def test_allows_write_to_sibling_with_same_prefix_as_protected_dir(tmp_path):
+    worktree = _worktree(tmp_path)
+    target = tmp_path / "git" / "tower-tools" / "a.py"
+    assert isinstance(_check(str(worktree), "Write", {"file_path": str(target)}), PermissionResultAllow)
+
+
+def test_allows_write_to_worktree_with_different_case(tmp_path):
+    worktree = _worktree(tmp_path)
+    target = str(worktree / "Core" / "A.py").upper()
+    assert isinstance(_check(str(worktree), "Write", {"file_path": target}), PermissionResultAllow)
+    assert isinstance(_check(str(worktree), "Bash", {"command": f"cat {target}"}), PermissionResultAllow)
+
+
 def test_denies_blocked_files_for_read_and_write(tmp_path):
     worktree = _worktree(tmp_path)
     blocked_paths = [
