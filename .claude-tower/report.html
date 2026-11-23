@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実行レポート: Claude参照ルールー③</title>
+<title>実行レポート: 待機中の表示ー①</title>
 <style>
 body { font-family: sans-serif; margin: 24px; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; }
@@ -15,55 +15,55 @@ code { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; }
 </style>
 </head>
 <body>
-<h1>実行レポート: Claude参照ルールー③</h1>
+<h1>実行レポート: 待機中の表示ー①</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#180 Claude参照ルール</td></tr>
-<tr><th>サブタスク</th><td>Claude参照ルールー③（アイデアマン提案: worktree内判定の前方一致・大文字小文字の不備を修正）</td></tr>
-<tr><th>ブランチ</th><td><code>issue-180-fb9482ce-subtask-1</code>（base: <code>master</code>）</td></tr>
+<tr><th>Issue</th><td>#196 待機中の表示</td></tr>
+<tr><th>サブタスク</th><td>待機中の表示ー①（ステータストグル以外でも、更新に時間が掛かる場合は待機中の表示を出す）</td></tr>
+<tr><th>ブランチ</th><td><code>issue-new-d8081196-subtask-1</code>（PR #197、base: <code>master</code>）</td></tr>
 </table>
 
 <h2>2. 実装結果の要約</h2>
 <p class="ok">成功</p>
 <ul>
-<li>提案の根拠のうち、前方一致・大文字小文字の不備は既存の<code>is_inside</code>（#180-①②で導入）で解消済みだった。</li>
-<li><code>is_inside</code>をnormcase+commonpathによる要素単位の比較に変更し、ドライブ違いも安全に扱うようにした。</li>
-<li>アイデアマン用の読み取り専用チェックで、Globのpattern・Grep/Globのglobも範囲判定の対象にした。</li>
-<li>読み取り専用チェックの相対パスを、プロセスのカレントでなく対象フォルダ基準で解決するようにした。</li>
-<li>名前の先頭が同じ別フォルダ、大文字小文字違い、絶対パスのpatternのテストを追加した。</li>
+<li>#153で追加した選択切替の更新中表示（オーバーレイ）を、操作の更新待ちでも使えるよう共通化した。</li>
+<li>Issueのクローズ・再開、MRのCancel・ReOpen・Merge、タイトル保存、MR作成、添付ファイル操作に適用した。</li>
 </ul>
 
 <h2>3. 実施した変更と主な変更ファイル</h2>
 <table>
 <tr><th>No.</th><th>コミット</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td><code>#180 [Claude参照ルール] 包含判定をcommonpathに変更</code></td><td><code>core/claude_access_rules.py</code><br><code>tests/test_claude_access_rules.py</code></td><td><code>is_inside</code>をcommonpath比較に変更し、ドライブ違いはFalseを返す。</td></tr>
-<tr><td>2</td><td><code>#180 [Claude参照ルール] 読み取り専用の範囲判定を拡張</code></td><td><code>core/claude_client.py</code><br><code>tests/test_claude_client.py</code></td><td><code>_pattern_target</code>・<code>_read_only_escape</code>を追加し、<code>_read_only_check</code>から使う。</td></tr>
-<tr><td>3</td><td><code>#180 [Claude参照ルール] 書き込み判定のテストを追加</code></td><td><code>tests/test_claude_client.py</code></td><td>書き込み判定の前方一致・大文字小文字のテストを追加。</td></tr>
+<tr><td>1</td><td><code>#196 [待機中の表示] 操作の更新待ち表示を共通化</code></td><td><code>app/static/app.js</code><br><code>app/static/style.css</code></td><td><code>runBusyAction</code>を追加した。操作数を数え、選択切替の更新中と合わせてオーバーレイの表示を決める。</td></tr>
+<tr><td>2</td><td><code>#196 [待機中の表示] Issue・MRの状態変更中に更新中を表示</code></td><td><code>app/static/app.js</code></td><td><code>toggleIssue</code>は送信から一覧の再取得まで、<code>runSubtaskStateAction</code>は応答待ちの間に表示する。</td></tr>
+<tr><td>3</td><td><code>#196 [待機中の表示] タイトル保存中に更新中を表示</code></td><td><code>app/static/app.js</code></td><td><code>makeTitleEditable</code>の保存処理を囲った。</td></tr>
+<tr><td>4</td><td><code>#196 [待機中の表示] MR作成中に更新中を表示</code></td><td><code>app/static/app.js</code></td><td>MRの作成から作成したMRを開くまで表示する。</td></tr>
+<tr><td>5</td><td><code>#196 [待機中の表示] 添付ファイル操作中に更新中を表示</code></td><td><code>app/static/app.js</code></td><td>アップロード・削除で、一覧を読み直すまで表示する。</td></tr>
 </table>
 
 <h2>4. 自律判断した事項・採用理由・前提</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>提案の<code>_is_inside</code>・<code>_command_escapes_worktree</code>は現存しないため、共通関数<code>is_inside</code>の改修で対応した。</td><td>現行コードでは<code>restrict_to_worktree</code>・シェル判定とも<code>AccessRules.is_writable</code>→<code>is_inside</code>に既に1本化されている。</td></tr>
-<tr><td>2</td><td>Grepの<code>pattern</code>は範囲判定の対象外とした。</td><td>Grepのpatternはファイル内容の正規表現でありパスではない。提案の「Grepのpattern」はGlobのpatternとGrepのglobを指すと解釈した。</td></tr>
-<tr><td>3</td><td>パターンは最初のワイルドカードを含む要素より前を固定フォルダとみなして判定する。</td><td>ワイルドカードを含む文字列はそのままでは包含判定できないため。</td></tr>
-<tr><td>4</td><td>ワイルドカード以降に<code>..</code>があるパターンは拒否する。</td><td><code>**/../../x</code>のように範囲を特定できず、対象フォルダ外に出得るため。</td></tr>
-<tr><td>5</td><td>書き込み側（<code>_worktree_check</code>）の相対パス解決は変更しなかった。</td><td>SDKのファイル操作ツールは絶対パスを渡す前提。今回の提案範囲外とした。</td></tr>
+<tr><td>1</td><td>新しい表示は作らず、既存の更新中オーバーレイを流用した。</td><td>共通する機能は同じUIで提供する方針のため。表示の遅延（0.2秒）により、すぐ終わる操作ではちらつかない。</td></tr>
+<tr><td>2</td><td>「ステータストグル」はIssueのClose/ReOpenボタンとヘッダーのMRステータスフィルタの両方と解釈した。</td><td>フィルタは#153で対応済み。Close/ReOpenは一覧の再取得中しか表示されなかったため、送信中から表示するようにした。</td></tr>
+<tr><td>3</td><td>Issue作成は対象外とした。</td><td>既存実装で「作成中は利用者の操作を妨げない」方針が明記されているため。状態欄の「IssueとMRを作成中...」表示は従来どおり。</td></tr>
+<tr><td>4</td><td>デプロイ・実装の実行・定期更新は対象外とした。</td><td>デプロイと実装は長時間かかり、画面のブロックは不適切なため。それぞれヘッダー・MR詳細に状態表示が既にある。</td></tr>
+<tr><td>5</td><td>MR操作のオーバーレイは応答待ちの間のみとし、マージ自体の完了は待たない。</td><td>マージはサーバー側でキュー実行され、状態はMergingで表示されるため。</td></tr>
 </table>
 
 <h2>5. 実行したテストと結果</h2>
 <ul>
-<li><code>./.venv/Scripts/python.exe -m pytest -q</code>: 423 passed。</li>
-<li>コミット分割後に<code>tests/test_claude_client.py</code>・<code>tests/test_claude_access_rules.py</code>を再実行: 49 passed。</li>
+<li><code>node --check app/static/app.js</code>: 構文エラーなし。</li>
+<li><code>./.venv/Scripts/python.exe -m pytest -q</code>: 425 passed。</li>
+<li>JSの自動テストは存在しないため、ブラウザでの動作確認は未実施（人間による確認を依頼）。</li>
 </ul>
 
 <h2>6. 残課題、リスク、レビュー時の確認ポイント</h2>
 <ul>
-<li>パターンの固定フォルダ抽出は<code>* ? [ {</code>をワイルドカードとみなす簡易判定。ファイル名にこれらの文字を含む正当な参照は、より上位のフォルダで判定される（安全側）。</li>
-<li>アイデアマンが<code>../</code>を含むGlobを使うと拒否されるようになる。通常の調査に支障がないか確認してほしい。</li>
-<li>ドライブ違いのテストはWindows前提（Z:またはY:を使用）。</li>
-<li>書き込み側ツールに相対パスが渡された場合の解決基準は従来どおりプロセスのカレントのまま。</li>
+<li>Close/ReOpen・MR操作・タイトル保存・MR作成・添付のアップロード/削除で、更新中表示が出て終了時に消えることを確認してほしい。</li>
+<li>操作中もヘッダー（MRステータスフィルタ・Deploy）は従来どおり操作できる。</li>
+<li>Issue作成を対象外としたことが意図に合うか確認してほしい。</li>
+<li>大きなファイルの複数アップロード中は、その間ずっと画面がブロックされる。</li>
 </ul>
 </body>
 </html>

@@ -248,8 +248,35 @@ async function runSelectionRequest(load, apply, { blocking = true } = {}) {
   }
 }
 
+// 選択の切り替えで更新待ちか
+let selectionBusy = false;
+// 更新待ちの操作の数（並行して実行された操作が全て終わるまで更新中を表示する）
+let busyActionCount = 0;
+
 function setSelectionBusy(busy) {
-  document.getElementById("selection-busy").hidden = !busy;
+  selectionBusy = busy;
+  updateBusyOverlay();
+}
+
+/**
+ * 更新待ちの操作を実行する
+ *
+ * 実行中は選択の切り替えと同じく、画面をブロックして更新中を表示する。
+ * 失敗時も含め、操作の終了時に表示を戻す。
+ */
+async function runBusyAction(action) {
+  busyActionCount += 1;
+  updateBusyOverlay();
+  try {
+    return await action();
+  } finally {
+    busyActionCount -= 1;
+    updateBusyOverlay();
+  }
+}
+
+function updateBusyOverlay() {
+  document.getElementById("selection-busy").hidden = !selectionBusy && busyActionCount === 0;
 }
 
 /**
@@ -298,6 +325,7 @@ function escapeHtml(text) {
  *
  * Enterまたはフォーカス外れで確定し、Escで取り消す。
  * onSaveは新タイトルを受け取り、失敗時はエラー文言を返す。
+ * 保存が終わるまで更新中を表示する。
  */
 function makeTitleEditable(titleEl, statusEl, onSave) {
   titleEl.classList.add("editable-title");
@@ -323,7 +351,7 @@ function makeTitleEditable(titleEl, statusEl, onSave) {
       titleEl.textContent = title;
       updateTitleTooltip(titleEl);
       statusEl.textContent = "更新中...";
-      const error = await onSave(title);
+      const error = await runBusyAction(() => onSave(title));
       if (error) titleEl.textContent = original;
       updateTitleTooltip(titleEl);
       statusEl.textContent = error ? `失敗しました: ${error}` : "更新しました";
@@ -1282,10 +1310,21 @@ function onClickIssueToggle() {
  * 見出し・一覧のどちらのボタンからも呼ぶ。
  * 表示中Issueの場合は見出しに結果を表示し、それ以外は失敗時のみ通知する。
  * 成否に関わらず一覧を再取得してボタンの状態を戻す。
+ * 一覧の再取得が終わるまで更新中を表示する。
  */
 async function toggleIssue(number, isOpen, button) {
   const verb = isOpen ? "閉じ" : "再開し";
   if (!confirm(`Issue #${number} を${verb}ますか？`)) return;
+  await runBusyAction(async () => {
+    await postIssueToggle(number, isOpen, button, verb);
+    await reloadIssues();
+  });
+}
+
+/**
+ * Issueを閉じる・再開する要求を送り、結果を表示する
+ */
+async function postIssueToggle(number, isOpen, button, verb) {
   const isCurrent = number === currentIssueNumber;
   const statusEl = isCurrent ? document.getElementById("issue-close-status") : null;
   button.disabled = true;
@@ -1298,7 +1337,6 @@ async function toggleIssue(number, isOpen, button) {
   const message = error ? `失敗しました: ${error}` : `Issueを${verb}ました`;
   if (statusEl) statusEl.textContent = message;
   else if (error) alert(message);
-  await reloadIssues();
 }
 
 /**
@@ -1728,8 +1766,13 @@ function renderAttachmentCell(subtaskId, attachment) {
  * 選択したファイルを1件ずつアップロードする
  *
  * IDの採番順を選択順に揃えるため、並列にせず順に送る。
+ * 一覧を読み直すまで更新中を表示する。
  */
 async function uploadAttachments(subtaskId, files) {
+  await runBusyAction(() => uploadAttachmentsInOrder(subtaskId, files));
+}
+
+async function uploadAttachmentsInOrder(subtaskId, files) {
   const statusEl = document.getElementById("attachment-status");
   const errors = [];
   for (const file of files) {
@@ -1745,9 +1788,14 @@ async function uploadAttachments(subtaskId, files) {
  * 確認のうえ添付ファイルを削除し、一覧を読み直す
  *
  * 失敗した場合は添付ボタン横の状態欄に理由を表示する。
+ * 一覧を読み直すまで更新中を表示する。
  */
 async function removeAttachment(subtaskId, attachmentId) {
   if (!confirm(`添付ファイル ${attachmentId} を削除しますか？`)) return;
+  await runBusyAction(() => deleteAttachment(subtaskId, attachmentId));
+}
+
+async function deleteAttachment(subtaskId, attachmentId) {
   const response = await fetch(
     `/api/subtasks/${subtaskId}/attachments/${encodeURIComponent(attachmentId)}`,
     { method: "DELETE" }
@@ -1888,13 +1936,14 @@ async function onClickSubtaskAction(subtaskId, action) {
  * Cancel・ReOpen・Mergeの実行
  *
  * 成功時はサーバーが返した状態を反映し、一覧とIssueのMR数も更新する。
+ * 要求の応答待ちの間は更新中を表示する。
  */
 async function runSubtaskStateAction(subtask, def) {
   if (!confirm(`MR「${subtask.title}」${def.confirm}`)) return;
   const statusEl = document.getElementById("subtask-action-status");
   setSubtaskBusy(subtask.id, true);
   statusEl.textContent = def.progress;
-  const { body, error } = await postAction(`/api/subtasks/${subtask.id}/${def.path}`);
+  const { body, error } = await runBusyAction(() => postAction(`/api/subtasks/${subtask.id}/${def.path}`));
   const latest = currentSubtasks.find((s) => s.id === subtask.id);
   if (!error && latest) latest.lifecycle_state = body.lifecycle_state;
   if (!error && latest && body.latest_merge) latest.latest_merge = body.latest_merge;
@@ -2087,6 +2136,11 @@ function supplementCreatedIssue(issue) {
     ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
+/**
+ * MR作成フォームの送信
+ *
+ * 作成したMRを開くまで更新中を表示する。
+ */
 async function onSubmitSubtaskForm(event) {
   event.preventDefault();
   if (isCurrentIssueAutoMrCreating()) return;
@@ -2098,14 +2152,15 @@ async function onSubmitSubtaskForm(event) {
   form.querySelector("button").disabled = true;
 
   const issueNumber = currentIssueNumber;
-  const { body, error } = await createSubtask(issueNumber, title);
-  if (error) {
-    statusEl.textContent = `失敗しました: ${error}`;
-    form.querySelector("button").disabled = false;
-    return;
-  }
-
-  await openCreatedSubtask(issueNumber, body.id);
+  await runBusyAction(async () => {
+    const { body, error } = await createSubtask(issueNumber, title);
+    if (error) {
+      statusEl.textContent = `失敗しました: ${error}`;
+      form.querySelector("button").disabled = false;
+      return;
+    }
+    await openCreatedSubtask(issueNumber, body.id);
+  });
 }
 
 /**
