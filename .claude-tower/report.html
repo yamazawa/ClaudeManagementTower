@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実行レポート: Claude参照ルールー②</title>
+<title>実行レポート: アイデアマンー④</title>
 <style>
 body { font-family: sans-serif; margin: 24px; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; }
@@ -15,58 +15,64 @@ code { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; }
 </style>
 </head>
 <body>
-<h1>実行レポート: Claude参照ルールー②</h1>
+<h1>実行レポート: アイデアマンー④</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#180 Claude参照ルール</td></tr>
-<tr><th>サブタスク</th><td>Claude参照ルールー②（PR #183）</td></tr>
-<tr><th>ブランチ</th><td><code>issue-180-subtask-2</code></td></tr>
+<tr><th>Issue</th><td>#178 アイデアマン</td></tr>
+<tr><th>サブタスク</th><td>アイデアマンー④（Draft PR #191）</td></tr>
+<tr><th>指示</th><td>アイデアマンに依頼するときに、どういう観点でアイデアを出してほしいか入力可能にして欲しい。</td></tr>
+<tr><th>ブランチ</th><td><code>issue-178-subtask-4</code>（base: <code>master</code>）</td></tr>
 </table>
 
 <h2>2. 実装結果の要約</h2>
 <p class="ok">成功</p>
 <ul>
-<li>書き込みは対象worktreeを基本とし、<code>C:/git</code>配下の他リポジトリも許可した。</li>
-<li>秘密鍵・<code>.env</code>・認証情報ファイル等を名前パターンで登録し、場所を問わず読み書きを拒否するようにした。</li>
-<li>判定は<code>can_use_tool</code>とPreToolUseフックの両方で行う。</li>
+<li>提案一覧ダイアログの見出し行の下に、観点の入力欄（任意・1000文字まで）を追加した。</li>
+<li>入力した観点はアイデア出しジョブ（<code>idea_jobs.focus</code>）に保存し、ワーカーへ渡す。</li>
+<li>観点の指定があれば、Claudeへの指示文の調査依頼の直後に「重視する観点」の節を含める。</li>
+<li>ダイアログを開いた直後は、前回のアイデア出しの観点で入力欄を埋める。</li>
+<li>実行中は入力欄を無効化する。</li>
 </ul>
 
-<h2>3. 実施した変更</h2>
+<h2>3. 実施した変更と主な変更ファイル</h2>
 <table>
-<tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td><code>core/claude_access_rules.py</code>（新規）</td><td>参照ルール（書き込み範囲・保護フォルダ・参照禁止の名前パターン）を集約</td></tr>
-<tr><td>2</td><td><code>core/config.py</code></td><td>設定<code>claude_shared_root</code>（既定<code>C:/git</code>）を追加</td></tr>
-<tr><td>3</td><td><code>core/claude_client.py</code></td><td>許可判定をルールベースに置換。PreToolUseフックを追加。アイデアマンにも参照禁止を適用</td></tr>
-<tr><td>4</td><td><code>tests/test_claude_access_rules.py</code>（新規）・<code>tests/test_claude_client.py</code></td><td>共有ルート書き込み・他worktree拒否・参照禁止・フックのテストを追加</td></tr>
-<tr><td>5</td><td><code>CLAUDE.md</code>・<code>README.md</code>・<code>IMPLEMENTATION_PLAN.md</code></td><td>ルールと残存リスクを追記</td></tr>
+<tr><th>No.</th><th>コミット</th><th>ファイル</th><th>変更</th></tr>
+<tr><td>1</td><td>ジョブに観点の列を追加</td><td><code>core/models.py</code>, <code>core/db.py</code>, <code>tests/test_db.py</code></td><td><code>IdeaJob.focus</code>を追加。起動時に既存DBへ不足列を追加する<code>ADDED_COLUMNS</code>を追加</td></tr>
+<tr><td>2</td><td>観点を受け取りジョブに保存</td><td><code>core/idea_queue.py</code>, <code>app/routes/ideas.py</code>, テスト</td><td><code>POST /api/projects/{id}/ideas/run</code>で<code>{"focus": "..."}</code>を任意で受け取る。投入時に前後空白を除いて保存し、ジョブ取得時に返す</td></tr>
+<tr><td>3</td><td>観点を指示文に含める</td><td><code>core/idea_context.py</code>, <code>worker/idea_runner.py</code>, テスト</td><td><code>build_idea_prompt</code>に<code>focus</code>引数を追加。空なら節を出さない</td></tr>
+<tr><td>4</td><td>提案一覧に観点の入力欄を追加</td><td><code>app/static/index.html</code>, <code>idea_dialog.js</code>, <code>style.css</code></td><td>入力欄の追加、送信、前回の観点での初期表示、実行中の無効化</td></tr>
+<tr><td>5</td><td>実装計画に記録</td><td><code>IMPLEMENTATION_PLAN.md</code></td><td>9章にNo.18（観点の指定）・No.19（列の追加方針）を追記</td></tr>
 </table>
-<p>コミット：b682703（ルール定義）、e02b91b（許可判定へ適用）、c8e5a28（ドキュメント）。</p>
 
-<h2>4. 自律判断した事項</h2>
+<h2>4. 自律判断した事項・採用理由・前提</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td><code>C:/git</code>配下でも、他のworktree（<code>worktree_base_dir</code>）と稼働中の管理塔フォルダへの書き込みは拒否</td><td>並列実行中の他サブタスクを壊さないため。稼働中のサーバーのコードとDBを直接書き換えずPR経由にするため</td></tr>
-<tr><td>2</td><td>参照禁止は<code>C:/git</code>の内外を問わず適用</td><td>ルールが単純になり、より安全側に倒れるため</td></tr>
-<tr><td>3</td><td>参照禁止の対象は、パスのいずれかの要素が名前パターンに一致するもの（<code>.ssh</code>等のフォルダは配下全体）。<code>.env.example</code>等の雛形は許可</td><td>リポジトリごとの登録なしで、汎用的にブラックボックス化するため</td></tr>
-<tr><td>4</td><td>PreToolUseフックでも同じ判定を実施</td><td>acceptEditsモードでは、worktree内の読み書きが<code>can_use_tool</code>を経ずに許可される。そのためworktree内の<code>.env</code>を守るにはフックが必要</td></tr>
-<tr><td>5</td><td>読み取り（worktree外）は従来通り許可。ディレクトリ逆参照（<code>..</code>）の拒否も維持</td><td>①の方針を維持するため。<code>..</code>は相対位置を確実に解決できないため</td></tr>
-<tr><td>6</td><td><code>READ_ONLY_TOOL_NAMES</code>の重複定義を解消（アイデアマン用を<code>IDEA_MAN_TOOL_NAMES</code>に改名）</td><td>後の定義が前の定義を上書きし、LS・NotebookReadがworktree外読み取りの許可から漏れていたため</td></tr>
-<tr><td>7</td><td>拒否する名前パターンはコード内の定数にした（設定化はしない）</td><td>一箇所にまとめるという規約を満たしつつ、実装をシンプルに保つため</td></tr>
+<tr><td>1</td><td>観点は自由記述の1項目とした（選択式にしない）</td><td>指示が「どういう観点で」と自由度の高い要望のため。選択肢は運用を見て追加できる</td></tr>
+<tr><td>2</td><td>観点はジョブ単位で保存し、提案単位には持たせない</td><td>ワーカーがDBからジョブを取得する構成のため、ジョブに保存するのが最小の変更になる</td></tr>
+<tr><td>3</td><td>既存DBへは起動時に列を追加する（<code>ALTER TABLE ... ADD COLUMN</code>）</td><td>DBは<code>create_all</code>のみで列追加されず、そのままでは稼働中の管理塔が<code>idea_jobs</code>参照時に失敗するため。ガイドラインの「移行コードを書かない」と衝突するが、実装計画3章No.3の運用開始後ルール（既存データを消さない）を優先し、9章No.19に記録した</td></tr>
+<tr><td>4</td><td>観点の上限を1000文字とした</td><td>指示文の肥大化を防ぐため。画面の<code>maxlength</code>とAPIの検証（超過は422）を合わせた</td></tr>
+<tr><td>5</td><td>観点に合う提案が無ければ件数を埋めない旨を指示文に含めた</td><td>観点外の提案で件数を埋めると、指定の意味が薄れるため</td></tr>
+<tr><td>6</td><td>前回の観点で入力欄を初期表示する</td><td>同じ観点での再実行を想定。不要なら消して実行すればよい</td></tr>
+<tr><td>7</td><td>リクエスト本文は省略可とした</td><td>既存の呼び出し（本文なし・<code>{}</code>）との互換のため</td></tr>
 </table>
 
-<h2>5. テスト</h2>
-<p><code>./.venv/Scripts/python.exe -m pytest -q</code>：<span class="ok">359 passed</span>（変更前は341件。18件追加）</p>
-<p>実機（Claude Agent SDK経由での実行）でのフックの動作確認は未実施。worktree内からは本番ワーカーを起動できないため。</p>
+<h2>5. 実行したテストと結果</h2>
+<ul>
+<li><code>./.venv/Scripts/python.exe -m pytest -q</code>：412件すべて成功。</li>
+<li>追加テスト：既存テーブルへの列追加（2回実行しても失敗しない）、観点の保存と取得、APIの観点受け渡し・文字数超過、指示文への観点の節の有無と位置、ワーカーからの観点の受け渡し。</li>
+<li>FastAPIのTestClientで、本文なし／<code>{}</code>／観点あり／1001文字（422）の応答を確認した。</li>
+<li><code>node --check app/static/idea_dialog.js</code>：構文エラーなし。</li>
+<li>ブラウザでの画面確認は未実施（アプリの起動確認は人間に依頼する運用のため）。</li>
+</ul>
 
 <h2>6. 残課題・リスク・レビュー時の確認ポイント</h2>
 <ul>
-<li>フォルダを指定したGrepは、その配下にある参照禁止ファイルの中身を拾う可能性がある。</li>
-<li>シェルの変数・ワイルドカード（<code>cat .e*</code>等）で参照禁止ファイルを指す操作は検出できない。</li>
-<li>名前パターンの誤検知がありうる（PowerShellの<code>$x.key</code>が<code>*.key</code>に一致する等）。</li>
-<li>PreToolUseフックの拒否が実際のSDK実行で効くことを、テスト用リポジトリで確認してほしい（worktree内の<code>.env</code>のReadが拒否されること）。</li>
-<li><code>BLOCKED_NAME_PATTERNS</code>の内容に過不足がないか確認してほしい。</li>
-<li><code>C:/git</code>配下の他リポジトリへの書き込みは、そのリポジトリのブランチ運用に依存する（直接masterを編集する可能性がある）。</li>
+<li>画面での見た目（入力欄の位置・スマホ幅での表示）を確認してほしい。</li>
+<li>既存DBへの列追加は、管理塔の再起動時（<code>init_db</code>実行時）に行われる。再起動前に新しいワーカーが動くと<code>focus</code>列が無く失敗する可能性がある。</li>
+<li><code>ADDED_COLUMNS</code>の仕組みを今後のスキーマ変更にも使うか、今回限りとするかの判断が必要。</li>
+<li>観点は提案カードには表示していない。どの観点で出た提案かを表示したい場合は後続で対応する。</li>
+<li>入力欄のプレースホルダーに入力例を入れている。不要であれば削除する。</li>
 </ul>
 </body>
 </html>
