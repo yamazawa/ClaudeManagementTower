@@ -138,6 +138,23 @@ class Report(Base):
     created_at: Mapped[datetime] = mapped_column(default=_now)
 
 
+class IdeaSession(Base):
+    """リポジトリ表示のIdeaタブの項目
+
+    項目ごとにアイデア出しを実行し、提案を確認する。
+    stateは一覧のOpen・Closeを表す。
+    """
+
+    __tablename__ = "idea_sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"))
+    title: Mapped[str]
+    state: Mapped[str] = mapped_column(default="open")
+    created_at: Mapped[datetime] = mapped_column(default=_now)
+    updated_at: Mapped[datetime] = mapped_column(default=_now, onupdate=_now)
+
+
 class IdeaJob(Base):
     """アイデアマンのアイデア出しジョブ
 
@@ -150,6 +167,7 @@ class IdeaJob(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     project_id: Mapped[int] = mapped_column(ForeignKey("projects.id"))
+    idea_session_id: Mapped[int | None] = mapped_column(ForeignKey("idea_sessions.id"), default=None)
     status: Mapped[str]
     focus: Mapped[str] = mapped_column(default="")
     queued_at: Mapped[datetime] = mapped_column(default=_now)
