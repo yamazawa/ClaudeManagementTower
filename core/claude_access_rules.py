@@ -54,10 +54,17 @@ def _normalize(path: str) -> str:
 
 
 def is_inside(path: str, root: str) -> bool:
-    """pathがroot配下（root自身を含む）かを判定する"""
+    """pathがroot配下（root自身を含む）かを判定する
+
+    大文字小文字はOSの規則で正規化し、パスの要素単位で比較する。
+    ドライブが異なる場合は配下でないと判定する。
+    """
     target = _normalize(path)
     base = _normalize(root)
-    return target == base or target.startswith(base.rstrip("\\/") + os.sep)
+    try:
+        return os.path.commonpath([target, base]) == base
+    except ValueError:
+        return False
 
 
 def _matches_any(name: str, patterns: list[str]) -> bool:
