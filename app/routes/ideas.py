@@ -17,6 +17,7 @@ from core.idea_approval import (
     IdeaApprovalNotAllowed,
     claim_idea,
     compose_issue_body,
+    compose_issue_title,
     compose_subtask_instruction,
     record_issue_created,
     record_subtask_created,
@@ -86,17 +87,18 @@ def _github_repo(project_id: int) -> str:
         return session.get(Project, project_id).github_repo
 
 
-def _create_issue_for(idea: dict) -> tuple[dict, str]:
+def _create_issue_for(idea: dict) -> tuple[dict, str, str]:
     """提案からIssueを作成する
 
     作成に失敗した場合は承認前の状態へ戻す。
     """
+    title = compose_issue_title(idea)
     try:
-        issue = create_issue(_github_repo(idea["project_id"]), idea["title"], compose_issue_body(idea))
+        issue = create_issue(_github_repo(idea["project_id"]), title, compose_issue_body(idea))
     except GitHubClientError as exc:
         release_claim(idea["id"])
         raise HTTPException(status_code=500, detail=f"Issue作成に失敗しました: {exc}") from exc
-    return record_issue_created(idea["id"], issue["number"]), issue["url"]
+    return record_issue_created(idea["id"], issue["number"]), issue["url"], title
 
 
 def _create_subtask_for(idea: dict, issue_title: str) -> tuple[dict, dict]:
@@ -129,8 +131,7 @@ def post_approve_idea(idea_id: int, payload: ApproveIdeaRequest):
     idea = _claim_or_raise(idea_id, payload.mode)
     issue_url, issue_title, subtask = None, "", None
     if target_issue_number(idea) is None:
-        idea, issue_url = _create_issue_for(idea)
-        issue_title = idea["title"]
+        idea, issue_url, issue_title = _create_issue_for(idea)
     if payload.mode == ApprovalMode.WITH_SUBTASK:
         idea, subtask = _create_subtask_for(idea, issue_title)
     return {"idea": idea, "issue_url": issue_url, "subtask": subtask}

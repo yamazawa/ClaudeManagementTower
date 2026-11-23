@@ -111,6 +111,10 @@ def test_record_subtask_created(session_factory):
     assert idea_approval.target_issue_number(idea) == 7
 
 
+def test_compose_issue_title_adds_prefix():
+    assert idea_approval.compose_issue_title({"title": "提案"}) == "[IdeaMan] 提案"
+
+
 def test_compose_issue_body(session_factory):
     idea = idea_approval.claim_idea(_save(session_factory), ApprovalMode.ISSUE_ONLY, session_factory=session_factory)
 
