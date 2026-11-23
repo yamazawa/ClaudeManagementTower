@@ -195,27 +195,14 @@ function isSectionExpanded(sectionId) {
   return !document.getElementById(sectionId).classList.contains("collapsed");
 }
 
-// 選択項目が無くなったため閉じたペインのID（選択項目ができた場合に開き直す）
-const emptyCollapsedSectionIds = new Set();
-
 /**
- * 選択項目が無くなったペインを閉じる
+ * ペインの表示・非表示を切り替える
  *
- * 縦長表示・横長表示を問わず閉じる。
+ * 親項目が未選択で表示内容が無いペインは、見出し行ごと非表示にする。
+ * 縦長表示・横長表示を問わず切り替える。
  */
-function collapseEmptySection(sectionId) {
-  setSectionExpanded(sectionId, false);
-  emptyCollapsedSectionIds.add(sectionId);
-}
-
-/**
- * 選択項目が無くなったため閉じたペインを、選択項目ができた際に開き直す
- *
- * 縦長表示では各選択処理の自動開閉に任せる。
- */
-function reopenEmptyCollapsedSection(sectionId) {
-  if (!emptyCollapsedSectionIds.delete(sectionId)) return;
-  if (!isPortrait()) setSectionExpanded(sectionId, true);
+function setSectionShown(sectionId, shown) {
+  document.getElementById(sectionId).hidden = !shown;
 }
 
 // 選択の切り替え要求の通番（後発の要求があれば、先発の取得結果で表示を上書きしない）
@@ -248,8 +235,35 @@ async function runSelectionRequest(load, apply, { blocking = true } = {}) {
   }
 }
 
+// 選択の切り替えで更新待ちか
+let selectionBusy = false;
+// 更新待ちの操作の数（並行して実行された操作が全て終わるまで更新中を表示する）
+let busyActionCount = 0;
+
 function setSelectionBusy(busy) {
-  document.getElementById("selection-busy").hidden = !busy;
+  selectionBusy = busy;
+  updateBusyOverlay();
+}
+
+/**
+ * 更新待ちの操作を実行する
+ *
+ * 実行中は選択の切り替えと同じく、画面をブロックして更新中を表示する。
+ * 失敗時も含め、操作の終了時に表示を戻す。
+ */
+async function runBusyAction(action) {
+  busyActionCount += 1;
+  updateBusyOverlay();
+  try {
+    return await action();
+  } finally {
+    busyActionCount -= 1;
+    updateBusyOverlay();
+  }
+}
+
+function updateBusyOverlay() {
+  document.getElementById("selection-busy").hidden = !selectionBusy && busyActionCount === 0;
 }
 
 /**
@@ -280,7 +294,6 @@ function setupExpanders() {
   document.querySelectorAll("section .expander").forEach((button) => {
     const section = button.closest("section");
     button.addEventListener("click", () => {
-      emptyCollapsedSectionIds.delete(section.id);
       setSectionExpanded(section.id, !isSectionExpanded(section.id));
     });
   });
@@ -298,6 +311,7 @@ function escapeHtml(text) {
  *
  * Enterまたはフォーカス外れで確定し、Escで取り消す。
  * onSaveは新タイトルを受け取り、失敗時はエラー文言を返す。
+ * 保存が終わるまで更新中を表示する。
  */
 function makeTitleEditable(titleEl, statusEl, onSave) {
   titleEl.classList.add("editable-title");
@@ -323,7 +337,7 @@ function makeTitleEditable(titleEl, statusEl, onSave) {
       titleEl.textContent = title;
       updateTitleTooltip(titleEl);
       statusEl.textContent = "更新中...";
-      const error = await onSave(title);
+      const error = await runBusyAction(() => onSave(title));
       if (error) titleEl.textContent = original;
       updateTitleTooltip(titleEl);
       statusEl.textContent = error ? `失敗しました: ${error}` : "更新しました";
@@ -654,7 +668,7 @@ async function waitForNewBootId(oldBootId) {
 /**
  * Issueの選択を外し、Issue・MRを未選択の表示に戻す
  *
- * Issue内容・MR内容のペインは閉じる。
+ * Issue内容・MR内容のペインは非表示にする。
  */
 function clearIssueSelection() {
   currentIssueNumber = null;
@@ -665,16 +679,16 @@ function clearIssueSelection() {
   highlightSelectedIssue();
   document.getElementById("issue-heading").textContent = "Issue";
   document.getElementById("subtask-list-body").innerHTML =
-    '<p class="empty">左の一覧からIssueを選択してください。</p>';
+    '<p class="empty">一覧からIssueを選択してください。</p>';
   document.getElementById("subtask-panel").hidden = true;
-  collapseEmptySection(SECTION_IDS.issue);
+  setSectionShown(SECTION_IDS.issue, false);
   renderSubtaskDetail(null);
 }
 
 /**
  * リポジトリの選択を外し、Issue一覧以降を未選択の表示に戻す
  *
- * Issue一覧・Issue内容・MR内容のペインは閉じる。
+ * Issue一覧・Issue内容・MR内容のペインは非表示にする。
  * CLI・Ideaの選択も外す。
  */
 function clearProjectSelection() {
@@ -685,7 +699,7 @@ function clearProjectSelection() {
   document.getElementById("issue-list-placeholder").hidden = false;
   document.getElementById("repo-panel").hidden = true;
   document.getElementById("issue-list-items").innerHTML = "";
-  collapseEmptySection(SECTION_IDS.repo);
+  setSectionShown(SECTION_IDS.repo, false);
   clearIssueSelection();
   clearRepoItemSelection();
 }
@@ -733,7 +747,7 @@ function showProject(project) {
   highlightSelectedProject();
   autoSetSectionExpanded(SECTION_IDS.projects, false);
   autoSetSectionExpanded(SECTION_IDS.repo, true);
-  reopenEmptyCollapsedSection(SECTION_IDS.repo);
+  setSectionShown(SECTION_IDS.repo, true);
   document.getElementById("issue-list-placeholder").hidden = true;
   document.getElementById("repo-panel").hidden = false;
   renderRepoHeading(project);
@@ -1276,10 +1290,21 @@ function onClickIssueToggle() {
  * 見出し・一覧のどちらのボタンからも呼ぶ。
  * 表示中Issueの場合は見出しに結果を表示し、それ以外は失敗時のみ通知する。
  * 成否に関わらず一覧を再取得してボタンの状態を戻す。
+ * 一覧の再取得が終わるまで更新中を表示する。
  */
 async function toggleIssue(number, isOpen, button) {
   const verb = isOpen ? "閉じ" : "再開し";
   if (!confirm(`Issue #${number} を${verb}ますか？`)) return;
+  await runBusyAction(async () => {
+    await postIssueToggle(number, isOpen, button, verb);
+    await reloadIssues();
+  });
+}
+
+/**
+ * Issueを閉じる・再開する要求を送り、結果を表示する
+ */
+async function postIssueToggle(number, isOpen, button, verb) {
   const isCurrent = number === currentIssueNumber;
   const statusEl = isCurrent ? document.getElementById("issue-close-status") : null;
   button.disabled = true;
@@ -1292,7 +1317,6 @@ async function toggleIssue(number, isOpen, button) {
   const message = error ? `失敗しました: ${error}` : `Issueを${verb}ました`;
   if (statusEl) statusEl.textContent = message;
   else if (error) alert(message);
-  await reloadIssues();
 }
 
 /**
@@ -1452,7 +1476,7 @@ function highlightSelectedIssue() {
  * 選択し直したIssueの内容を表示する
  *
  * MR一覧に表示中の先頭MRを自動選択する。
- * 表示中のMRが無い場合は未選択とし、MR内容を閉じる。
+ * 表示中のMRが無い場合は未選択とし、MR内容を非表示にする。
  * 縦長表示ではIssue内容を開き、MR一覧の表示が1件のみの場合は閉じる。
  * 表示が複数件の場合は、MRを選択し直せるよう開いたままにする。
  * 開閉は内容の切り替え後に行い、切り替え前の内容で開閉しないようにする。
@@ -1460,7 +1484,7 @@ function highlightSelectedIssue() {
 function showIssueDetail(issue) {
   currentSelectedSubtaskId = null;
   renderIssueDetail(issue);
-  reopenEmptyCollapsedSection(SECTION_IDS.issue);
+  setSectionShown(SECTION_IDS.issue, true);
   autoSetSectionExpanded(SECTION_IDS.issue, filterSubtasks(currentSubtasks).length !== 1);
 }
 
@@ -1590,11 +1614,11 @@ function renderSubtaskDetail(s) {
   const heading = document.getElementById("subtask-heading");
   if (!s) {
     heading.textContent = "MR";
-    el.innerHTML = '<p class="empty">左の一覧からMRを選択してください。</p>';
-    collapseEmptySection(SECTION_IDS.mr);
+    el.innerHTML = '<p class="empty">一覧からMRを選択してください。</p>';
+    setSectionShown(SECTION_IDS.mr, false);
     return;
   }
-  reopenEmptyCollapsedSection(SECTION_IDS.mr);
+  setSectionShown(SECTION_IDS.mr, true);
 
   heading.innerHTML =
     `${renderSubtaskNumber(s)}${renderMrTitle(s, { id: "subtask-title" })}${renderSubtaskState(s)}`;
@@ -1722,8 +1746,13 @@ function renderAttachmentCell(subtaskId, attachment) {
  * 選択したファイルを1件ずつアップロードする
  *
  * IDの採番順を選択順に揃えるため、並列にせず順に送る。
+ * 一覧を読み直すまで更新中を表示する。
  */
 async function uploadAttachments(subtaskId, files) {
+  await runBusyAction(() => uploadAttachmentsInOrder(subtaskId, files));
+}
+
+async function uploadAttachmentsInOrder(subtaskId, files) {
   const statusEl = document.getElementById("attachment-status");
   const errors = [];
   for (const file of files) {
@@ -1739,9 +1768,14 @@ async function uploadAttachments(subtaskId, files) {
  * 確認のうえ添付ファイルを削除し、一覧を読み直す
  *
  * 失敗した場合は添付ボタン横の状態欄に理由を表示する。
+ * 一覧を読み直すまで更新中を表示する。
  */
 async function removeAttachment(subtaskId, attachmentId) {
   if (!confirm(`添付ファイル ${attachmentId} を削除しますか？`)) return;
+  await runBusyAction(() => deleteAttachment(subtaskId, attachmentId));
+}
+
+async function deleteAttachment(subtaskId, attachmentId) {
   const response = await fetch(
     `/api/subtasks/${subtaskId}/attachments/${encodeURIComponent(attachmentId)}`,
     { method: "DELETE" }
@@ -1882,13 +1916,14 @@ async function onClickSubtaskAction(subtaskId, action) {
  * Cancel・ReOpen・Mergeの実行
  *
  * 成功時はサーバーが返した状態を反映し、一覧とIssueのMR数も更新する。
+ * 要求の応答待ちの間は更新中を表示する。
  */
 async function runSubtaskStateAction(subtask, def) {
   if (!confirm(`MR「${subtask.title}」${def.confirm}`)) return;
   const statusEl = document.getElementById("subtask-action-status");
   setSubtaskBusy(subtask.id, true);
   statusEl.textContent = def.progress;
-  const { body, error } = await postAction(`/api/subtasks/${subtask.id}/${def.path}`);
+  const { body, error } = await runBusyAction(() => postAction(`/api/subtasks/${subtask.id}/${def.path}`));
   const latest = currentSubtasks.find((s) => s.id === subtask.id);
   if (!error && latest) latest.lifecycle_state = body.lifecycle_state;
   if (!error && latest && body.latest_merge) latest.latest_merge = body.latest_merge;
@@ -1944,6 +1979,11 @@ function countMrs(subtasks) {
   };
 }
 
+/**
+ * Issue作成フォームの送信
+ *
+ * 作成したIssueとMRを開くまで更新中を表示する。
+ */
 async function onSubmitIssueForm(event) {
   event.preventDefault();
   const form = event.target;
@@ -1956,20 +1996,29 @@ async function onSubmitIssueForm(event) {
   statusEl.textContent = "IssueとMRを作成中...";
   form.querySelector("button").disabled = true;
   try {
-    const created = await createIssueWithSubtask(projectId, title, statusEl);
-    if (!created) return;
-    if (form.title.value === title) form.reset();
-    if (projectId === currentProjectId) await openCreatedIssueAndSubtask(created.issue, created.subtaskId);
+    await runBusyAction(() => createAndOpenIssue(form, projectId, title, statusEl));
   } finally {
     form.querySelector("button").disabled = false;
   }
 }
 
 /**
+ * IssueとMRを作成し、作成したIssueとMRを開く
+ *
+ * 作成中に別プロジェクトへ切り替えた場合は開かない。
+ */
+async function createAndOpenIssue(form, projectId, title, statusEl) {
+  const created = await createIssueWithSubtask(projectId, title, statusEl);
+  if (!created) return;
+  if (form.title.value === title) form.reset();
+  if (projectId === currentProjectId) await openCreatedIssueAndSubtask(created.issue, created.subtaskId);
+}
+
+/**
  * IssueとMRの作成
  *
  * 高速化のため、Issue作成とMR作成を並行して行い、MRへのIssue紐付けは後から行う。
- * 作成中は画面を更新せず、利用者の操作を妨げない。
+ * 作成中は画面を更新せず、作成完了後にまとめて反映する。
  * Issue作成に失敗した場合はnull、MR作成のみ失敗した場合はsubtaskIdをnullで返す。
  */
 async function createIssueWithSubtask(projectId, title, statusEl) {
@@ -2081,6 +2130,11 @@ function supplementCreatedIssue(issue) {
     ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
+/**
+ * MR作成フォームの送信
+ *
+ * 作成したMRを開くまで更新中を表示する。
+ */
 async function onSubmitSubtaskForm(event) {
   event.preventDefault();
   if (isCurrentIssueAutoMrCreating()) return;
@@ -2092,14 +2146,15 @@ async function onSubmitSubtaskForm(event) {
   form.querySelector("button").disabled = true;
 
   const issueNumber = currentIssueNumber;
-  const { body, error } = await createSubtask(issueNumber, title);
-  if (error) {
-    statusEl.textContent = `失敗しました: ${error}`;
-    form.querySelector("button").disabled = false;
-    return;
-  }
-
-  await openCreatedSubtask(issueNumber, body.id);
+  await runBusyAction(async () => {
+    const { body, error } = await createSubtask(issueNumber, title);
+    if (error) {
+      statusEl.textContent = `失敗しました: ${error}`;
+      form.querySelector("button").disabled = false;
+      return;
+    }
+    await openCreatedSubtask(issueNumber, body.id);
+  });
 }
 
 /**
