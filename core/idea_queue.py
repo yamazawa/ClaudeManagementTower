@@ -44,7 +44,7 @@ _CLAIM_SQL = text(
         ORDER BY queued_at
         LIMIT 1
     )
-    RETURNING id, project_id
+    RETURNING id, project_id, focus
     """
 )
 
@@ -62,6 +62,7 @@ def job_to_dict(job: IdeaJob) -> dict:
         "id": job.id,
         "project_id": job.project_id,
         "status": job.status,
+        "focus": job.focus,
         "queued_at": job.queued_at,
         "started_at": job.started_at,
         "ended_at": job.ended_at,
@@ -71,10 +72,11 @@ def job_to_dict(job: IdeaJob) -> dict:
     }
 
 
-def enqueue_idea_job(project_id: int, session_factory: sessionmaker = SessionLocal) -> dict:
+def enqueue_idea_job(project_id: int, focus: str = "", session_factory: sessionmaker = SessionLocal) -> dict:
     """アイデア出しジョブを投入する
 
     同じプロジェクトで待機中・実行中のジョブがあれば重ねて投入しない。
+    focusはアイデアを出してほしい観点で、前後の空白を除いて保存する。
     """
     with session_factory() as session:
         if session.get(Project, project_id) is None:
@@ -86,7 +88,7 @@ def enqueue_idea_job(project_id: int, session_factory: sessionmaker = SessionLoc
         )
         if active is not None:
             raise IdeaJobAlreadyActive("アイデア出しを実行中です")
-        job = IdeaJob(project_id=project_id, status=IdeaJobStatus.QUEUED)
+        job = IdeaJob(project_id=project_id, status=IdeaJobStatus.QUEUED, focus=focus.strip())
         session.add(job)
         session.commit()
         return job_to_dict(job)
@@ -116,7 +118,7 @@ def claim_next_idea_job(worker_id: int, bind=engine, session_factory: sessionmak
         job.started_at = now
         job.heartbeat_at = now
         session.commit()
-    return {"idea_job_id": row.id, "project_id": row.project_id}
+    return {"idea_job_id": row.id, "project_id": row.project_id, "focus": row.focus or ""}
 
 
 def heartbeat_idea_job(idea_job_id: int, worker_id: int, session_factory: sessionmaker = SessionLocal) -> None:

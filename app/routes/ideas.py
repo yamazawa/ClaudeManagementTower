@@ -7,7 +7,7 @@
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.routes.subtasks import CreateSubtaskRequest, create_subtask, execute_subtask
 from core.db import SessionLocal
@@ -30,6 +30,14 @@ from core.models import Project
 
 router = APIRouter(prefix="/api")
 
+# アイデアを出してほしい観点の最大文字数
+IDEA_FOCUS_MAX_LENGTH = 1000
+
+
+class RunIdeaRequest(BaseModel):
+    # アイデアを出してほしい観点（空なら指定なし）
+    focus: str = Field(default="", max_length=IDEA_FOCUS_MAX_LENGTH)
+
 
 class RejectIdeaRequest(BaseModel):
     reason: str = ""
@@ -42,13 +50,15 @@ class ApproveIdeaRequest(BaseModel):
 
 
 @router.post("/projects/{project_id}/ideas/run", status_code=202)
-def run_idea_generation(project_id: int):
+def run_idea_generation(project_id: int, payload: RunIdeaRequest | None = None):
     """アイデア出しジョブを投入する
 
     結果は待たずに返し、画面は最新ジョブと提案一覧の取得で確認する。
+    観点の指定は任意とする。
     """
+    focus = payload.focus if payload else ""
     try:
-        return enqueue_idea_job(project_id)
+        return enqueue_idea_job(project_id, focus)
     except IdeaProjectNotFound as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
     except IdeaJobAlreadyActive as exc:

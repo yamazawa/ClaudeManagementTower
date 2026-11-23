@@ -28,9 +28,20 @@ def test_run_maps_errors(monkeypatch, exc, status):
 
 
 def test_run_returns_queued_job(monkeypatch):
-    monkeypatch.setattr(ideas, "enqueue_idea_job", lambda project_id: {"id": 4, "project_id": project_id})
+    monkeypatch.setattr(ideas, "enqueue_idea_job", lambda project_id, focus: {"id": 4, "focus": focus})
 
-    assert ideas.run_idea_generation(2) == {"id": 4, "project_id": 2}
+    assert ideas.run_idea_generation(2) == {"id": 4, "focus": ""}
+
+
+def test_run_passes_focus(monkeypatch):
+    monkeypatch.setattr(ideas, "enqueue_idea_job", lambda project_id, focus: {"id": 4, "focus": focus})
+
+    assert ideas.run_idea_generation(2, ideas.RunIdeaRequest(focus="テスト不足"))["focus"] == "テスト不足"
+
+
+def test_run_request_rejects_too_long_focus():
+    with pytest.raises(ValueError):
+        ideas.RunIdeaRequest(focus="a" * (ideas.IDEA_FOCUS_MAX_LENGTH + 1))
 
 
 @pytest.mark.parametrize(
