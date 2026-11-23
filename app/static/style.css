@@ -68,8 +68,14 @@
   box-sizing: border-box;
 }
 
+/* ヘッダーの高さ分、スクロール先の位置をずらす（高さはapp.jsで設定する） */
+html {
+  scroll-padding-top: var(--header-height, 0px);
+}
+
 body {
   margin: 0;
+  padding-top: var(--header-height, 0px);
   background: var(--bg);
   color: var(--ink);
   font: 15px/1.7 system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -77,11 +83,13 @@ body {
 
 /* ヘッダー
 
-スクロールしても常に画面上端に表示する。
+スクロール量に関わらず、常に画面上端に固定して表示する。
 */
 header {
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 100;
   background: var(--header-bg);
   color: #fff;

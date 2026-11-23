@@ -325,6 +325,19 @@ function setAutoMrCreatingIssue(issueNumber) {
 }
 
 /**
+ * 固定表示のヘッダーの高さを、本文の余白とスクロール位置に反映する
+ *
+ * ヘッダーは画面幅やレート制限表示で折り返して高さが変わるため、変化を監視する。
+ */
+function setupHeaderOffset() {
+  const header = document.querySelector("header");
+  const apply = () =>
+    document.documentElement.style.setProperty("--header-height", `${header.offsetHeight}px`);
+  new ResizeObserver(apply).observe(header);
+  apply();
+}
+
+/**
  * エキスパンダの初期化
  *
  * ペインは自動で閉じず、利用者の開閉操作でのみ閉じる。
@@ -2454,6 +2467,7 @@ async function showReport(jobId, subtaskId) {
   frame.hidden = false;
 }
 
+setupHeaderOffset();
 setupExpanders();
 setupMrStatusFilter();
 updateDeployButton();
