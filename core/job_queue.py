@@ -27,6 +27,9 @@ _CLAIM_SQL = text(
 )
 
 
+# 利用上限で中断したジョブの状態（リセット後に自動で再投入する）
+STATUS_RATE_LIMITED = "rate_limited"
+
 _PROCESS_IDENTIFIER_PREFIX = "worker"
 
 
@@ -131,6 +134,40 @@ def recover_stale_jobs(
             job.status = "needs_attention"
         session.commit()
     return recovered_ids
+
+
+def _has_newer_job(session, job: ExecutionJob) -> bool:
+    return (
+        session.query(ExecutionJob)
+        .filter(ExecutionJob.subtask_id == job.subtask_id, ExecutionJob.id > job.id)
+        .first()
+        is not None
+    )
+
+
+def requeue_rate_limited_jobs(
+    retry_delay_seconds: int,
+    session_factory: sessionmaker = SessionLocal,
+) -> list[int]:
+    """利用上限で中断したジョブを待機中に戻す
+
+    中断から一定時間が過ぎたジョブのみ対象とする。
+    同じサブタスクで後から再実行されたジョブは対象外とする。
+    """
+    threshold = datetime.now(timezone.utc) - timedelta(seconds=retry_delay_seconds)
+    with session_factory() as session:
+        candidates = (
+            session.query(ExecutionJob)
+            .filter(ExecutionJob.status == STATUS_RATE_LIMITED, ExecutionJob.ended_at < threshold)
+            .all()
+        )
+        targets = [job for job in candidates if not _has_newer_job(session, job)]
+        for job in targets:
+            job.status = "queued"
+            job.exit_code = None
+            job.ended_at = None
+        session.commit()
+        return [job.id for job in targets]
 
 
 def cleanup_stale_workers(

@@ -11,6 +11,7 @@ Phase 10（統合受け入れテスト）まで完了し、受け入れチェッ
 以下の安全対策の完了により、本リポジトリ自身の開発管理もアプリでの自律実行に移行した。
 
 - Bash/PowerShellの操作範囲制限（worktree外への操作・force push・hard reset等を拒否）
+- 書き込み系ツールのworktree内制限（Read・Glob・Grepはworktree外も参照可）
 - GitHub側のbranch protection（masterへの直接push・force pushを禁止、管理者にも適用）
 - Issueの自動クローズ・PRの自動マージを行わない方針の実機確認
 
@@ -105,7 +106,9 @@ python -u -m worker.launcher
 再起動の手順は、他の手順が全て成功した後にまとめて実行する。\
 再起動の手順は`run_all.py`経由で起動した場合のみ使える。
 
-Claude管理塔リポジトリ自身は、masterの最新を取得してサーバーを再起動する定義にしている。
+Claude管理塔リポジトリ自身は、masterの最新を取得してサーバー・ワーカーを再起動する定義にしている。\
+ワーカーは起動時に読み込んだソースで動くため、再起動しないとワーカー側の変更が反映されない。\
+ワーカーの再起動では実行中のジョブも中断されるため、ジョブ実行中はデプロイしない。
 
 ## 遠隔アクセス（Cloudflare Tunnel + Access）
 

@@ -1,5 +1,6 @@
 import json
 import sys
+from pathlib import Path
 
 import pytest
 
@@ -11,6 +12,7 @@ from core.deploy import (
     is_deploy_defined,
     load_steps,
     read_result,
+    restart_commands,
     run_deploy,
     start_deploy,
 )
@@ -46,6 +48,12 @@ def test_load_steps_returns_defined_steps(tmp_path):
 
     assert is_deploy_defined(str(tmp_path))
     assert load_steps(str(tmp_path)) == steps
+
+
+def test_self_repo_definition_restarts_server_and_workers():
+    repo_root = str(Path(__file__).resolve().parents[1])
+
+    assert restart_commands(load_steps(repo_root)) == [COMMAND_RESTART_SERVER, COMMAND_RESTART_WORKERS]
 
 
 @pytest.mark.parametrize(

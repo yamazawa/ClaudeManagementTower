@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException
@@ -14,6 +15,7 @@ from core.github_client import (
     edit_pr_title,
     get_issue,
     list_issues,
+    list_issues_closed_since,
     reopen_issue,
 )
 from core.lifecycle import LifecycleState
@@ -31,6 +33,8 @@ RESOLVED_LIFECYCLE_STATES = LifecycleState.MERGED_STATES
 # Issue一覧のMR数から除外するlifecycle_state（マージされずクローズ）
 UNCOUNTED_LIFECYCLE_STATE = LifecycleState.CANCELED
 EMPTY_MR_COUNTS = {"resolved": 0, "unresolved": 0, "total": 0}
+# Issue一覧で本日クローズされたIssueのみを返すステータス
+ISSUE_STATE_CLOSED_TODAY = "closed_today"
 
 
 def _latest_job_summary(session, subtask_id: int) -> dict | None:
@@ -69,18 +73,31 @@ def get_projects():
 
 
 @router.get("/{project_id}/issues")
-def get_issues(project_id: int, state: Literal["open", "closed"] = "open"):
+def get_issues(project_id: int, state: Literal["open", "closed_today", "closed"] = "open"):
     """Issue一覧
 
-    IssueのステータスはOpen・Closeの2種類とし、指定したステータスのIssueを返す。
+    指定したステータスのIssueを返す。
+    closed_todayは本日（サーバーのローカル時刻）クローズされたIssueのみを返す。
     """
     with SessionLocal() as session:
         project = session.get(Project, project_id)
         if project is None:
             raise HTTPException(status_code=404, detail="project not found")
-        issues = list_issues(project.github_repo, state)
+        issues = _list_issues_by_state(project.github_repo, state)
         counts = _mr_counts_by_issue(session, project.id)
         return [{**i, "mr_counts": counts.get(i["number"], EMPTY_MR_COUNTS)} for i in issues]
+
+
+def _list_issues_by_state(repo: str, state: str) -> list[dict]:
+    if state == ISSUE_STATE_CLOSED_TODAY:
+        return list_issues_closed_since(repo, _start_of_today())
+    return list_issues(repo, state)
+
+
+def _start_of_today() -> datetime:
+    """サーバーのローカル時刻での本日0時（タイムゾーン付き）"""
+    now = datetime.now().astimezone()
+    return now.replace(hour=0, minute=0, second=0, microsecond=0)
 
 
 @router.get("/{project_id}/mr-counts")

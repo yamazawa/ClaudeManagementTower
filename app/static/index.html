@@ -34,15 +34,19 @@
     </div>
     <p id="issue-list-placeholder" class="empty">左の一覧からリポジトリを選択してください。</p>
     <div id="issue-panel" hidden>
-      <form id="issue-create-form">
-        <input type="text" name="title" placeholder="タイトル" required />
-        <button type="submit">作成</button>
-        <p id="issue-create-status" class="empty"></p>
-      </form>
+      <div id="issue-create-block" class="create-block">
+        <h3 class="section-heading section-heading-top">Issue作成</h3>
+        <form id="issue-create-form">
+          <input type="text" name="title" placeholder="タイトル" required />
+          <button type="submit">Create</button>
+          <p id="issue-create-status" class="empty"></p>
+        </form>
+      </div>
       <h3 class="section-heading section-heading-with-filter">
         Issue一覧
         <select id="issue-filter" class="heading-filter" aria-label="Issue一覧の表示フィルタ">
           <option value="open" selected>Open</option>
+          <option value="closed_today">Close（Today）</option>
           <option value="closed">Close</option>
         </select>
       </h3>
@@ -58,12 +62,15 @@
       <p class="empty">左の一覧からIssueを選択してください。</p>
     </div>
     <div id="subtask-panel" hidden>
-      <form id="subtask-form">
-        <span id="subtask-form-prefix" class="subtask-form-prefix"></span>
-        <input type="text" name="title" placeholder="MR名（空欄なら連番）" />
-        <button type="submit">作成</button>
-        <p id="subtask-form-status" class="empty"></p>
-      </form>
+      <div id="subtask-create-block" class="create-block">
+        <h3 class="section-heading section-heading-top">MR作成</h3>
+        <form id="subtask-form">
+          <span id="subtask-form-prefix" class="subtask-form-prefix"><span id="subtask-form-prefix-title" class="subtask-form-prefix-title"></span><span id="subtask-form-prefix-separator"></span></span>
+          <input type="text" name="title" placeholder="MR名（空欄なら連番）" />
+          <button type="submit">Create</button>
+          <p id="subtask-form-status" class="empty"></p>
+        </form>
+      </div>
       <h3 class="section-heading section-heading-with-filter">
         MR一覧
         <select id="subtask-filter" class="heading-filter" aria-label="MR一覧の表示フィルタ">
@@ -110,7 +117,36 @@
   </div>
 </dialog>
 
+<dialog id="cli-dialog" class="cli-dialog" aria-label="CLI実行">
+  <div class="cli-dialog-header">
+    <span id="cli-dialog-title" class="cli-dialog-title"></span>
+    <span id="cli-dialog-status" class="cli-dialog-status" role="status"></span>
+    <button type="button" id="cli-dialog-new" class="subtask-action-button">新しい会話</button>
+    <button type="button" id="cli-dialog-close" class="subtask-action-button">閉じる</button>
+  </div>
+  <div id="cli-dialog-log" class="cli-dialog-log" aria-live="polite"></div>
+  <form id="cli-dialog-form" class="cli-dialog-form">
+    <textarea id="cli-dialog-input" rows="3" placeholder="Claudeへの指示（Ctrl+Enterで送信）"></textarea>
+    <button type="submit" id="cli-dialog-send" class="subtask-action-button primary">送信</button>
+  </form>
+</dialog>
+
+<dialog id="idea-dialog" class="cli-dialog idea-dialog" aria-label="提案一覧（アイデアマン）">
+  <div class="cli-dialog-header">
+    <span id="idea-dialog-title" class="cli-dialog-title"></span>
+    <span id="idea-dialog-job" class="cli-dialog-status" role="status"></span>
+    <label class="idea-dialog-execute"><input type="checkbox" id="idea-dialog-execute" checked />そのまま実装に進む</label>
+    <button type="button" id="idea-dialog-run" class="subtask-action-button primary">アイデア出し実行</button>
+    <button type="button" id="idea-dialog-close" class="subtask-action-button">閉じる</button>
+  </div>
+  <div id="idea-dialog-tabs" class="idea-dialog-tabs" role="group" aria-label="提案の状態"></div>
+  <p id="idea-dialog-message" class="idea-dialog-message" role="status"></p>
+  <div id="idea-dialog-list" class="cli-dialog-log idea-dialog-list" aria-live="polite"></div>
+</dialog>
+
 <script src="/static/image_editor.js"></script>
+<script src="/static/cli_dialog.js"></script>
+<script src="/static/idea_dialog.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

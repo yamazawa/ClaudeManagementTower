@@ -1,6 +1,7 @@
 {
   "steps": [
     { "type": "pull", "branch": "master" },
-    { "type": "restart_server" }
+    { "type": "restart_server" },
+    { "type": "restart_workers" }
   ]
 }

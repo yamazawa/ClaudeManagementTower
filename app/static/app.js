@@ -58,6 +58,8 @@ const MR_STATUS_FILTER_BUTTONS = [
 ];
 const MR_STATUS_FILTER_TOOLTIP = "のMRで絞り込み（全リポジトリでMRが無い場合は選択不可）";
 const MR_STATUS_POLL_MS = 3000;
+// MRステータスフィルタの選択中に隠す要素（既存フィルタ・作成フォーム）
+const MR_STATUS_FILTER_HIDDEN_IDS = ["issue-filter", "subtask-filter", "issue-create-block", "subtask-create-block"];
 
 // MR一覧フィルタの値ごとに表示対象のlifecycle_stateを定義する
 // 未解決はDraft〜Merging、解決済はMerged〜Deployedを表示する
@@ -399,6 +401,8 @@ const PROJECT_COUNT_TOOLTIP = "OpenなIssueの未解決MR数 / 解決済MR数";
 const PROJECT_COUNT_FILTERED_TOOLTIP = "OpenなIssueで、選択中のステータスのMR数";
 const PROJECT_LIST_NO_PROJECT_TEXT = "リポジトリが登録されていません。";
 const PROJECT_LIST_NO_MATCH_TEXT = "選択中のステータスのMRを持つリポジトリはありません。";
+const PROJECT_CLI_BUTTON_TOOLTIP = "このリポジトリでClaudeと対話する";
+const PROJECT_IDEA_BUTTON_TOOLTIP = "このリポジトリの改善提案（アイデアマン）を確認する";
 
 /**
  * ヘッダーのMRステータスフィルタの初期化
@@ -482,15 +486,14 @@ function isMrStatusFilterActive() {
 /**
  * MRステータスフィルタの選択変更をIssue一覧・MR一覧に反映する
  *
- * 選択中はIssue一覧・MR一覧の既存フィルタを隠す。
+ * 選択中はIssue一覧・MR一覧の既存フィルタと、Issue作成・MR作成を隠す。
  * リポジトリを選択し直した場合は、Issue一覧の読み込みを選択処理に任せる。
  * MR一覧はIssue一覧の読み込み後に、Issue一覧とまとめて描画し直す。
  */
 function onMrStatusFilterChanged() {
   updateMrStatusFilterButtons();
   const active = isMrStatusFilterActive();
-  document.getElementById("issue-filter").hidden = active;
-  document.getElementById("subtask-filter").hidden = active;
+  MR_STATUS_FILTER_HIDDEN_IDS.forEach((id) => (document.getElementById(id).hidden = active));
   const reselected = refreshProjectCounts();
   if (currentProjectId !== null && !reselected) reloadIssues().catch(() => {});
 }
@@ -572,14 +575,14 @@ async function renderRateLimits() {
 /**
  * レート制限枠1つ分の表示HTMLを作る
  *
- * 使用率が未受信の場合は--と表示する。
- * リセット時刻を受信している場合は併記する。
+ * 使用率・リセット時刻が未受信の場合は--と表示する。
  */
 function formatRateLimit(label, limit) {
   const hasUtilization = limit && limit.utilization != null;
   const percent = hasUtilization ? `${Math.round(limit.utilization * 100)}%` : RATE_LIMIT_UNKNOWN_TEXT;
   const statusClass = (limit && RATE_LIMIT_STATUS_CLASSES[limit.status]) || "";
-  const reset = limit && limit.resets_at ? `<span class="token-usage-reset">${formatResetTime(limit.resets_at)}</span>` : "";
+  const resetText = limit && limit.resets_at ? formatResetTime(limit.resets_at) : RATE_LIMIT_UNKNOWN_TEXT;
+  const reset = `<span class="token-usage-reset">${resetText}</span>`;
   return `<span class="token-usage-item ${statusClass}"><span class="token-usage-label">${label}</span>${percent}${reset}</span>`;
 }
 
@@ -729,7 +732,8 @@ function renderProjectItems(listEl) {
 /**
  * リポジトリ一覧の1行
  *
- * 「表示名 MR数」を並べる。
+ * 「表示名 MR数 Ideaボタン CLIボタン」を並べる。
+ * Ideaボタン・CLIボタンはリポジトリを選択せずに各ダイアログを開く。
  */
 function renderProjectItem(project) {
   const li = document.createElement("li");
@@ -737,9 +741,20 @@ function renderProjectItem(project) {
   li.dataset.projectId = project.id;
   li.innerHTML =
     `<span class="project-name" title="${escapeAttr(project.display_name)}">${escapeHtml(project.display_name)}</span>` +
-    `<span class="project-count"></span>`;
+    `<span class="project-count"></span>` +
+    `<button type="button" class="subtask-action-button project-dialog-button project-idea-button" title="${PROJECT_IDEA_BUTTON_TOOLTIP}">Idea</button>` +
+    `<button type="button" class="subtask-action-button project-dialog-button project-cli-button" title="${PROJECT_CLI_BUTTON_TOOLTIP}">CLI</button>`;
   li.addEventListener("click", () => selectProject(project));
+  bindProjectDialogButton(li, ".project-idea-button", () => openIdeaDialog(project));
+  bindProjectDialogButton(li, ".project-cli-button", () => openCliDialog(project));
   return li;
+}
+
+function bindProjectDialogButton(li, selector, open) {
+  li.querySelector(selector).addEventListener("click", (event) => {
+    event.stopPropagation();
+    open();
+  });
 }
 
 /**
@@ -1215,7 +1230,7 @@ async function postAction(url) {
  */
 function applyIssueToggleState(button, isOpen, counts) {
   const hasUnresolved = counts.unresolved > 0;
-  button.textContent = isOpen ? "閉じる" : "再開";
+  button.textContent = isOpen ? "Close" : "ReOpen";
   button.classList.toggle("primary", isOpen && counts.resolved > 0 && !hasUnresolved);
   button.disabled = isOpen && hasUnresolved;
   button.title = button.disabled ? "未解決のMRがあるため閉じられません" : "";
@@ -1495,10 +1510,13 @@ function resetSubtaskForm() {
 
 /**
  * MR作成フォームの「Issue名ー」表示を更新する
+ *
+ * 省略表示時も区切り文字が残るよう、Issue名と区切り文字を別要素に設定する。
  */
 function updateSubtaskFormPrefix() {
   const prefixEl = document.getElementById("subtask-form-prefix");
-  prefixEl.textContent = `${currentIssueTitle}${MR_NAME_SEPARATOR}`;
+  document.getElementById("subtask-form-prefix-title").textContent = currentIssueTitle;
+  document.getElementById("subtask-form-prefix-separator").textContent = MR_NAME_SEPARATOR;
   prefixEl.title = currentIssueTitle;
 }
 

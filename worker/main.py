@@ -3,6 +3,7 @@ import os
 import threading
 import time
 from collections.abc import Callable
+from datetime import datetime
 
 from claude_agent_sdk import RateLimitEvent
 
@@ -12,9 +13,11 @@ from core.config import settings
 from core.db import SessionLocal, init_db
 from core.execution_events import record_event
 from core.git_client import append_instruction_history, push_branch
-from core.github_client import mark_pr_ready
+from core.github_client import GitHubClientError, mark_pr_ready
+from core.idea_queue import claim_next_idea_job, recover_stale_idea_jobs
 from core.lifecycle import LifecycleState
 from core.job_queue import (
+    STATUS_RATE_LIMITED,
     claim_next_job,
     cleanup_stale_workers,
     finish_job,
@@ -22,11 +25,13 @@ from core.job_queue import (
     make_process_identifier,
     recover_stale_jobs,
     register_worker,
+    requeue_rate_limited_jobs,
     set_worker_state,
 )
 from core.models import ExecutionJob, Project, Subtask
-from core.rate_limits import record_rate_limit
+from core.rate_limits import blocked_until, is_rate_limit_error, record_rate_limit
 from core.reports import save_report
+from worker.idea_runner import process_idea_job
 
 
 def _previous_session_id(subtask_id: int, current_job_id: int) -> str | None:
@@ -74,17 +79,27 @@ def _run_with_heartbeat(job_id: int, worker_id: int, action: Callable[[], None])
         thread.join()
 
 
-def _finalize_success(job_id: int, subtask: Subtask, project: Project, worktree_path: str, result_text: str) -> None:
+def _finalize_success(job_id: int, subtask: Subtask, project: Project, worktree_path: str, result_text: str) -> str:
+    """Claude実行後の後処理を行い、ジョブの終了状態を返す
+
+    Draft解除に失敗した場合、Claudeの作業結果は残っているためneeds_attentionとする。
+    """
     html_path = save_report(job_id, worktree_path, summary=result_text or "")
     if html_path is None:
         record_event(job_id, event_type="warning", content=".claude-tower/report.htmlが見つからない")
 
-    if subtask.github_pr_number:
+    if not subtask.github_pr_number:
+        return "succeeded"
+    try:
         mark_pr_ready(project.github_repo, subtask.github_pr_number)
-        with SessionLocal() as session:
-            db_subtask = session.get(Subtask, subtask.id)
-            db_subtask.lifecycle_state = LifecycleState.RESOLVED
-            session.commit()
+    except GitHubClientError as exc:
+        record_event(job_id, event_type="error", content=f"PRのDraft解除に失敗: {exc}")
+        return "needs_attention"
+    with SessionLocal() as session:
+        db_subtask = session.get(Subtask, subtask.id)
+        db_subtask.lifecycle_state = LifecycleState.RESOLVED
+        session.commit()
+    return "succeeded"
 
 
 def _execute_job(job_id: int, subtask: Subtask, project: Project) -> None:
@@ -99,29 +114,39 @@ def _execute_job(job_id: int, subtask: Subtask, project: Project) -> None:
         db_job = session.get(ExecutionJob, job_id)
         db_job.claude_session_id = session_id
         session.commit()
-    _finalize_success(job_id, subtask, project, worktree_path, result_text or "")
-    finish_job(job_id, status="succeeded", exit_code=0)
-    print(f"[worker] job {job_id} 完了: {result_text}")
+    status = _finalize_success(job_id, subtask, project, worktree_path, result_text or "")
+    finish_job(job_id, status=status, exit_code=0)
+    print(f"[worker] job {job_id} 完了({status}): {result_text}")
+
+
+def _load_subtask_and_project(subtask_id: int) -> tuple[Subtask, Project]:
+    with SessionLocal() as session:
+        subtask = session.get(Subtask, subtask_id)
+        project = session.get(Project, subtask.project_id)
+        session.expunge(subtask)
+        session.expunge(project)
+    return subtask, project
 
 
 def process_job(job: dict, worker_id: int) -> None:
+    """実装ジョブを1件実行する
+
+    Claudeの利用上限による失敗は、failedと区別してrate_limitedにする。
+    """
     job_id = job["job_id"]
     print(f"[worker] job {job_id} (subtask {job['subtask_id']}) を実行開始")
     set_worker_state(worker_id, state="busy", current_job_id=job_id)
 
-    with SessionLocal() as session:
-        subtask = session.get(Subtask, job["subtask_id"])
-        project = session.get(Project, subtask.project_id)
-        session.expunge(subtask)
-        session.expunge(project)
+    subtask, project = _load_subtask_and_project(job["subtask_id"])
     record_event(job_id, event_type="instruction", content=subtask.instruction)
 
     try:
         _run_with_heartbeat(job_id, worker_id, lambda: _execute_job(job_id, subtask, project))
     except Exception as exc:  # noqa: BLE001
         record_event(job_id, event_type="error", content=str(exc))
-        finish_job(job_id, status="failed", exit_code=1)
-        print(f"[worker] job {job_id} 失敗: {exc}")
+        status = STATUS_RATE_LIMITED if is_rate_limit_error(str(exc)) else "failed"
+        finish_job(job_id, status=status, exit_code=1)
+        print(f"[worker] job {job_id} 失敗（{status}）: {exc}")
 
 
 def _cleanup_stale_records() -> None:
@@ -129,9 +154,41 @@ def _cleanup_stale_records() -> None:
     if recovered:
         print(f"[worker] 要確認にしたジョブ: {recovered}")
 
+    recovered_ideas = recover_stale_idea_jobs(settings.job_stale_timeout_seconds)
+    if recovered_ideas:
+        print(f"[worker] 要確認にしたアイデア出しジョブ: {recovered_ideas}")
+
     removed_workers = cleanup_stale_workers(settings.worker_offline_timeout_seconds)
     if removed_workers:
         print(f"[worker] 削除したオフラインワーカー行: {removed_workers}")
+
+
+def _requeue_rate_limited() -> None:
+    requeued = requeue_rate_limited_jobs(settings.rate_limit_retry_delay_seconds)
+    if requeued:
+        print(f"[worker] 利用上限から再投入したジョブ: {requeued}")
+
+
+_notified_resets_at: int | None = None
+
+
+def _is_rate_limited() -> bool:
+    """利用上限中ならTrueを返す
+
+    上限中でなければ、利用上限で中断したジョブを再投入する。
+    待機のログはリセット時刻が変わった時のみ出す。
+    """
+    global _notified_resets_at
+    resets_at = blocked_until()
+    if resets_at is None:
+        _notified_resets_at = None
+        _requeue_rate_limited()
+        return False
+    if resets_at != _notified_resets_at:
+        _notified_resets_at = resets_at
+        reset_text = datetime.fromtimestamp(resets_at).strftime("%m/%d %H:%M")
+        print(f"[worker] 利用上限中のためジョブを取得しません（{reset_text}にリセット）")
+    return True
 
 
 def run_loop(worker_id: int) -> None:
@@ -146,11 +203,27 @@ def run_loop(worker_id: int) -> None:
             return
         _cleanup_stale_records()
 
-        job = claim_next_job(worker_id)
-        if job is None:
+        if not _process_next_job(worker_id):
             time.sleep(settings.worker_poll_interval_seconds)
-            continue
+
+
+def _process_next_job(worker_id: int) -> bool:
+    """待機中のジョブを1件実行する
+
+    実装のジョブを優先し、無ければアイデア出しジョブを実行する。
+    実行するジョブが無い場合・利用上限中の場合はFalseを返す。
+    """
+    if _is_rate_limited():
+        return False
+    job = claim_next_job(worker_id)
+    if job is not None:
         process_job(job, worker_id)
+        return True
+    idea_job = claim_next_idea_job(worker_id)
+    if idea_job is not None:
+        process_idea_job(idea_job, worker_id)
+        return True
+    return False
 
 
 def main() -> None:

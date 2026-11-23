@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>実行レポート #178 アイデアマンー③</title>
+<style>
+body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
+h1 { font-size: 1.4em; }
+h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; margin-top: 1.6em; }
+table { border-collapse: collapse; width: 100%; }
+th, td { border: 1px solid #ccc; padding: 4px 8px; text-align: left; vertical-align: top; }
+th { background: #f3f3f3; }
+.ok { color: #186a1e; font-weight: bold; }
+code { background: #f5f5f5; padding: 0 3px; }
+</style>
+</head>
+<body>
+<h1>実行レポート</h1>
+
+<h2>1. 対象</h2>
+<table>
+<tr><th>Issue</th><td>#178 アイデアマン</td></tr>
+<tr><th>サブタスク</th><td>アイデアマンー③（Issue名の接頭辞・承認の選択肢・ブランチ名の重複対策）</td></tr>
+<tr><th>ブランチ</th><td>issue-178-subtask-3（PR #190、Draft）</td></tr>
+</table>
+
+<h2>2. 実装結果</h2>
+<p class="ok">成功</p>
+<p>①提案から作るIssue名の先頭に<code>[IdeaMan] </code>を付けた。<br>
+②承認の選択肢を「Issue・MRを作成」のみにし、見出し行に「そのまま実装に進む」チェックボックスを追加した。<br>
+③承認時のMRのブランチ名を、連番ではなく一意な識別子を含む名前にした。</p>
+
+<h2>3. 変更内容</h2>
+<table>
+<tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
+<tr><td>1</td><td>core/idea_approval.py</td><td>ISSUE_TITLE_PREFIXとcompose_issue_titleを追加。</td></tr>
+<tr><td>2</td><td>core/idea_context.py</td><td>出力形式のtitleに「[SPn]タスクn等の接頭辞は付けない」を追記。</td></tr>
+<tr><td>3</td><td>app/routes/ideas.py</td><td>Issue作成時に接頭辞付きのタイトルを使用。<br>承認APIに<code>execute</code>（既定true）を追加し、falseなら実行ジョブを投入しない。<br>サブタスク作成時に<code>unique_branch=True</code>を指定。</td></tr>
+<tr><td>4</td><td>app/routes/subtasks.py</td><td>CreateSubtaskRequestに<code>unique_branch</code>（既定false）を追加。<br>指定時は<code>issue-{Issue番号}-{識別子8桁}-subtask-1</code>とする。<br>Issue未紐付けMRの識別子生成と<code>_unique_branch_name</code>で共通化。</td></tr>
+<tr><td>5</td><td>app/static/idea_dialog.js / index.html / style.css</td><td>「Issueを作成」ボタンを削除し、「Issue・MRを作成」（既存Issue配下は「MRを作成」）のみにした。<br>見出し行にチェックボックス「そのまま実装に進む」（既定チェックあり）を追加。<br>確認ダイアログにチェック時の実装開始を明記。</td></tr>
+<tr><td>6</td><td>tests/test_idea_routes.py / test_idea_approval.py / test_subtask_routes.py</td><td>接頭辞・execute=false・一意なブランチ名のテストを追加。</td></tr>
+<tr><td>7</td><td>IMPLEMENTATION_PLAN.md</td><td>3章No.4と9章No.11・15〜17に方式を記録。</td></tr>
+</table>
+<p>コミット：61d6f3b（①）、4b0ba0a・49c768a（②）、48e09f2・a73433f（③）、計画追記の1件</p>
+
+<h2>4. 自律判断した事項</h2>
+<table>
+<tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
+<tr><td>1</td><td>接頭辞はIssue作成時に付与し、提案のタイトル自体は変えない。</td><td>提案一覧の表示・却下済み提案の指示文への反映に接頭辞が混ざらないようにするため。</td></tr>
+<tr><td>2</td><td>アイデアマンへの指示にもSP・タスクの接頭辞を付けないよう追記した。</td><td>対象リポジトリの規約を読んでClaudeが[SPn]形式で提案する可能性があるため。</td></tr>
+<tr><td>3</td><td>承認APIの<code>issue_only</code>は残し、画面からのみ削除した。</td><td>既存のIssue作成済みの提案との整合を保ち、変更範囲を小さくするため。</td></tr>
+<tr><td>4</td><td>チェックボックスの既定はチェックありとした。</td><td>従来の動作（作成後に実装開始）を維持するため。</td></tr>
+<tr><td>5</td><td>重複原因は、MR作成失敗後の再作成で同じ連番ブランチ名（<code>issue-N-subtask-1</code>）が再生成されることと推定した。</td><td>連番は「DB上のMR件数+1」で決まり、失敗時に作られたローカルブランチ・worktreeが残るため。</td></tr>
+<tr><td>6</td><td>一意な識別子のブランチ名はアイデアマンの承認時のみに適用した。</td><td>指示の対象がアイデアマンのMR作成のため。通常のMR追加は従来の連番のまま。</td></tr>
+<tr><td>7</td><td>形式は<code>issue-new-{識別子}-subtask-1</code>のnewをIssue番号に置き換えた形とした。</td><td>既存の規則に合わせつつ、PR同期の<code>^issue-(\d+)-</code>でIssueと紐付くようにするため。</td></tr>
+</table>
+
+<h2>5. テスト</h2>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code>：<span class="ok">386 passed</span></p>
+<p><code>node --check app/static/idea_dialog.js</code>：構文エラーなし。</p>
+<p>画面の動作確認・GitHub上での実機確認は未実施（起動確認は人間が行う規約のため）。</p>
+
+<h2>6. 残課題・リスク・確認ポイント</h2>
+<ul>
+<li>画面で確認してほしい点：見出し行のチェックボックスの配置（狭い画面での折り返し）、チェック無しで承認した場合にMRのみ作成され実行されないこと。</li>
+<li>重複の原因は推定である。実際に失敗したケースが別要因（同期で取り込まれた管理塔外のブランチ等）の場合でも、一意な識別子により重複は回避できる想定。</li>
+<li>失敗時に残ったローカルブランチ・worktree・リモートブランチの後始末は今回対象外。</li>
+<li>通常のMR追加（連番方式）にも同じ重複リスクが残る。必要なら別タスクで一意な識別子に揃える。</li>
+<li>Issue作成済みの提案は承認済みタブに残り、「MRを作成」で再実行できる（従来どおり）。</li>
+</ul>
+</body>
+</html>

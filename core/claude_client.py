@@ -9,7 +9,19 @@ from claude_agent_sdk import (
     query,
 )
 
+from core.attachments import MAX_ATTACHMENT_BYTES
+
+# SDKとCLIプロセス間のJSONメッセージバッファ上限（SDK既定は1MB）
+# 添付画像をReadするとBase64化された内容が1メッセージで返るため既定値では溢れる。
+# 添付10件分を想定し、Base64化(約4/3倍)とJSONのオーバーヘッドを1.5倍で見込む。
+MAX_BUFFER_ATTACHMENT_COUNT = 10
+MAX_BUFFER_OVERHEAD_RATIO = 1.5
+MAX_BUFFER_SIZE = int(MAX_ATTACHMENT_BYTES * MAX_BUFFER_ATTACHMENT_COUNT * MAX_BUFFER_OVERHEAD_RATIO)
+
 SHELL_TOOL_NAMES = {"Bash", "PowerShell"}
+
+# worktree外でも参照を許可する読み取り専用ツール
+READ_ONLY_TOOL_NAMES = {"Read", "Glob", "Grep", "LS", "NotebookRead"}
 
 DANGEROUS_COMMAND_PATTERNS = [
     re.compile(r"push[^|&;\n]*(--force\b|-f\b)", re.IGNORECASE),
@@ -73,6 +85,88 @@ CONFLICT_RESOLUTION_POLICY_PROMPT = """
 """
 
 
+CLI_DIALOG_POLICY_PROMPT = """
+あなたはClaude管理塔の画面（CLI実行ダイアログ）から、利用者と対話しています。
+開発PCで対話式に実行している時と同様に、利用者の発言に応答する。
+1. 作業は対象リポジトリのフォルダ内で行う。
+2. 不明点や判断に迷う点は、作業を進めずに利用者へ質問してよい。
+3. 機密情報の公開、権限外操作、破壊的操作は行わない。
+4. Issueのクローズ、PRのマージは利用者が明示的に指示した場合のみ行う。
+"""
+
+
+IDEA_MAN_POLICY_PROMPT = """
+あなたはClaude管理塔のアイデアマンです。
+対象：指定リポジトリのコード・ドキュメント・過去の実行履歴。
+1. コードの変更・コミット・push・GitHubへの書き込み操作は行わない（読み取り専用）。
+2. 既存のOpen Issue一覧を確認し、重複する提案は作らない。
+3. 1回の実行で提案する件数は指示された上限件数までとする。
+4. 各提案には、対象ファイル・行・観測した事象など根拠を明記する。
+5. 機密情報・個人情報を提案の本文に記載しない。
+6. 提案はあくまで案であり、Issue・PRの作成はこのジョブの中では行わない。
+"""
+
+# アイデアマンが使えるツール（読み取り専用）
+READ_ONLY_TOOL_NAMES = ["Read", "Glob", "Grep"]
+
+
+def _is_inside(path: str, root_abs: str) -> bool:
+    return os.path.abspath(path).lower().startswith(root_abs.lower())
+
+
+def restrict_to_read_only(root: str) -> Callable:
+    """読み取り専用ツールを、対象フォルダ内に限って許可する
+
+    シェル・ファイル変更・Web取得などは全て拒否する。
+    """
+    root_abs = os.path.abspath(root)
+
+    async def can_use_tool(tool_name, tool_input, context):
+        if tool_name not in READ_ONLY_TOOL_NAMES:
+            return PermissionResultDeny(message=f"読み取り専用のため拒否: {tool_name}")
+        path = tool_input.get("file_path") or tool_input.get("path")
+        if path and not _is_inside(path, root_abs):
+            return PermissionResultDeny(message=f"対象フォルダ外の参照を拒否: {path}")
+        return PermissionResultAllow(updated_input=tool_input)
+
+    return can_use_tool
+
+
+async def run_read_only_claude(
+    prompt: str,
+    root: str,
+    policy_prompt: str,
+    on_message: Callable[[object], None] | None = None,
+) -> tuple[str | None, str | None]:
+    """読み取り専用でClaudeを実行する
+
+    使えるツールを読み取り系に絞り、許可確認でも読み取り以外を拒否する。
+    """
+    options = ClaudeAgentOptions(
+        cwd=root,
+        tools=READ_ONLY_TOOL_NAMES,
+        can_use_tool=restrict_to_read_only(root),
+        permission_mode="default",
+        max_buffer_size=MAX_BUFFER_SIZE,
+        system_prompt={"type": "preset", "preset": "claude_code", "append": policy_prompt},
+    )
+    return await _collect_result(query(prompt=prompt, options=options), on_message)
+
+
+async def _collect_result(messages, on_message) -> tuple[str | None, str | None]:
+    session_id = None
+    result_text = None
+    async for message in messages:
+        if on_message is not None:
+            on_message(message)
+        cls = type(message).__name__
+        if cls == "SystemMessage" and message.subtype == "init":
+            session_id = message.data.get("session_id")
+        if cls == "ResultMessage":
+            result_text = message.result
+    return session_id, result_text
+
+
 def restrict_to_worktree(worktree: str) -> Callable:
     worktree_abs = os.path.abspath(worktree)
 
@@ -83,6 +177,9 @@ def restrict_to_worktree(worktree: str) -> Callable:
                 return PermissionResultDeny(message=f"危険な操作のため拒否: {command}")
             if _command_escapes_worktree(command, worktree_abs):
                 return PermissionResultDeny(message=f"worktree外を操作する可能性があるため拒否: {command}")
+            return PermissionResultAllow(updated_input=tool_input)
+
+        if tool_name in READ_ONLY_TOOL_NAMES:
             return PermissionResultAllow(updated_input=tool_input)
 
         path = tool_input.get("file_path") or tool_input.get("path")
@@ -105,20 +202,11 @@ async def run_claude(
         can_use_tool=restrict_to_worktree(worktree),
         permission_mode="acceptEdits",
         resume=resume,
+        max_buffer_size=MAX_BUFFER_SIZE,
         system_prompt={
             "type": "preset",
             "preset": "claude_code",
             "append": policy_prompt,
         },
     )
-    session_id = None
-    result_text = None
-    async for message in query(prompt=prompt, options=options):
-        if on_message is not None:
-            on_message(message)
-        cls = type(message).__name__
-        if cls == "SystemMessage" and message.subtype == "init":
-            session_id = message.data.get("session_id")
-        if cls == "ResultMessage":
-            result_text = message.result
-    return session_id, result_text
+    return await _collect_result(query(prompt=prompt, options=options), on_message)
