@@ -1309,10 +1309,21 @@ function onClickIssueToggle() {
  * 見出し・一覧のどちらのボタンからも呼ぶ。
  * 表示中Issueの場合は見出しに結果を表示し、それ以外は失敗時のみ通知する。
  * 成否に関わらず一覧を再取得してボタンの状態を戻す。
+ * 一覧の再取得が終わるまで更新中を表示する。
  */
 async function toggleIssue(number, isOpen, button) {
   const verb = isOpen ? "閉じ" : "再開し";
   if (!confirm(`Issue #${number} を${verb}ますか？`)) return;
+  await runBusyAction(async () => {
+    await postIssueToggle(number, isOpen, button, verb);
+    await reloadIssues();
+  });
+}
+
+/**
+ * Issueを閉じる・再開する要求を送り、結果を表示する
+ */
+async function postIssueToggle(number, isOpen, button, verb) {
   const isCurrent = number === currentIssueNumber;
   const statusEl = isCurrent ? document.getElementById("issue-close-status") : null;
   button.disabled = true;
@@ -1325,7 +1336,6 @@ async function toggleIssue(number, isOpen, button) {
   const message = error ? `失敗しました: ${error}` : `Issueを${verb}ました`;
   if (statusEl) statusEl.textContent = message;
   else if (error) alert(message);
-  await reloadIssues();
 }
 
 /**
@@ -1915,13 +1925,14 @@ async function onClickSubtaskAction(subtaskId, action) {
  * Cancel・ReOpen・Mergeの実行
  *
  * 成功時はサーバーが返した状態を反映し、一覧とIssueのMR数も更新する。
+ * 要求の応答待ちの間は更新中を表示する。
  */
 async function runSubtaskStateAction(subtask, def) {
   if (!confirm(`MR「${subtask.title}」${def.confirm}`)) return;
   const statusEl = document.getElementById("subtask-action-status");
   setSubtaskBusy(subtask.id, true);
   statusEl.textContent = def.progress;
-  const { body, error } = await postAction(`/api/subtasks/${subtask.id}/${def.path}`);
+  const { body, error } = await runBusyAction(() => postAction(`/api/subtasks/${subtask.id}/${def.path}`));
   const latest = currentSubtasks.find((s) => s.id === subtask.id);
   if (!error && latest) latest.lifecycle_state = body.lifecycle_state;
   if (!error && latest && body.latest_merge) latest.latest_merge = body.latest_merge;
