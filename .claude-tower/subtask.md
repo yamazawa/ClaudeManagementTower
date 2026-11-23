@@ -1,67 +1,61 @@
-# サブタスク: CLI機能の追加ー④
+# サブタスク: CLI機能の追加ー⑤
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-CLIタブの指示に画像・ファイルを添付できるようにする
+CLIタブのClaudeの応答文をMarkdownとして表示する
 
 ## 概要
 
-開発PCでは画面のスクリーンショットを貼って指示できるが、CLIタブは文字だけしか送れない。MRの指示ですでに使っている添付の仕組みを使い、CLIの発言にも添付できるようにする。
+Claudeの応答文は見出し・箇条書き・表・コードブロックを含むMarkdownだが、CLIタブではそのままのテキストで表示している。開発PCの画面と同じように読めるよう、Markdownを描画する。
 
 ## 詳細
 
-- CLIの項目ごとに添付を置く場所を決める（リポジトリの外に、項目IDごとのフォルダを作る）。
-- 送信APIで添付を受け取れるようにし、core/attachments.py の build_instruction_prompt と同じ形でパスを指示文に入れる。
-- 画面は入力欄に添付ボタンを付け、クリップボードの画像の貼り付けにも対応する。
-- 発言一覧には、添付したファイル名を利用者の発言と一緒に表示する。
-- 添付を置く場所は、参照ルールでReadが許可される場所かを確認する。
+- assistantの発言だけをMarkdownとして描画する。user・tool・errorは今のままテキストで表示する。
+- 外部CDNは使わない。必要な範囲の小さな描画処理を自前で書くか、ライブラリをstaticに同梱する。
+- 描画したHTMLは、許可したタグ以外を取り除いてから表示する（XSS対策）。
+- コードブロックは等幅の枠に入れ、横スクロールできるようにする。
+- 表・コードブロックの色や余白は、style.cssの:root変数にまとめる。
 
 ## 根拠
 
-app/routes/cli.py:30-31 の SendCliMessageRequest は text しか持たない。core/attachments.py:95・127 にはMR用の保存処理と指示文の組み立てがあり、core/claude_client.py:22-27 も添付画像を読み込めるようにバッファの上限を広げてある。それでもCLIの経路ではどちらも使っていない。画面の不具合を相談する時は、スクリーンショットがあると説明しやすい。
+app/static/cli_view.js:148-157 の appendCliMessage は、message.contentをtextContentで入れている。app/static/style.css:350-354 はwhite-space: pre-wrapで改行を保つだけなので、表や見出しが記号のまま表示される。app配下にMarkdownを描画する処理は無い（「markdown」で検索しても見つからない）。管理塔からの依頼文は表形式の報告を求めているため、表が崩れて読みづらい。
 
 ## 関連ファイル
 
-- app/routes/cli.py:30
-- core/cli_session.py:148
-- core/attachments.py:95
-- core/attachments.py:127
-- core/claude_client.py:22
-- app/static/cli_view.js:47
-## 実行指示（2026-11-23 07:38:02 UTC）
+- app/static/cli_view.js:148
+- app/static/style.css:350
+- app/static/style.css:364
+## 実行指示（2026-11-23 07:38:14 UTC）
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-CLIタブの指示に画像・ファイルを添付できるようにする
+CLIタブのClaudeの応答文をMarkdownとして表示する
 
 ## 概要
 
-開発PCでは画面のスクリーンショットを貼って指示できるが、CLIタブは文字だけしか送れない。MRの指示ですでに使っている添付の仕組みを使い、CLIの発言にも添付できるようにする。
+Claudeの応答文は見出し・箇条書き・表・コードブロックを含むMarkdownだが、CLIタブではそのままのテキストで表示している。開発PCの画面と同じように読めるよう、Markdownを描画する。
 
 ## 詳細
 
-- CLIの項目ごとに添付を置く場所を決める（リポジトリの外に、項目IDごとのフォルダを作る）。
-- 送信APIで添付を受け取れるようにし、core/attachments.py の build_instruction_prompt と同じ形でパスを指示文に入れる。
-- 画面は入力欄に添付ボタンを付け、クリップボードの画像の貼り付けにも対応する。
-- 発言一覧には、添付したファイル名を利用者の発言と一緒に表示する。
-- 添付を置く場所は、参照ルールでReadが許可される場所かを確認する。
+- assistantの発言だけをMarkdownとして描画する。user・tool・errorは今のままテキストで表示する。
+- 外部CDNは使わない。必要な範囲の小さな描画処理を自前で書くか、ライブラリをstaticに同梱する。
+- 描画したHTMLは、許可したタグ以外を取り除いてから表示する（XSS対策）。
+- コードブロックは等幅の枠に入れ、横スクロールできるようにする。
+- 表・コードブロックの色や余白は、style.cssの:root変数にまとめる。
 
 ## 根拠
 
-app/routes/cli.py:30-31 の SendCliMessageRequest は text しか持たない。core/attachments.py:95・127 にはMR用の保存処理と指示文の組み立てがあり、core/claude_client.py:22-27 も添付画像を読み込めるようにバッファの上限を広げてある。それでもCLIの経路ではどちらも使っていない。画面の不具合を相談する時は、スクリーンショットがあると説明しやすい。
+app/static/cli_view.js:148-157 の appendCliMessage は、message.contentをtextContentで入れている。app/static/style.css:350-354 はwhite-space: pre-wrapで改行を保つだけなので、表や見出しが記号のまま表示される。app配下にMarkdownを描画する処理は無い（「markdown」で検索しても見つからない）。管理塔からの依頼文は表形式の報告を求めているため、表が崩れて読みづらい。
 
 ## 関連ファイル
 
-- app/routes/cli.py:30
-- core/cli_session.py:148
-- core/attachments.py:95
-- core/attachments.py:127
-- core/claude_client.py:22
-- app/static/cli_view.js:47
+- app/static/cli_view.js:148
+- app/static/style.css:350
+- app/static/style.css:364
 
 ## 実行指示（2026-11-23 10:50:02 UTC）
 
@@ -69,30 +63,27 @@ app/routes/cli.py:30-31 の SendCliMessageRequest は text しか持たない。
 
 ## 提案タイトル
 
-CLIタブの指示に画像・ファイルを添付できるようにする
+CLIタブのClaudeの応答文をMarkdownとして表示する
 
 ## 概要
 
-開発PCでは画面のスクリーンショットを貼って指示できるが、CLIタブは文字だけしか送れない。MRの指示ですでに使っている添付の仕組みを使い、CLIの発言にも添付できるようにする。
+Claudeの応答文は見出し・箇条書き・表・コードブロックを含むMarkdownだが、CLIタブではそのままのテキストで表示している。開発PCの画面と同じように読めるよう、Markdownを描画する。
 
 ## 詳細
 
-- CLIの項目ごとに添付を置く場所を決める（リポジトリの外に、項目IDごとのフォルダを作る）。
-- 送信APIで添付を受け取れるようにし、core/attachments.py の build_instruction_prompt と同じ形でパスを指示文に入れる。
-- 画面は入力欄に添付ボタンを付け、クリップボードの画像の貼り付けにも対応する。
-- 発言一覧には、添付したファイル名を利用者の発言と一緒に表示する。
-- 添付を置く場所は、参照ルールでReadが許可される場所かを確認する。
+- assistantの発言だけをMarkdownとして描画する。user・tool・errorは今のままテキストで表示する。
+- 外部CDNは使わない。必要な範囲の小さな描画処理を自前で書くか、ライブラリをstaticに同梱する。
+- 描画したHTMLは、許可したタグ以外を取り除いてから表示する（XSS対策）。
+- コードブロックは等幅の枠に入れ、横スクロールできるようにする。
+- 表・コードブロックの色や余白は、style.cssの:root変数にまとめる。
 
 ## 根拠
 
-app/routes/cli.py:30-31 の SendCliMessageRequest は text しか持たない。core/attachments.py:95・127 にはMR用の保存処理と指示文の組み立てがあり、core/claude_client.py:22-27 も添付画像を読み込めるようにバッファの上限を広げてある。それでもCLIの経路ではどちらも使っていない。画面の不具合を相談する時は、スクリーンショットがあると説明しやすい。
+app/static/cli_view.js:148-157 の appendCliMessage は、message.contentをtextContentで入れている。app/static/style.css:350-354 はwhite-space: pre-wrapで改行を保つだけなので、表や見出しが記号のまま表示される。app配下にMarkdownを描画する処理は無い（「markdown」で検索しても見つからない）。管理塔からの依頼文は表形式の報告を求めているため、表が崩れて読みづらい。
 
 ## 関連ファイル
 
-- app/routes/cli.py:30
-- core/cli_session.py:148
-- core/attachments.py:95
-- core/attachments.py:127
-- core/claude_client.py:22
-- app/static/cli_view.js:47
+- app/static/cli_view.js:148
+- app/static/style.css:350
+- app/static/style.css:364
 

@@ -2,78 +2,66 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実装レポート #176 CLI添付</title>
+<title>実行レポート #176 サブタスク1</title>
 <style>
-body { font-family: sans-serif; margin: 24px; line-height: 1.6; color: #222; }
-h1 { font-size: 20px; } h2 { font-size: 16px; border-bottom: 1px solid #ccc; margin-top: 24px; }
-table { border-collapse: collapse; margin: 8px 0; } th, td { border: 1px solid #ccc; padding: 4px 10px; text-align: left; vertical-align: top; }
-th { background: #f2f2f2; } code { background: #f4f4f4; padding: 0 4px; }
-.ok { color: #0a7a2f; font-weight: bold; }
+body{font-family:sans-serif;max-width:960px;margin:24px auto;padding:0 16px;line-height:1.6;color:#222}
+h1{font-size:1.4em}h2{font-size:1.15em;border-bottom:1px solid #ccc;padding-bottom:4px;margin-top:28px}
+table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:6px 8px;text-align:left;vertical-align:top}
+th{background:#f3f3f3}code{background:#f5f5f5;padding:1px 4px}
+.ok{display:inline-block;background:#2e7d32;color:#fff;padding:2px 10px;border-radius:4px}
 </style>
 </head>
 <body>
-<h1>実装レポート：CLIタブの指示に画像・ファイルを添付できるようにする</h1>
+<h1>実行レポート</h1>
 
 <h2>1. 対象</h2>
 <table>
 <tr><th>Issue</th><td>#176</td></tr>
-<tr><th>サブタスク</th><td>CLI機能の追加ー④（CLIタブの指示に画像・ファイルを添付）</td></tr>
-<tr><th>ブランチ</th><td><code>issue-176-46577a9e-subtask-1</code></td></tr>
-<tr><th>PR</th><td>#215（Draft・既存。マージは行っていない）</td></tr>
+<tr><th>サブタスク</th><td>CLI機能の追加ー⑤（CLIタブのClaudeの応答文をMarkdownとして表示する）</td></tr>
+<tr><th>ブランチ</th><td><code>issue-176-a1f871a2-subtask-1</code></td></tr>
+<tr><th>PR</th><td>#216（Draft・既存）</td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
-<p class="ok">成功</p>
-<p>CLIの項目ごとに添付を保存し、送信時に添付の対応表を指示文に付けてClaudeへ渡すようにした。<br>
-画面には添付ボタン・クリップボード画像の貼り付け・発言内の添付ファイル名表示を追加した。</p>
+<p><span class="ok">成功</span></p>
+<p>assistantの発言だけをMarkdownとして描画するようにした。<br>
+今回の実行指示は前回と同じ内容だった。<br>
+実装は前回の実行でコミット・push済みのため、今回は内容の再確認とテストの再実行を行った。</p>
 
-<h2>3. 実施した変更</h2>
+<h2>3. 変更内容</h2>
 <table>
-<tr><th>コミット</th><th>内容</th></tr>
-<tr><td>9034401</td><td>添付の保存先と指示文のパス説明を可変にする（前回実行分）</td></tr>
-<tr><td>a0b5ac4</td><td>CLIの項目ごとの添付の保存先を追加</td></tr>
-<tr><td>635564b</td><td>発言に添付を記録しClaudeに渡す</td></tr>
-<tr><td>0b574a4</td><td>添付の保存・取得・削除と送信APIの添付指定</td></tr>
-<tr><td>7840f5a</td><td>画面に添付ボタンと貼り付け・添付名の表示を追加</td></tr>
+<tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
+<tr><td>1</td><td><code>app/static/markdown_view.js</code>（新規）</td><td>自前のMarkdown描画処理。<br>見出し・箇条書き（入れ子・番号付き）・表（列寄せ）・コードブロック・引用・水平線に対応。<br>行内のコード・リンク・強調・斜体・取り消し線に対応。<br>文字列は全てエスケープしてからタグを組み立てる。<br>描画後、templateに入れて許可したタグ・属性以外を取り除く。</td></tr>
+<tr><td>2</td><td><code>app/static/cli_view.js</code></td><td>appendCliMessageで、assistantだけMarkdown描画にした。<br>user・tool・errorはtextContentのまま。</td></tr>
+<tr><td>3</td><td><code>app/static/index.html</code></td><td>markdown_view.jsを読み込むscriptタグを追加（cli_view.jsより前）。</td></tr>
+<tr><td>4</td><td><code>app/static/style.css</code></td><td>表・コードブロック・引用の色や余白を<code>--markdown-*</code>として:rootに追加。<br>コードブロックと表は横スクロールの枠に入れた。</td></tr>
+<tr><td>5</td><td><code>tests/test_markdown_view.py</code>（新規）</td><td>Node.jsでrenderMarkdownを実行し、生成HTMLを確認するテスト11件。</td></tr>
 </table>
-<table>
-<tr><th>ファイル</th><th>変更</th></tr>
-<tr><td>core/attachments.py</td><td>保存先のサブフォルダと指示文のパス説明を引数化（既定値はMRと同じ）</td></tr>
-<tr><td>core/cli_attachments.py（新規）</td><td>CLI用の保存先（worktree置き場/cli-attachments/項目ID）と保存・取得・削除・ID解決・指示文組み立て</td></tr>
-<tr><td>core/models.py, core/db.py</td><td>cli_messagesに添付（JSON）列を追加。既存DBは追加列として自動追加</td></tr>
-<tr><td>core/cli_session.py</td><td>send_messageで添付IDを受け、発言に記録し、対応表付きの指示文でClaudeを実行。ensure_session_openを追加</td></tr>
-<tr><td>app/routes/cli.py</td><td>送信APIにattachment_ids追加。添付のPOST/GET file/DELETE APIを追加</td></tr>
-<tr><td>app/static/cli_view.js, style.css</td><td>添付ボタン、送信前の添付一覧（取り消し可）、貼り付け添付、発言内の添付名リンク</td></tr>
-<tr><td>tests/test_cli_attachments.py（新規）, test_cli_session.py, test_cli_routes.py</td><td>テスト追加・更新</td></tr>
-</table>
+<p>コミット：<code>c2cfa2b</code>（描画処理）、<code>0946565</code>（CLIタブへの組み込み）、<code>1f8a41d</code>（見た目）</p>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>保存先は <code>worktree_base_dir/cli-attachments/{項目ID}/S{n}/</code></td><td>CLIはリポジトリ本体で動くためリポジトリ外に置く必要がある。この場所は参照ルールでRead許可・Write拒否となることをテストで確認した</td></tr>
-<tr><td>2</td><td>指示文のパスは絶対パスとし、説明文をCLI用に差し替える</td><td>実行フォルダからの相対パスでは届かないため。表の形はbuild_instruction_promptをそのまま使う</td></tr>
-<tr><td>3</td><td>添付は選択・貼り付け時点でアップロードし、送信時はIDのみ送る</td><td>MRの添付と同じ流れに揃え、APIをJSONのまま保つため</td></tr>
-<tr><td>4</td><td>IDは項目内の通し番号で、発言をまたいで振り直さない</td><td>過去の発言の「S1」が別ファイルを指すことを防ぐため</td></tr>
-<tr><td>5</td><td>発言一覧にはID・ファイル名・画像かどうかのみ記録し、パスは出さない</td><td>画面にローカルの絶対パスを出さないため</td></tr>
-<tr><td>6</td><td>発言の記録は利用者の入力文のみとし、対応表はClaudeへ渡す指示文にだけ付ける</td><td>発言一覧の見た目を入力どおりに保つため</td></tr>
-<tr><td>7</td><td>MRの画像添付にあるお絵かき編集はCLIには付けない</td><td>提案は添付ボタンと貼り付けのみのため。範囲を広げない</td></tr>
-<tr><td>8</td><td>文字の無い添付のみの送信は不可（従来通り本文必須）</td><td>既存の空文字チェックを維持し、API仕様の変化を最小にした</td></tr>
+<tr><td>1</td><td>ライブラリを同梱せず、必要な範囲の描画処理を自前で書いた。</td><td>依存とライセンス管理を増やさず、対応範囲を応答文で使う記法に絞れるため。</td></tr>
+<tr><td>2</td><td>許可しないタグは削除せず文字列に置き換えた。</td><td>応答文の内容が欠けないようにするため。</td></tr>
+<tr><td>3</td><td>リンクはhttp/httpsのみ許可し、別タブ・noopener noreferrerで開く。</td><td>javascript:等のスキームを防ぎ、管理塔画面から遷移しないため。</td></tr>
+<tr><td>4</td><td>画像記法・生HTMLは描画対象外とした。</td><td>外部リソースの読み込みとXSSの経路を作らないため。</td></tr>
+<tr><td>5</td><td>段落内の改行は&lt;br&gt;として表示する。</td><td>従来のpre-wrap表示と見た目を揃え、CLIの出力に近づけるため。</td></tr>
+<tr><td>6</td><td>JSのテストはNode.jsで実行し、Node.jsが無い環境ではスキップする。</td><td>既存のテスト基盤がpytestのため、追加の依存を入れずに検証するため。</td></tr>
+<tr><td>7</td><td>同じ指示の再実行では、実装を作り直さず再確認のみとした。</td><td>既に要件を満たした実装がpush済みで、作り直すと差分が増えるだけのため。</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<p><code>./.venv/Scripts/python.exe -m pytest -q</code> ：<span class="ok">481 passed</span></p>
-<p><code>node --check app/static/cli_view.js</code> ：構文OK</p>
-<p>ブラウザでの動作確認（添付ボタン・貼り付け・発言表示）は未実施。<br>
-プロジェクト規約により、起動しての確認は人間に依頼する。</p>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code>：<strong>474 passed</strong>（Markdown描画テスト11件を含む。Node.js v24で実行）</p>
+<p>サニタイズ処理（sanitizeMarkdownHtml）はブラウザのDOMが必要なため自動テストは未実施。</p>
+<p>サーバー起動・ブラウザでの表示確認は未実施（稼働中の管理塔に影響させないため）。</p>
 
 <h2>6. 残課題・リスク・確認ポイント</h2>
 <ul>
-<li>送信せずに取り消さなかった添付・画面を閉じて残った添付はディスクに残る（自動削除なし）。</li>
-<li>Close・項目の削除時に添付フォルダは削除しない。</li>
-<li>DELETE APIは送信済みの添付も消せる（画面からは送信前のみ操作可）。消すと発言内のリンクが404になる。</li>
-<li>貼り付け画像は名前が無い場合 <code>pasted-image.png</code> とする。ブラウザにより <code>image.png</code> となる。</li>
-<li>確認ポイント：Claudeが絶対パスの画像をReadで読めること（実機で1回確認してほしい）。</li>
-<li>確認ポイント：添付欄・チップの見た目（style.css の .cli-attachment）。</li>
+<li>自前実装のため、CommonMarkの細かい仕様（遅延継続行・リスト内のコードブロック・参照リンク等）には対応していない。</li>
+<li>リスト項目の下に字下げしたコードブロックがある場合、リストの外のコードブロックとして表示される。</li>
+<li>ブラウザでCLIタブを開き、表・コードブロック・入れ子リストの見た目と横スクロールを確認してほしい。</li>
+<li>レビュー時は<code>app/static/markdown_view.js</code>のsanitizeMarkdownHtml周辺（許可タグ・属性の一覧）を確認してほしい。</li>
 </ul>
 </body>
 </html>

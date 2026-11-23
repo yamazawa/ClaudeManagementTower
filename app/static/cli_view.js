@@ -165,13 +165,19 @@ function stopCliViewPolling() {
   cliViewPollTimer = null;
 }
 
+/**
+ * 発言を一覧の末尾に追加する
+ *
+ * Claudeの応答文はMarkdownとして描画し、それ以外はそのままの文字列で表示する。
+ */
 function appendCliMessage(message) {
   const log = document.getElementById("cli-view-log");
   log.querySelector(".cli-log-empty")?.remove();
   const el = document.createElement("div");
   const role = Object.values(CLI_MESSAGE_ROLES).includes(message.role) ? message.role : CLI_MESSAGE_ROLES.assistant;
   el.className = `cli-message cli-message-${role}`;
-  el.textContent = message.content;
+  if (role === CLI_MESSAGE_ROLES.assistant) el.appendChild(renderMarkdownFragment(message.content));
+  else el.textContent = message.content;
   const attachments = message.attachments || [];
   if (attachments.length) el.appendChild(renderCliMessageAttachments(cliViewState.item.id, attachments));
   log.appendChild(el);
