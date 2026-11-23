@@ -1431,6 +1431,7 @@ function mrStatus(s) {
  * 一覧の行と詳細の見出しで共通に使う。
  * Resolving・Mergingはツールチップに意味（マージ待ちの場合はマージ待ち）を出す。
  * マージ失敗はResolvedのままの場合のみ併記し、ツールチップに理由を出す。
+ * 状態ごとの色分け用に、状態名のクラスを付ける。
  */
 function renderSubtaskState(s) {
   const status = mrStatus(s);
@@ -1440,7 +1441,19 @@ function renderSubtaskState(s) {
   const suffix = showFailure ? `（${MERGE_STATUS_LABELS[merge.status]}）` : "";
   const tooltipText = showFailure ? merge.error_message : mrStatusTooltip(status, merge);
   const tooltip = tooltipText ? ` title="${escapeAttr(tooltipText)}"` : "";
-  return `<span class="subtask-state"${tooltip}>${label}${suffix}</span>`;
+  const className = subtaskStateClassName(status, showFailure);
+  return `<span class="${className}"${tooltip}>${label}${suffix}</span>`;
+}
+
+/**
+ * MRの状態表示のクラス名
+ *
+ * マージ失敗を併記する場合は警告色のクラスを足す。
+ */
+function subtaskStateClassName(status, showFailure) {
+  const classes = ["subtask-state", `state-${escapeAttr(status)}`];
+  if (showFailure) classes.push("state-merge-failed");
+  return classes.join(" ");
 }
 
 function mrStatusTooltip(status, merge) {
