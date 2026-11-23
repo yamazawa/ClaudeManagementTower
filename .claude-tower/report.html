@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実装レポート #220 サブタスク1</title>
+<title>実装レポート #220 サブタスク2</title>
 <style>
 body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; }
@@ -20,52 +20,47 @@ code { background: #f4f4f4; padding: 0 .3em; }
 <h2>1. 対象</h2>
 <table>
 <tr><th>Issue</th><td>#220</td></tr>
-<tr><th>サブタスク</th><td>エキスパンダルール見直しー①（PR #221）</td></tr>
-<tr><th>ブランチ</th><td><code>issue-new-3b02bf33-subtask-1</code></td></tr>
+<tr><th>サブタスク</th><td>エキスパンダルール見直しー②</td></tr>
+<tr><th>ブランチ</th><td><code>issue-220-subtask-2</code></td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
-<p><span class="ok">成功</span>（ブラウザでの動作確認は未実施）</p>
-<p>①ペインを自動で閉じないようにした。</p>
-<p>代わりにMR作成後とMRステータスフィルタの切り替え後に、画面の一番下までスクロールする。</p>
-<p>②ヘッダーを<code>position: fixed</code>にし、常に画面上端に表示するようにした。</p>
+<p><span class="ok">成功</span>（ブラウザでの見た目の確認は未実施）</p>
+<p>①MR一覧フィルタを「全て／未完了／完了」の3種にし、既定を「全て」にした。</p>
+<p>②Issue・CLI・Idea・MRの作成見出しの右隣に、文字大のエキスパンダを追加した。</p>
+<p>作成欄は閉じた状態が既定で、エキスパンダを開くと作成フォームが表示される。</p>
 
 <h2>3. 変更内容</h2>
 <table>
 <tr><th>No.</th><th>ファイル</th><th>変更</th><th>コミット</th></tr>
-<tr><td>1</td><td><code>app/static/app.js</code></td><td>MR作成後の処理を<code>showCreatedSubtask</code>に共通化し、指示内容欄へのフォーカスと<code>scrollToPageBottom</code>を行う。Issue一覧・Issue内容を閉じる処理を削除。</td><td>cc2796b</td></tr>
-<tr><td>2</td><td><code>app/static/app.js</code></td><td><code>toggleMrStatusFilter</code>で再表示の完了を待ってから最下部へスクロール。そのため<code>onMrStatusFilterChanged</code>・<code>selectFirstVisibleProject</code>が完了待ちのPromiseを返すよう変更。</td><td>cc2796b</td></tr>
-<tr><td>3</td><td><code>app/static/app.js</code>, <code>app/static/repo_items.js</code></td><td><code>autoSetSectionExpanded</code>を開く専用の<code>autoExpandSection</code>に変更。初期表示・リポジトリ選択・Issue選択時に閉じる処理を削除。</td><td>423fe2f</td></tr>
-<tr><td>4</td><td><code>app/static/style.css</code>, <code>app/static/app.js</code></td><td>ヘッダーを<code>sticky</code>から<code>fixed</code>に変更。高さをResizeObserverで<code>--header-height</code>に反映し、bodyの上余白と<code>scroll-padding-top</code>に使う。</td><td>95d9c40</td></tr>
+<tr><td>1</td><td><code>app/static/index.html</code></td><td>MR一覧フィルタの選択肢を全て・未完了・完了に変更</td><td>03ac7c0</td></tr>
+<tr><td>2</td><td><code>app/static/app.js</code></td><td><code>SUBTASK_FILTER_STATES</code>に全状態を表す<code>all</code>を追加</td><td>03ac7c0</td></tr>
+<tr><td>3</td><td><code>app/static/index.html</code></td><td>作成見出し4か所にエキスパンダを追加し、作成欄を閉じた状態で開始</td><td>b9d24ff</td></tr>
+<tr><td>4</td><td><code>app/static/style.css</code></td><td>作成見出しの横並び・エキスパンダの大きさ（16px）・閉じた作成欄の非表示</td><td>b9d24ff</td></tr>
+<tr><td>5</td><td><code>app/static/app.js</code></td><td>作成欄エキスパンダの開閉処理を追加し、ペイン開閉の対象を見出し行のエキスパンダに限定</td><td>4ad28ec</td></tr>
 </table>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>「ステータストグル」はヘッダーのMRステータスフィルタと解釈した。</td><td>画面内でトグル動作するステータスの切り替えはこれのみのため。</td></tr>
-<tr><td>2</td><td>スクロールは利用者の操作時のみ行い、ポーリングで選択が自動移動した場合は行わない。</td><td>自動更新のたびに画面が動くと操作の妨げになるため。</td></tr>
-<tr><td>3</td><td>縦長表示での自動で開く処理は残した。</td><td>指示は「自動で閉じない」のみで、開く処理は選択内容を見せるのに必要なため。</td></tr>
-<tr><td>4</td><td>MR作成後の入力欄へのフォーカスは残し、スクロールのみ中央寄せから最下部に変更。<code>focusWithScroll</code>は呼び出し元が無くなったので削除。</td><td>作成直後に指示内容を入力する流れは維持するため。</td></tr>
-<tr><td>5</td><td>ヘッダーを<code>fixed</code>に変更した。</td><td><code>sticky</code>は親(body)の範囲内でしか効かない。mainの下マージンがbodyの外に出るため、最下部付近でヘッダーが押し出される。最下部へのスクロールを追加するため、確実に固定できる<code>fixed</code>を採用。</td></tr>
-<tr><td>6</td><td>Issue番号はPR #221の「Related to #220」から#220とした。</td><td>ブランチ名にIssue番号が無いため。</td></tr>
+<tr><td>1</td><td>「全て」はCanceledのMRも表示する</td><td>文言どおり全状態とした。従来はCanceledがどのフィルタでも表示されなかった。</td></tr>
+<tr><td>2</td><td>内部値<code>unresolved</code>・<code>solved</code>は変更せず、表示文言のみ変更</td><td>MR数の集計・表示ステータス判定でも同定義を使っており、影響範囲を抑えるため。</td></tr>
+<tr><td>3</td><td>CLI作成・Idea作成にも同じエキスパンダを適用</td><td>指示が「Issue作成やMR作成」であり、共通操作は同じUIで提供する規約に従った。</td></tr>
+<tr><td>4</td><td>作成欄は閉じた状態を既定とした</td><td>「開いたら作成UIが開く」との指示から、閉じた状態が初期と解釈した。</td></tr>
+<tr><td>5</td><td>エキスパンダの大きさを16pxとした</td><td>小見出しの文字（12.5px）と同程度にするため。CSS変数<code>--create-expander-size</code>で調整できる。</td></tr>
 </table>
 
-<h2>5. テスト</h2>
-<table>
-<tr><th>内容</th><th>結果</th></tr>
-<tr><td><code>./.venv/Scripts/python.exe -m pytest -q</code></td><td>509 passed</td></tr>
-<tr><td><code>node --check</code>（app.js・repo_items.js、各コミット時点の app.js）</td><td>構文エラーなし</td></tr>
-<tr><td>ブラウザでの動作確認</td><td>未実施（フロントエンドの自動テストが無く、起動確認は人間に依頼する規約のため）</td></tr>
-</table>
+<h2>5. テスト結果</h2>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code>：509件すべて成功。</p>
+<p><code>app.js</code>の構文チェック（Node.js）：問題なし。</p>
+<p>フロントエンドの自動テストは無いため、画面での確認は未実施。</p>
 
-<h2>6. 残課題・レビュー時の確認ポイント</h2>
+<h2>6. 残課題・確認ポイント</h2>
 <ul>
-<li>縦長表示（幅680px以下）・横長表示の両方でヘッダーが常に表示されるか。</li>
-<li>ヘッダーの折り返しで高さが変わった時に、本文の先頭がヘッダーに隠れないか。</li>
-<li>MR作成後（Issue作成と同時の場合を含む）に最下部までスクロールされるか。</li>
-<li>MRステータスフィルタの切り替え後、Issue一覧の再表示が終わってから最下部までスクロールされるか。</li>
-<li>横長表示では、最下部は最も長いペインの下端になる。意図と違う場合は調整が必要。</li>
-<li><code>SECTION_IDS.projects</code>は参照が無くなったが、ペインIDの定義として残した。</li>
+<li>スマホ・PCでエキスパンダの大きさと見出しとの位置が添付画像の意図に合っているか確認してほしい。</li>
+<li>作成欄の開閉状態はページ再読み込みで閉じた状態に戻る（保存しない）。</li>
+<li>Issue作成後もIssue作成欄は開いたままとなる。</li>
+<li>MRステータスフィルタ選択中は従来どおり作成欄ごと非表示になる。</li>
 </ul>
 </body>
 </html>
