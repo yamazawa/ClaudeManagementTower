@@ -1026,9 +1026,12 @@ section.collapsed > .section-title-row {
   height: var(--create-expander-size);
 }
 
-/* 閉じた作成欄は見出しのみ表示する */
+/* 閉じた作成欄は見出しのみ表示する
+
+作成フォームのID指定のdisplayより優先させる。
+*/
 .create-block.collapsed > :not(.create-heading) {
-  display: none;
+  display: none !important;
 }
 
 .create-block.collapsed > .create-heading {
