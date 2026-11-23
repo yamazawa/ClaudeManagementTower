@@ -325,6 +325,7 @@ function escapeHtml(text) {
  *
  * Enterまたはフォーカス外れで確定し、Escで取り消す。
  * onSaveは新タイトルを受け取り、失敗時はエラー文言を返す。
+ * 保存が終わるまで更新中を表示する。
  */
 function makeTitleEditable(titleEl, statusEl, onSave) {
   titleEl.classList.add("editable-title");
@@ -350,7 +351,7 @@ function makeTitleEditable(titleEl, statusEl, onSave) {
       titleEl.textContent = title;
       updateTitleTooltip(titleEl);
       statusEl.textContent = "更新中...";
-      const error = await onSave(title);
+      const error = await runBusyAction(() => onSave(title));
       if (error) titleEl.textContent = original;
       updateTitleTooltip(titleEl);
       statusEl.textContent = error ? `失敗しました: ${error}` : "更新しました";
