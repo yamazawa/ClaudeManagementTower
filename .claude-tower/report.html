@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実装レポート #220 サブタスク3</title>
+<title>実装レポート #220 サブタスク4</title>
 <style>
 body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; }
@@ -19,37 +19,37 @@ code { background: #f4f4f4; padding: 0 .3em; }
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#220</td></tr>
-<tr><th>サブタスク</th><td>エキスパンダルール見直しー③</td></tr>
-<tr><th>ブランチ</th><td><code>issue-220-subtask-3</code></td></tr>
+<tr><th>Issue</th><td>#220 エキスパンダルール見直し</td></tr>
+<tr><th>サブタスク</th><td>エキスパンダルール見直しー④</td></tr>
+<tr><th>ブランチ</th><td><code>issue-220-subtask-4</code></td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
 <p><span class="ok">成功</span>（ブラウザでの見た目の確認は未実施）</p>
-<p>①閉じた作成欄で、作成フォーム（入力欄・Createボタン）が表示されていた不具合を修正した。</p>
-<p>②MRステータスフィルタ選択時は、作成欄を隠す代わりに作成欄を閉じるようにした。</p>
-<p>③Issue・MR（およびCLI・Idea）の作成に成功したら、作成欄を自動で閉じるようにした。</p>
+<p>①Issue・CLI・Idea・MR一覧の見出しの右隣に、作成欄と同様の一覧エキスパンダを追加した。</p>
+<p>②一覧エキスパンダは開いた状態を既定とした。</p>
+<p>③リポジトリ一覧・リポジトリ・Issue・MR・CLI/Idea内容のペインのエキスパンダを、開閉処理ごと削除した。</p>
 
 <h2>3. 変更内容</h2>
 <table>
 <tr><th>No.</th><th>ファイル</th><th>変更</th><th>コミット</th></tr>
-<tr><td>1</td><td><code>app/static/style.css</code></td><td>閉じた作成欄の非表示指定に<code>!important</code>を付与</td><td>b03b35a</td></tr>
-<tr><td>2</td><td><code>app/static/app.js</code></td><td>作成欄の開閉関数<code>setCreateBlockExpanded</code>・<code>collapseCreateBlock</code>を追加</td><td>211ab26</td></tr>
-<tr><td>3</td><td><code>app/static/app.js</code></td><td>ステータスフィルタ選択時に作成欄を隠す処理を、閉じる処理に置換</td><td>211ab26</td></tr>
-<tr><td>4</td><td><code>app/static/style.css</code></td><td>不要になった<code>.create-block[hidden]</code>関連スタイルを削除</td><td>211ab26</td></tr>
-<tr><td>5</td><td><code>app/static/app.js</code></td><td>Issue・MR作成成功時に作成欄を閉じる</td><td>0f16398</td></tr>
-<tr><td>6</td><td><code>app/static/repo_items.js</code></td><td>CLI・Idea作成成功時に作成欄を閉じる</td><td>0f16398</td></tr>
+<tr><td>1</td><td><code>app/static/index.html</code></td><td>ペイン見出し行のエキスパンダを5箇所削除</td><td>c405714</td></tr>
+<tr><td>2</td><td><code>app/static/app.js</code></td><td>ペインの開閉・縦長表示時の自動展開の処理（<code>setSectionExpanded</code>・<code>autoExpandSection</code>・<code>setupExpanders</code>等）を削除</td><td>c405714</td></tr>
+<tr><td>3</td><td><code>app/static/repo_items.js</code></td><td>CLI・Idea選択時の自動展開呼び出しを削除</td><td>c405714</td></tr>
+<tr><td>4</td><td><code>app/static/style.css</code></td><td>閉じたペインのスタイル・無効時スタイルを削除し、エキスパンダの大きさを16pxに統一</td><td>c405714</td></tr>
+<tr><td>5</td><td><code>app/static/*.js/html/css</code></td><td>作成欄専用の開閉の仕組みを「開閉欄」（<code>fold-block</code>）として汎用化</td><td>11b42b5</td></tr>
+<tr><td>6</td><td><code>app/static/index.html</code></td><td>各一覧の見出しと一覧を開閉欄で囲み、エキスパンダ（既定で開）を追加</td><td>4a99f2b</td></tr>
+<tr><td>7</td><td><code>app/static/style.css</code></td><td>状態フィルタを<code>margin-left:auto</code>で右寄せにし、<code>.section-heading-with-filter</code>を削除</td><td>4a99f2b</td></tr>
 </table>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>①の原因はCSSの詳細度と判断し、<code>!important</code>で対応</td><td>フォームのID指定の<code>display:flex/grid</code>が、クラス指定の<code>display:none</code>より優先されていた。HTML構造を変えずに済む最小の修正とした。</td></tr>
-<tr><td>2</td><td>ステータスフィルタ解除時は作成欄を自動で開かない</td><td>指示は「閉じる操作に置き換え」のため、選択時に閉じるのみとした。</td></tr>
-<tr><td>3</td><td>CLI・Idea作成時も作成欄を閉じる</td><td>前回サブタスクと同様、共通操作は同じUIで提供する規約に従った。</td></tr>
-<tr><td>4</td><td>Issue作成でMR作成のみ失敗した場合は閉じない</td><td>失敗メッセージが作成欄内にあり、閉じると見えなくなるため。</td></tr>
-<tr><td>5</td><td>作成失敗時は閉じない</td><td>エラー表示を確認・再送信できるようにするため。</td></tr>
-<tr><td>6</td><td>Issue作成成功で閉じる際、完了メッセージを消す</td><td>次に開いたときに前回の完了表示が残らないようにするため。</td></tr>
+<tr><td>1</td><td>CLI・Idea一覧にも一覧エキスパンダを付けた</td><td>作成欄はIssue・CLI・Idea・MRの4箇所にあり、共通操作は同じUIで提供する規約に従った。</td></tr>
+<tr><td>2</td><td>CLI・Idea内容のペインのエキスパンダも削除した</td><td>Issue表示・MR表示と同じ「表示」ペインであり、開閉処理を残さず「ロジックごと削除」の指示に沿うため。</td></tr>
+<tr><td>3</td><td>作成欄の開閉処理を汎用化して一覧でも共用した</td><td>同一処理の重複を避けるため。クラス名・関数名を作成欄専用から汎用名に変更した。</td></tr>
+<tr><td>4</td><td>エキスパンダの配置は「見出し文字列の右隣」、フィルタは右端</td><td>作成欄のエキスパンダと同じ配置にそろえた。</td></tr>
+<tr><td>5</td><td>未使用となった<code>.expander:disabled</code>スタイルも削除</td><td>エキスパンダを無効化する処理が存在しないため。</td></tr>
 </table>
 
 <h2>5. テスト結果</h2>
@@ -59,9 +59,10 @@ code { background: #f4f4f4; padding: 0 .3em; }
 
 <h2>6. 残課題・確認ポイント</h2>
 <ul>
-<li>閉じた状態で見出し「〇〇作成 &gt;」のみが表示されるか、スマホ・PCで確認してほしい。</li>
-<li>ステータスフィルタ選択中も作成欄の見出しは表示され、手動で開けば作成できる（従来は作成欄ごと非表示）。</li>
-<li>ステータスフィルタ選択時、MR作成欄はIssue未選択でも閉じた状態に戻る。</li>
+<li>一覧の見出し行で「〇〇一覧 &gt;」とフィルタの並びが崩れていないか、スマホ・PCで確認してほしい。</li>
+<li>一覧を閉じた状態は、リポジトリやIssueを切り替えても維持される（自動では開かない）。</li>
+<li>MRステータスフィルタ選択中もIssue一覧・MR一覧のエキスパンダは操作できる。</li>
+<li>縦長表示でペインを自動で開く処理を削除したため、各ペインは常に展開表示となる。</li>
 </ul>
 </body>
 </html>
