@@ -39,8 +39,19 @@ def _idea(title, status, reject_reason=None):
     )
 
 
-def _build(session_factory, issue_lister):
-    return build_idea_prompt(1, 5, 10, session_factory=session_factory, issue_lister=issue_lister)
+def _build(session_factory, issue_lister, focus=""):
+    return build_idea_prompt(1, 5, 10, focus, session_factory=session_factory, issue_lister=issue_lister)
+
+
+def test_prompt_includes_focus_after_header(session_factory):
+    prompt = _build(session_factory, lambda repo: [], focus="  エラー処理の抜け漏れ\n")
+
+    assert "# 重視する観点（依頼者の指定）\nエラー処理の抜け漏れ\n" in prompt
+    assert prompt.index("最大5件") < prompt.index("重視する観点") < prompt.index("# Open Issue一覧")
+
+
+def test_prompt_omits_focus_section_when_blank(session_factory):
+    assert "重視する観点" not in _build(session_factory, lambda repo: [], focus="  ")
 
 
 def test_prompt_includes_issues_history_and_ideas(session_factory):
