@@ -6,6 +6,7 @@ SDKのRateLimitEventは状態変化時しか通知されず使用率も欠ける
 """
 
 import json
+import logging
 import os
 import threading
 import urllib.request
@@ -14,6 +15,8 @@ from datetime import datetime
 from pathlib import Path
 
 from core.config import settings
+
+logger = logging.getLogger(__name__)
 
 USAGE_URL = "https://api.anthropic.com/api/oauth/usage"
 OAUTH_BETA_HEADER = "oauth-2025-04-20"
@@ -131,7 +134,7 @@ def _refresh_loop(
             refresh_usage(fetcher)
         except Exception as exc:  # noqa: BLE001
             # 一時的な失敗で定期更新を止めない
-            print(f"[claude_usage] 使用率の取得に失敗しました: {exc}")
+            logger.warning("使用率の取得に失敗しました: %s", exc)
         stop_event.wait(interval_seconds)
 
 
