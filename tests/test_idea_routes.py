@@ -6,9 +6,10 @@ from app.routes import ideas
 from core import idea_approval
 from core.db import init_db, make_engine
 from core.github_client import GitHubClientError
-from core.idea_queue import IdeaJobAlreadyActive, IdeaProjectNotFound
+from core.idea_queue import IdeaJobAlreadyActive
 from core.ideas import IdeaAlreadyDecided, IdeaNotFound, IdeaStatus, list_ideas, save_proposals
 from core.models import IdeaJob, Project
+from core.repo_items import RepoItemClosed, RepoItemInvalid, RepoItemNotFound
 
 
 def _raiser(exc):
@@ -18,9 +19,12 @@ def _raiser(exc):
     return fail
 
 
-@pytest.mark.parametrize(("exc", "status"), [(IdeaProjectNotFound("x"), 404), (IdeaJobAlreadyActive("x"), 409)])
+@pytest.mark.parametrize(
+    ("exc", "status"),
+    [(RepoItemNotFound("x"), 404), (RepoItemClosed("x"), 409), (IdeaJobAlreadyActive("x"), 409)],
+)
 def test_run_maps_errors(monkeypatch, exc, status):
-    monkeypatch.setattr(ideas, "enqueue_idea_job", _raiser(exc))
+    monkeypatch.setattr(ideas, "run_session", _raiser(exc))
 
     with pytest.raises(HTTPException) as error:
         ideas.run_idea_generation(1)
@@ -28,15 +32,33 @@ def test_run_maps_errors(monkeypatch, exc, status):
 
 
 def test_run_returns_queued_job(monkeypatch):
-    monkeypatch.setattr(ideas, "enqueue_idea_job", lambda project_id, focus: {"id": 4, "focus": focus})
+    monkeypatch.setattr(ideas, "run_session", lambda session_id, focus: {"id": 4, "focus": focus})
 
     assert ideas.run_idea_generation(2) == {"id": 4, "focus": ""}
 
 
 def test_run_passes_focus(monkeypatch):
-    monkeypatch.setattr(ideas, "enqueue_idea_job", lambda project_id, focus: {"id": 4, "focus": focus})
+    monkeypatch.setattr(ideas, "run_session", lambda session_id, focus: {"id": 4, "focus": focus})
 
     assert ideas.run_idea_generation(2, ideas.RunIdeaRequest(focus="テスト不足"))["focus"] == "テスト不足"
+
+
+@pytest.mark.parametrize(("exc", "status"), [(RepoItemNotFound("x"), 404), (RepoItemInvalid("x"), 400)])
+def test_create_session_maps_errors(monkeypatch, exc, status):
+    monkeypatch.setattr(ideas, "create_session", _raiser(exc))
+
+    with pytest.raises(HTTPException) as error:
+        ideas.create_idea_session(ideas.CreateIdeaSessionRequest(project_id=1, title=""))
+    assert error.value.status_code == status
+
+
+def test_session_ideas_filters_by_tab(monkeypatch):
+    calls = []
+    monkeypatch.setattr(ideas, "list_session_ideas", lambda session_id, s: calls.append((session_id, s)) or [])
+
+    ideas.get_idea_session_ideas(3, "approved")
+
+    assert calls == [(3, IdeaStatus.APPROVED_STATES)]
 
 
 def test_run_request_rejects_too_long_focus():
@@ -70,7 +92,9 @@ def test_routes_are_registered():
     from app.main import app
 
     paths = app.openapi()["paths"]
-    assert "/api/projects/{project_id}/ideas/run" in paths
+    assert "/api/projects/{project_id}/idea-sessions" in paths
+    assert "/api/idea-sessions/{idea_session_id}/run" in paths
+    assert "/api/idea-sessions/{idea_session_id}/ideas" in paths
     assert "/api/ideas/{idea_id}/reject" in paths
     assert "/api/ideas/{idea_id}/approve" in paths
 

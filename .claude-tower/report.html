@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実行レポート: 待機中の表示ー②</title>
+<title>実行レポート: CLI機能の追加ー②</title>
 <style>
 body { font-family: sans-serif; margin: 24px; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; }
@@ -15,49 +15,78 @@ code { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; }
 </style>
 </head>
 <body>
-<h1>実行レポート: 待機中の表示ー②</h1>
+<h1>実行レポート: CLI機能の追加ー②</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#196 待機中の表示</td></tr>
-<tr><th>サブタスク</th><td>待機中の表示ー②（Issue作成時・MR作成時の「作成中」で待機中メッセージを出す）</td></tr>
-<tr><th>ブランチ</th><td><code>issue-196-subtask-2</code>（base: <code>master</code>）</td></tr>
+<tr><th>Issue</th><td>#176 CLI機能の追加</td></tr>
+<tr><th>サブタスク</th><td>CLI機能の追加ー②（CLI・IdeaをDLGではなくリポジトリの項目として扱う）</td></tr>
+<tr><th>ブランチ</th><td><code>issue-176-subtask-2</code>（PR #195、base: <code>master</code>）</td></tr>
 </table>
 
 <h2>2. 実装結果の要約</h2>
 <p class="ok">成功</p>
 <ul>
-<li>Issue作成フォーム（IssueとMRを同時作成）で、作成したIssueとMRを開くまで更新中オーバーレイを表示するようにした。</li>
-<li>MR作成フォームは前サブタスク（PR #197）で対応済みのため、コードの変更は不要だった。</li>
+<li>リポジトリ表示をIssue・CLI・Ideaのタブ形式にした。</li>
+<li>CLI・IdeaタブはIssueと同じUIで「作成フォーム」「一覧（Open／Closeフィルタ）」を表示する。</li>
+<li>一覧の各行はIssueと同様に種別・タイトル・状態・Close／ReOpenボタンを並べる。</li>
+<li>CLI・Ideaの項目を選択すると、Issue内容・MR内容の2列分の幅で、MR内容と同じ画面構成で内容を表示する。</li>
+<li>未選択の間は内容のペインを表示しない。</li>
+<li>リポジトリ一覧のCLI・Ideaボタンとダイアログは削除した。</li>
 </ul>
 
 <h2>3. 実施した変更と主な変更ファイル</h2>
 <table>
-<tr><th>No.</th><th>コミット</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td><code>#196 [待機中の表示] Issue作成中に更新中を表示</code></td><td><code>app/static/app.js</code></td><td><code>onSubmitIssueForm</code>の処理を<code>runBusyAction</code>で囲った。作成と画面反映の処理は<code>createAndOpenIssue</code>に切り出した。<code>createIssueWithSubtask</code>のコメントから「操作を妨げない」を削除した。</td></tr>
+<tr><th>No.</th><th>コミット</th><th>主なファイル</th><th>変更</th></tr>
+<tr><td>1</td><td><code>#176 [リポジトリ項目] 項目の共通処理を追加</code></td><td><code>core/repo_items.py</code><br><code>app/routes/repo_items.py</code></td><td>タイトル・Open/Close（<code>ItemState</code>）の共通処理と、APIのエラー変換を追加。</td></tr>
+<tr><td>2</td><td><code>#176 [リポジトリ項目] CLIの対話にタイトル・状態を追加</code></td><td><code>core/cli_session.py</code><br><code>app/routes/cli.py</code><br><code>core/models.py</code><br><code>core/db.py</code></td><td><code>cli_sessions</code>に<code>title</code>・<code>state</code>列を追加。一覧・作成・変更APIを追加。Closeの対話には発言不可。</td></tr>
+<tr><td>3</td><td><code>#176 [リポジトリ項目] Ideaの項目を追加</code></td><td><code>core/idea_sessions.py</code><br><code>app/routes/ideas.py</code><br><code>core/idea_queue.py</code><br><code>core/ideas.py</code></td><td><code>idea_sessions</code>を新設し、<code>idea_jobs.idea_session_id</code>で項目に紐づけ。項目単位の実行・提案一覧APIを追加。リポジトリ単位の実行・最新ジョブAPIは廃止。</td></tr>
+<tr><td>4</td><td><code>#176 [リポジトリ項目] CLIの内容表示を追加</code></td><td><code>app/static/cli_view.js</code></td><td>入力欄・送信・状態表示・発言一覧をペイン内に表示。</td></tr>
+<tr><td>5</td><td><code>#176 [リポジトリ項目] Ideaの内容表示を追加</code></td><td><code>app/static/idea_view.js</code></td><td>観点の入力欄・実行ボタン・状態表示・提案タブ・提案カードをペイン内に表示。</td></tr>
+<tr><td>6</td><td><code>#176 [リポジトリ項目] Issue・CLI・Ideaのタブを追加</code></td><td><code>app/static/index.html</code><br><code>app/static/repo_items.js</code><br><code>app/static/app.js</code><br><code>app/static/style.css</code></td><td>タブ・作成フォーム・一覧・内容のペインを追加。ダイアログ・リポジトリ一覧のボタンを削除。</td></tr>
+<tr><td>7</td><td><code>#176 [リポジトリ項目] ダイアログ前提の文言を修正</code></td><td><code>core/claude_client.py</code> 他</td><td>Claudeへの方針文・ログ等の「CLI実行ダイアログ」をCLIタブに変更。</td></tr>
+<tr><td>8</td><td><code>#176 [リポジトリ項目] 実装計画にタブ方式を記録</code></td><td><code>IMPLEMENTATION_PLAN.md</code></td><td>タブ方式・項目のOpen/Close・列追加を記録。</td></tr>
 </table>
 
-<h2>4. 自律判断した事項・採用理由・前提</h2>
+<h2>4. 自律判断した事項</h2>
 <table>
-<tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>前サブタスクの「Issue作成は操作を妨げない」方針を撤回し、画面をブロックする。</td><td>今回の指示で明示的に待機表示を求められたため。</td></tr>
-<tr><td>2</td><td>「MR作成時」はIssue作成時に自動で行うMR作成（状態欄「IssueとMRを作成中...」）と解釈した。</td><td>MR作成フォームはmasterで既に<code>runBusyAction</code>で囲われているため。</td></tr>
-<tr><td>3</td><td>MR自動作成中のMR作成ボタン無効化（<code>setAutoMrCreatingIssue</code>）は残した。</td><td>オーバーレイ中は押せないが、防御として残しても害がないため。</td></tr>
+<tr><th>No.</th><th>判断</th><th>採用理由・前提</th></tr>
+<tr><td>1</td><td>CLIの1項目＝1対話（<code>cli_sessions</code>の1行）とした。</td><td>既存の対話をそのまま項目にでき、Claudeのセッション引き継ぎも維持できるため。</td></tr>
+<tr><td>2</td><td>Ideaの1項目＝アイデア出しの単位（新設<code>idea_sessions</code>）とし、項目内で何度でも実行できるようにした。</td><td>DLGの「観点入力＋実行＋提案一覧」をMRの「指示＋実装＋結果」に対応させるため。ジョブ1件を項目にすると再実行が扱いにくい。</td></tr>
+<tr><td>3</td><td>項目の内容のペインは、Issue内容・MR内容の2列分の幅で表示した。</td><td>CLIの発言一覧・提案カードは幅が必要なため。CLI・Ideaタブ中はIssue内容・MR内容のペインを隠す。</td></tr>
+<tr><td>4</td><td>作成フォームの見出しは「CLI作成」「Idea作成」とした。</td><td>Issueの「Issue作成」と同一のUIにするため（指示文の「CLI追加」と表記が異なる）。</td></tr>
+<tr><td>5</td><td>一覧のフィルタはOpen／Closeの2つとし、IssueのClose（Today）は設けなかった。</td><td>指示が「Open、Close」のため。必要なら後で追加できる。</td></tr>
+<tr><td>6</td><td>Issueと異なり、一覧の先頭項目を自動選択しない。Close／ReOpenの確認ダイアログも出さない。</td><td>指示の「選択されてない時は非表示」を実現するため。Close／ReOpenはアプリ内だけの操作で、GitHubへ反映しないため。</td></tr>
+<tr><td>7</td><td>Closeの項目は、CLIの送信・アイデア出しの実行を不可にした（サーバー側も409で拒否）。提案の承認・却下はCloseでも可能。</td><td>Close＝作業完了とみなしつつ、残った提案の判断はできるようにするため。</td></tr>
+<tr><td>8</td><td>既存DBへの列追加は<code>ADDED_COLUMNS</code>方式（IMPLEMENTATION_PLAN.md アイデアマンNo.19）に従った。</td><td>運用中のDBを残す既存方針に合わせるため。</td></tr>
+<tr><td>9</td><td>項目に紐づかない過去のアイデア出しの提案は、画面に表示しない。</td><td>移行コードは書かない方針のため。<code>GET /api/projects/{id}/ideas</code>は残しており、APIからは参照できる。</td></tr>
+<tr><td>10</td><td>リポジトリ単位のアイデア出し実行・最新ジョブのAPIを廃止した。</td><td>画面から使わなくなり、残すと項目に紐づかない提案が増えるため。</td></tr>
 </table>
 
 <h2>5. 実行したテストと結果</h2>
 <ul>
-<li><code>node --check app/static/app.js</code>: 構文エラーなし。</li>
-<li><code>./.venv/Scripts/python.exe -m pytest -q</code>: 425 passed。</li>
-<li>JSの自動テストは存在しないため、ブラウザでの動作確認は未実施（人間による確認を依頼）。</li>
+<li><code>./.venv/Scripts/python.exe -m pytest -q</code>：<span class="ok">444 passed</span></li>
+<li>追加・更新したテスト：<code>tests/test_idea_sessions.py</code>（新規）、<code>tests/test_cli_session.py</code>、<code>tests/test_cli_routes.py</code>、<code>tests/test_idea_routes.py</code>、<code>tests/test_db.py</code></li>
+<li>JS構文チェック（<code>node --check</code>）：全ファイルOK</li>
+<li>ヘッドレスChromeでの画面の動作確認（一時ハーネス。コミットしていない）：<span class="ok">21項目すべてPASS</span>
+<ul>
+<li>CLI・Ideaの実APIを一時DBで動かし、GitHub系APIはスタブ、Claude実行は固定応答に差し替えた。</li>
+<li>タブ切替、作成→選択、2列幅の表示、発言の送受信、Close→一覧から消える、Closeフィルタで再選択時の読み取り専用、Ideaの実行（待機中表示）、タブごとの選択保持、Issueタブへの復帰を確認。</li>
+<li>確認中に、app.jsのIssue行の更新処理がCLI行のMR数表示を書き換える不具合を見つけ、行のクラスを分けて修正した。</li>
+</ul>
+</li>
+<li>本番相当の起動（GitHub連携・ワーカーでのアイデア出し）は未実施。人間による動作確認をお願いしたい。</li>
 </ul>
 
-<h2>6. 残課題、リスク、レビュー時の確認ポイント</h2>
-<ul>
-<li>Issue作成で、更新中表示が出て、作成したMRの指示欄が開いた時点で消えることを確認してほしい。</li>
-<li>MR作成フォームで更新中が出ない場合、ブラウザが古い<code>app.js</code>をキャッシュしている可能性がある。強制再読み込みで確認してほしい。</li>
-<li>キャッシュが原因でない場合は、再現手順を教えてほしい（今回のコードからは原因を特定できなかった）。</li>
-<li>Issue作成中（GitHubへのIssue・PR作成で数秒）は、ヘッダー以外の操作がブロックされる。</li>
-</ul>
+<h2>6. 残課題・リスク・レビュー時の確認ポイント</h2>
+<table>
+<tr><th>No.</th><th>内容</th></tr>
+<tr><td>1</td><td>既存のCLI対話（タイトル空）は、CLI一覧のOpenに空タイトルで表示される。必要ならタイトルをクリックして編集する。</td></tr>
+<tr><td>2</td><td>項目に紐づかない過去の提案（未処理含む）は画面に出なくなる。必要なら過去分を表示する仕組みを別途検討する。</td></tr>
+<tr><td>3</td><td>アイデア出しの同時実行はリポジトリ単位で1件のまま（別項目でも実行中は409）。</td></tr>
+<tr><td>4</td><td>縦長表示（スマホ幅）での開閉の挙動は簡易確認のみ。実機での見た目を確認してほしい。</td></tr>
+<tr><td>5</td><td>CLIの画面構成は、MRに合わせて入力欄を上、発言一覧を下に置いた。チャットとして使いにくければ順序を入れ替える。</td></tr>
+<tr><td>6</td><td>デプロイ後、起動時に<code>cli_sessions</code>・<code>idea_jobs</code>へ列が追加され、<code>idea_sessions</code>テーブルが作成される。</td></tr>
+</table>
 </body>
 </html>

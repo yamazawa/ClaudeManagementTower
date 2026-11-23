@@ -16,6 +16,8 @@
   --selection-busy-show-delay: 0.2s;
   --selection-busy-fade: 0.15s;
   --selection-busy-spinner-size: 16px;
+  --cli-log-height: 60vh;
+  --repo-item-input-min-height: 90px;
 }
 
 * {
@@ -102,6 +104,7 @@ header h1 {
 }
 
 #issue-create-form,
+.repo-item-create-form,
 #subtask-form {
   margin-top: 10px;
 }
@@ -112,7 +115,8 @@ header h1 {
 入力欄が残りの幅を埋め、状態表示は次の行に出す。
 入力欄と作成ボタンは同じ高さに固定する。
 */
-#issue-create-form {
+#issue-create-form,
+.repo-item-create-form {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -120,6 +124,7 @@ header h1 {
 }
 
 #issue-create-form input,
+.repo-item-create-form input,
 #subtask-form input {
   flex: 1 1 0;
   height: var(--create-row-height);
@@ -132,6 +137,7 @@ header h1 {
 }
 
 #issue-create-form button,
+.repo-item-create-form button,
 #subtask-form button {
   flex: 0 0 auto;
   height: var(--create-row-height);
@@ -147,6 +153,7 @@ header h1 {
 }
 
 #issue-create-form button:disabled,
+.repo-item-create-form button:disabled,
 #subtask-form button:disabled {
   opacity: 0.6;
   cursor: default;
@@ -179,7 +186,8 @@ Issue名・入力欄・作成ボタンは折り返さず1行に並べる。
   text-overflow: ellipsis;
 }
 
-#issue-create-status {
+#issue-create-status,
+.repo-item-create-status {
   flex-basis: 100%;
   margin: 0;
 }
@@ -190,6 +198,7 @@ Issue名・入力欄・作成ボタンは折り返さず1行に並べる。
 }
 
 #issue-create-status:empty,
+.repo-item-create-status:empty,
 #subtask-form-status:empty {
   display: none;
 }
@@ -291,59 +300,21 @@ Issue名・入力欄・作成ボタンは折り返さず1行に並べる。
   gap: 6px;
 }
 
-/* リポジトリ一覧のIdeaボタン・CLIボタン */
-.project-dialog-button {
-  flex: none;
-}
-
-/* CLI実行ダイアログ */
-.cli-dialog {
-  width: min(860px, 95vw);
-  height: min(720px, 90vh);
-  padding: 12px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-}
-
-.cli-dialog[open] {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.cli-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.5);
-}
-
-.cli-dialog-header {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.cli-dialog-title {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 600;
-}
-
-.cli-dialog-status {
-  color: var(--muted);
-  font-size: 12.5px;
-  white-space: nowrap;
-}
-
-.cli-dialog-log {
-  flex: 1;
-  min-height: 0;
+/* CLIタブの項目の発言一覧 */
+.cli-log {
+  height: var(--cli-log-height);
+  margin-top: 8px;
   overflow-y: auto;
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
   background: var(--bg);
+}
+
+/* CLI・Ideaタブの項目の入力欄（MRの指示内容より低くする） */
+.instruction-form.cli-view-form textarea,
+.instruction-form.idea-view-form textarea {
+  min-height: var(--repo-item-input-min-height);
 }
 
 .cli-message {
@@ -377,40 +348,14 @@ Issue名・入力欄・作成ボタンは折り返さず1行に並べる。
   background: #fff;
 }
 
-.cli-dialog-form {
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
-}
-
-.cli-dialog-form textarea {
-  flex: 1;
-  min-width: 0;
-  resize: vertical;
-  font: inherit;
-  padding: 6px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-}
-
-/* 提案一覧（アイデアマン）ダイアログ（枠・見出し行はCLI実行ダイアログと共通） */
-.idea-dialog-tabs {
+/* Ideaタブの項目の提案一覧 */
+.idea-tabs {
   display: flex;
   gap: 6px;
+  margin: 12px 0 8px;
 }
 
-.idea-dialog-focus {
-  width: 100%;
-  box-sizing: border-box;
-  resize: vertical;
-  font: inherit;
-  font-size: 13px;
-  padding: 4px 8px;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-}
-
-.idea-dialog-execute {
+.idea-view-execute {
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -435,13 +380,6 @@ Issue名・入力欄・作成ボタンは折り返さず1行に並べる。
   background: var(--accent);
   color: #fff;
   font-weight: bold;
-}
-
-.idea-dialog-message {
-  margin: 0;
-  min-height: 1.5em;
-  color: var(--warning);
-  font-size: 12.5px;
 }
 
 .idea-card {
@@ -524,16 +462,8 @@ Issue名・入力欄・作成ボタンは折り返さず1行に並べる。
   border-radius: 6px;
 }
 
-/* スマホ幅では見出し行・操作を縦に積む */
+/* スマホ幅では提案の見出し行・操作を縦に積む */
 @media (max-width: 650px) {
-  .idea-dialog .cli-dialog-header {
-    flex-wrap: wrap;
-  }
-
-  .idea-dialog .cli-dialog-title {
-    flex-basis: 100%;
-  }
-
   .idea-card-header {
     flex-wrap: wrap;
   }
@@ -651,9 +581,55 @@ Issue名・入力欄・作成ボタンは折り返さず1行に並べる。
   color: #ff6b6b;
 }
 
-#issue-panel[hidden],
-#issue-list-placeholder[hidden] {
+#repo-panel[hidden],
+.repo-item-panel[hidden],
+#issue-list-placeholder[hidden],
+section[hidden] {
   display: none;
+}
+
+/* リポジトリの項目（Issue・CLI・Idea）のタブ
+
+選択中（aria-selected）のタブはアクセント色にする。
+*/
+.repo-item-tabs {
+  display: flex;
+  gap: 4px;
+  margin: 0 0 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.repo-item-tab {
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 14px;
+  margin-bottom: -1px;
+  border: 1px solid transparent;
+  border-radius: 6px 6px 0 0;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.repo-item-tab:hover {
+  color: var(--ink);
+  background: var(--soft);
+}
+
+.repo-item-tab[aria-selected="true"] {
+  border-color: var(--line);
+  border-bottom-color: #fff;
+  background: #fff;
+  color: var(--accent);
+  font-weight: bold;
+}
+
+/* CLI・Ideaの項目の内容
+
+Issue内容・MR内容のペインの2列分の幅で表示する。
+*/
+#repo-item-detail {
+  grid-column: span 2;
 }
 
 /* 選択切替・操作の更新待ち表示
@@ -732,10 +708,6 @@ section {
   border: 1px solid var(--line);
   border-radius: 10px;
   padding: 16px 20px;
-}
-
-section[hidden] {
-  display: none;
 }
 
 /* ペインの見出し行
@@ -882,6 +854,7 @@ section.collapsed > .section-title-row {
 タイトルを左、状態表示を右寄せで1行に並べる。
 */
 #issue-list-items,
+.repo-item-list,
 #subtask-list-items {
   list-style: none;
   margin: 12px 0 0;
@@ -889,6 +862,7 @@ section.collapsed > .section-title-row {
 }
 
 .issue-item,
+.repo-item-row,
 .subtask-row {
   display: flex;
   justify-content: space-between;
@@ -902,11 +876,13 @@ section.collapsed > .section-title-row {
 }
 
 .issue-item:hover,
+.repo-item-row:hover,
 .subtask-row:hover {
   background: var(--soft);
 }
 
 .issue-item.active,
+.repo-item-row.active,
 .subtask-row.active {
   border-color: var(--accent);
   background: var(--soft);
@@ -917,13 +893,15 @@ section.collapsed > .section-title-row {
 見出しと同様に番号リンク・タイトル・MR数（状態）・閉じるボタンを1行に並べる。
 */
 .issue-item,
+.repo-item-row,
 .subtask-row {
   align-items: center;
   justify-content: flex-start;
   font-size: 13.5px;
 }
 
-.issue-item .title-action-button {
+.issue-item .title-action-button,
+.repo-item-row .title-action-button {
   font-size: 11px;
   padding: 1px 8px;
 }
@@ -938,6 +916,7 @@ section.collapsed > .section-title-row {
 }
 
 .issue-item-meta,
+.repo-item-meta,
 .subtask-state {
   color: var(--muted);
   font-size: 12px;
@@ -1183,8 +1162,10 @@ section.collapsed > .section-title-row {
 全文はツールチップで表示する。 */
 #repo-title,
 #issue-title,
+#repo-item-title,
 #subtask-title,
 .issue-item-title,
+.repo-item-row-title,
 .subtask-row-title {
   min-width: 0;
   overflow: hidden;
@@ -1241,7 +1222,8 @@ Issue名・区切り文字・MR固有名を1行に並べる。
 
 見出し用の負のマージンを打ち消し、ボタンと重ならないようにする。
 */
-#subtask-action-status {
+#subtask-action-status,
+.repo-item-action-status {
   margin: 6px 0 0;
 }
 
@@ -1249,5 +1231,9 @@ Issue名・区切り文字・MR固有名を1行に並べる。
   /* 長いタイトルで列が広がらないよう、列幅の下限を0にする */
   #issue-view {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  #repo-item-detail {
+    grid-column: auto;
   }
 }

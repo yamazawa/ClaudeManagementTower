@@ -6,6 +6,7 @@ from core import cli_session
 from core.cli_session import CliMessageRole, CliSessionStatus
 from core.db import init_db, make_engine
 from core.models import CliSession, Project
+from core.repo_items import ItemState, RepoItemClosed, RepoItemInvalid, RepoItemNotFound
 
 
 @pytest.fixture
@@ -54,12 +55,52 @@ def test_message_entries_shows_result_only_on_error():
 
 
 def test_create_session_rejects_unknown_project(session_factory):
-    with pytest.raises(cli_session.CliSessionNotFound):
-        cli_session.create_session(99, session_factory=session_factory)
+    with pytest.raises(RepoItemNotFound):
+        cli_session.create_session(99, "調査", session_factory=session_factory)
+
+
+def test_create_session_rejects_empty_title(session_factory):
+    with pytest.raises(RepoItemInvalid):
+        cli_session.create_session(1, "  ", session_factory=session_factory)
+
+
+def test_create_session_is_open_with_stripped_title(session_factory):
+    created = cli_session.create_session(1, " 調査 ", session_factory=session_factory)
+
+    assert (created["title"], created["state"], created["status"]) == ("調査", ItemState.OPEN, CliSessionStatus.IDLE)
+
+
+def test_list_sessions_filters_by_state_newest_first(session_factory):
+    first = cli_session.create_session(1, "1件目", session_factory=session_factory)["id"]
+    second = cli_session.create_session(1, "2件目", session_factory=session_factory)["id"]
+    closed = cli_session.create_session(1, "閉じる", session_factory=session_factory)["id"]
+    cli_session.update_session(closed, state=ItemState.CLOSED, session_factory=session_factory)
+
+    opened = cli_session.list_sessions(1, ItemState.OPEN, session_factory=session_factory)
+    closed_list = cli_session.list_sessions(1, ItemState.CLOSED, session_factory=session_factory)
+
+    assert [s["id"] for s in opened] == [second, first]
+    assert [s["id"] for s in closed_list] == [closed]
+
+
+def test_update_session_changes_only_given_values(session_factory):
+    session_id = cli_session.create_session(1, "調査", session_factory=session_factory)["id"]
+
+    renamed = cli_session.update_session(session_id, title="再調査", session_factory=session_factory)
+
+    assert (renamed["title"], renamed["state"]) == ("再調査", ItemState.OPEN)
+
+
+def test_claim_turn_rejects_closed_session(session_factory):
+    session_id = cli_session.create_session(1, "調査", session_factory=session_factory)["id"]
+    cli_session.update_session(session_id, state=ItemState.CLOSED, session_factory=session_factory)
+
+    with pytest.raises(RepoItemClosed):
+        cli_session._claim_turn(session_id, "質問", session_factory)
 
 
 def _claim(session_factory, text="こんにちは"):
-    session_id = cli_session.create_session(1, session_factory=session_factory)
+    session_id = cli_session.create_session(1, "調査", session_factory=session_factory)["id"]
     target = cli_session._claim_turn(session_id, text, session_factory)
     return session_id, target
 

@@ -25,6 +25,9 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 # create_allで追加されない既存テーブルへの後付け列（テーブル名, 列名, 列定義）
 ADDED_COLUMNS = [
     ("idea_jobs", "focus", "VARCHAR NOT NULL DEFAULT ''"),
+    ("idea_jobs", "idea_session_id", "INTEGER REFERENCES idea_sessions(id)"),
+    ("cli_sessions", "title", "VARCHAR NOT NULL DEFAULT ''"),
+    ("cli_sessions", "state", "VARCHAR NOT NULL DEFAULT 'open'"),
 ]
 
 

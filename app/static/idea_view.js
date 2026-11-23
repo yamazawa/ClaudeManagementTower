@@ -1,14 +1,15 @@
 /**
- * 提案一覧（アイデアマン）ダイアログ
+ * Ideaタブの項目の内容（アイデアマン）
  *
- * リポジトリごとにアイデア出しを実行し、提案を確認・承認・却下する。
+ * 項目ごとにアイデア出しを実行し、提案を確認・承認・却下する。
  * アイデア出しの実行時は、アイデアを出してほしい観点を任意で指定できる。
  * 提案は未処理／承認済み／却下済みのタブに分けて表示する。
- * アイデア出しの実行中は、最新ジョブを一定間隔で取得して状態を表示する。
+ * アイデア出しの実行中は、項目を一定間隔で取得して状態を表示する。
+ * 画面構成はMR内容と揃え、観点の入力欄・実行ボタン・状態表示・提案一覧の順に並べる。
  */
 
-// アイデア出し実行中の最新ジョブの取得間隔
-const IDEA_DIALOG_POLL_MS = 3000;
+// アイデア出し実行中の項目の取得間隔
+const IDEA_VIEW_POLL_MS = 3000;
 
 // 提案一覧のタブ（app/routes/ideas.pyのtabと合わせる）
 const IDEA_TABS = [
@@ -49,9 +50,17 @@ const IDEA_JOB_STATUS_LABELS = {
   needs_attention: "前回のアイデア出し：要確認",
   rate_limited: "前回のアイデア出し：利用上限で中断",
 };
+// Idea一覧の行に表示するジョブの状態
+const IDEA_JOB_ROW_LABELS = {
+  queued: "待機中",
+  running: "実行中",
+};
 
-const IDEA_DIALOG_MESSAGES = {
-  title: (name) => `提案一覧（アイデアマン） - ${name}`,
+const IDEA_VIEW_MESSAGES = {
+  focusPlaceholder: "アイデアを出してほしい観点（任意）　例：テスト不足の箇所、エラー処理の抜け漏れ",
+  execute: "そのまま実装に進む",
+  run: "アイデア出し実行",
+  closed: "Closeの項目ではアイデア出しを実行できません（ReOpenすると実行できます）。",
   empty: "提案はありません。",
   loadFailed: "提案一覧を取得できませんでした",
   runFailed: "アイデア出しを開始できませんでした",
@@ -72,52 +81,77 @@ const IDEA_DIALOG_MESSAGES = {
   approved: (n) => `Issue #${n} に反映しました`,
 };
 
-// 表示中の提案一覧（projectId・表示中のタブ・操作中か・観点の入力欄を前回の観点で埋めたか）
-let ideaDialogState = null;
-let ideaDialogPollTimer = null;
+// 表示中の項目（item・表示中のタブ・操作中か）
+let ideaViewState = null;
+let ideaViewPollTimer = null;
 
-async function openIdeaDialog(project) {
-  ideaDialogState = { projectId: project.id, tab: IDEA_TABS[0].tab, busy: false, focusFilled: false };
-  document.getElementById("idea-dialog-title").textContent = IDEA_DIALOG_MESSAGES.title(project.display_name);
-  document.getElementById("idea-dialog-focus").value = "";
-  setIdeaDialogMessage("");
+/**
+ * Idea一覧の行の状態表示
+ */
+function ideaItemMeta(item) {
+  return (item.latest_job && IDEA_JOB_ROW_LABELS[item.latest_job.status]) || "";
+}
+
+function isIdeaJobActive(job) {
+  return !!job && IDEA_JOB_ACTIVE_STATUSES.includes(job.status);
+}
+
+/**
+ * Ideaの項目の内容を表示する
+ *
+ * 観点の入力欄は、前回のアイデア出しの観点で埋める（同じ観点で再実行しやすくするため）。
+ */
+function showIdeaItem(item, container) {
+  hideIdeaItem();
+  ideaViewState = { item, tab: IDEA_TABS[0].tab, busy: false };
+  container.innerHTML = `
+    <div class="instruction-form idea-view-form">
+      <textarea id="idea-view-focus" rows="3" maxlength="1000" aria-label="アイデアを出してほしい観点"
+        placeholder="${IDEA_VIEW_MESSAGES.focusPlaceholder}"></textarea>
+      <div class="subtask-actions">
+        <button type="button" id="idea-view-run" class="subtask-action-button primary">${IDEA_VIEW_MESSAGES.run}</button>
+        <label class="idea-view-execute"><input type="checkbox" id="idea-view-execute" checked />${IDEA_VIEW_MESSAGES.execute}</label>
+      </div>
+    </div>
+    <p id="idea-view-message" class="title-status repo-item-action-status empty" role="status"></p>
+    <p id="idea-view-job" class="job-status empty" role="status"></p>
+    <div id="idea-view-tabs" class="idea-tabs" role="group" aria-label="提案の状態"></div>
+    <div id="idea-view-list" class="idea-list" aria-live="polite"></div>
+  `;
+  document.getElementById("idea-view-focus").value = (item.latest_job && item.latest_job.focus) || "";
+  document.getElementById("idea-view-run").addEventListener("click", onRunIdeaGeneration);
   renderIdeaTabs();
-  document.getElementById("idea-dialog").showModal();
-  await Promise.all([refreshIdeaJob(), refreshIdeaList()]);
+  renderIdeaJob(item);
+  pollIdeaItem(item);
+  refreshIdeaList();
 }
 
-function closeIdeaDialog() {
-  document.getElementById("idea-dialog").close();
+function hideIdeaItem() {
+  clearTimeout(ideaViewPollTimer);
+  ideaViewPollTimer = null;
+  ideaViewState = null;
 }
 
-function onIdeaDialogClosed() {
-  clearTimeout(ideaDialogPollTimer);
-  ideaDialogPollTimer = null;
-  ideaDialogState = null;
-}
-
-function setIdeaDialogMessage(text) {
-  document.getElementById("idea-dialog-message").textContent = text;
+function setIdeaViewMessage(text) {
+  document.getElementById("idea-view-message").textContent = text;
 }
 
 function renderIdeaTabs() {
-  const container = document.getElementById("idea-dialog-tabs");
+  const container = document.getElementById("idea-view-tabs");
   container.replaceChildren(...IDEA_TABS.map(renderIdeaTabButton));
 }
 
 function renderIdeaTabButton(def) {
-  const button = document.createElement("button");
+  const button = ideaElement("button", "idea-tab-button", def.label);
   button.type = "button";
-  button.className = "idea-tab-button";
-  button.textContent = def.label;
-  button.setAttribute("aria-pressed", String(ideaDialogState.tab === def.tab));
+  button.setAttribute("aria-pressed", String(ideaViewState.tab === def.tab));
   button.addEventListener("click", () => selectIdeaTab(def.tab));
   return button;
 }
 
 async function selectIdeaTab(tab) {
-  if (!ideaDialogState) return;
-  ideaDialogState.tab = tab;
+  if (!ideaViewState) return;
+  ideaViewState.tab = tab;
   renderIdeaTabs();
   await refreshIdeaList();
 }
@@ -138,86 +172,86 @@ function postIdeaJson(url, payload) {
 }
 
 /**
- * 最新のアイデア出しジョブの状態を表示する
- *
- * 実行中は一定間隔で取得し直し、終わったら提案一覧を取得し直す。
- * 取得に失敗した場合（サーバー再起動中など）も取得し直す。
+ * アイデア出しの実行中は、項目を一定間隔で取得し直す
  */
-async function refreshIdeaJob(wasActive = false) {
-  clearTimeout(ideaDialogPollTimer);
-  const state = ideaDialogState;
-  if (!state) return;
-  const job = await fetchIdeaJson(`/api/projects/${state.projectId}/idea-jobs/latest`).catch(() => undefined);
-  if (state !== ideaDialogState) return;
-  const fetched = job !== undefined;
-  const active = fetched && job !== null && IDEA_JOB_ACTIVE_STATUSES.includes(job.status);
-  if (fetched) renderIdeaJob(job, active);
-  if (fetched) fillIdeaFocusOnce(state, job);
-  if (wasActive && fetched && !active) await refreshIdeaList();
-  if (!fetched || active) {
-    const nextWasActive = fetched ? active : wasActive;
-    ideaDialogPollTimer = setTimeout(() => refreshIdeaJob(nextWasActive), IDEA_DIALOG_POLL_MS);
-  }
-}
-
-function renderIdeaJob(job, active) {
-  const status = document.getElementById("idea-dialog-job");
-  status.textContent = job ? IDEA_JOB_STATUS_LABELS[job.status] || job.status : "";
-  status.title = (job && (job.error_message || job.result_summary)) || "";
-  document.getElementById("idea-dialog-run").disabled = active;
-  document.getElementById("idea-dialog-focus").disabled = active;
+function pollIdeaItem(item) {
+  clearTimeout(ideaViewPollTimer);
+  if (isIdeaJobActive(item.latest_job)) ideaViewPollTimer = setTimeout(() => refreshIdeaItem(true), IDEA_VIEW_POLL_MS);
 }
 
 /**
- * 観点の入力欄を前回のアイデア出しの観点で埋める
+ * 項目を取得し直して、最新のアイデア出しの状態を表示する
  *
- * 同じ観点で再実行しやすくするため、ダイアログを開いた直後に1回だけ行う。
- * 入力済みの内容は上書きしない。
+ * 実行中から終わった場合は提案一覧を取得し直す。
+ * 取得に失敗した場合（サーバー再起動中など）も取得し直す。
  */
-function fillIdeaFocusOnce(state, job) {
-  if (state.focusFilled) return;
-  state.focusFilled = true;
-  const input = document.getElementById("idea-dialog-focus");
-  if (job && job.focus && !input.value) input.value = job.focus;
+async function refreshIdeaItem(wasActive = false) {
+  const state = ideaViewState;
+  if (!state) return;
+  const item = await fetchIdeaJson(`/api/idea-sessions/${state.item.id}`).catch(() => null);
+  if (state !== ideaViewState) return;
+  if (!item) {
+    ideaViewPollTimer = setTimeout(() => refreshIdeaItem(wasActive), IDEA_VIEW_POLL_MS);
+    return;
+  }
+  state.item = item;
+  renderIdeaJob(item);
+  updateRepoItemRow(REPO_ITEM_TABS.idea, item);
+  if (wasActive && !isIdeaJobActive(item.latest_job)) await refreshIdeaList();
+  pollIdeaItem(item);
+}
+
+/**
+ * 最新のアイデア出しの状態と実行可否を表示する
+ *
+ * 実行中・Closeの項目では実行できない。
+ */
+function renderIdeaJob(item) {
+  const job = item.latest_job;
+  const status = document.getElementById("idea-view-job");
+  status.textContent = job ? IDEA_JOB_STATUS_LABELS[job.status] || job.status : "";
+  status.title = (job && (job.error_message || job.result_summary)) || "";
+  const open = item.state === REPO_ITEM_STATES.open;
+  const active = isIdeaJobActive(job);
+  document.getElementById("idea-view-run").disabled = active || !open;
+  document.getElementById("idea-view-focus").readOnly = active || !open;
+  if (!open) setIdeaViewMessage(IDEA_VIEW_MESSAGES.closed);
 }
 
 async function onRunIdeaGeneration() {
-  const state = ideaDialogState;
+  const state = ideaViewState;
   if (!state) return;
-  document.getElementById("idea-dialog-run").disabled = true;
-  const focus = document.getElementById("idea-dialog-focus").value;
+  document.getElementById("idea-view-run").disabled = true;
+  const focus = document.getElementById("idea-view-focus").value;
   try {
-    await postIdeaJson(`/api/projects/${state.projectId}/ideas/run`, { focus });
-    setIdeaDialogMessage("");
+    await postIdeaJson(`/api/idea-sessions/${state.item.id}/run`, { focus });
+    setIdeaViewMessage("");
   } catch (error) {
-    setIdeaDialogMessage(`${IDEA_DIALOG_MESSAGES.runFailed}: ${error.message}`);
+    setIdeaViewMessage(`${IDEA_VIEW_MESSAGES.runFailed}: ${error.message}`);
   }
-  await refreshIdeaJob();
+  await refreshIdeaItem(true);
 }
 
 async function refreshIdeaList() {
-  const state = ideaDialogState;
+  const state = ideaViewState;
   if (!state) return;
-  const list = document.getElementById("idea-dialog-list");
+  const list = document.getElementById("idea-view-list");
   try {
-    const ideas = await fetchIdeaJson(`/api/projects/${state.projectId}/ideas?tab=${state.tab}`);
-    if (state !== ideaDialogState) return;
+    const ideas = await fetchIdeaJson(`/api/idea-sessions/${state.item.id}/ideas?tab=${state.tab}`);
+    if (state !== ideaViewState) return;
     renderIdeaList(list, ideas);
   } catch (error) {
-    list.replaceChildren(ideaEmptyText(`${IDEA_DIALOG_MESSAGES.loadFailed}: ${error.message}`));
+    if (state === ideaViewState) list.replaceChildren(ideaEmptyText(`${IDEA_VIEW_MESSAGES.loadFailed}: ${error.message}`));
   }
 }
 
 function renderIdeaList(list, ideas) {
-  if (ideas.length === 0) list.replaceChildren(ideaEmptyText(IDEA_DIALOG_MESSAGES.empty));
+  if (ideas.length === 0) list.replaceChildren(ideaEmptyText(IDEA_VIEW_MESSAGES.empty));
   else list.replaceChildren(...ideas.map(renderIdeaCard));
 }
 
 function ideaEmptyText(text) {
-  const p = document.createElement("p");
-  p.className = "empty";
-  p.textContent = text;
-  return p;
+  return ideaElement("p", "empty", text);
 }
 
 function ideaElement(tag, className, text) {
@@ -253,9 +287,9 @@ function renderIdeaCardHeader(idea) {
 
 function renderIdeaCardBody(idea) {
   const sections = [
-    [IDEA_DIALOG_MESSAGES.rationale, idea.rationale],
-    [IDEA_DIALOG_MESSAGES.relatedFiles, idea.related_files.join("\n")],
-    [IDEA_DIALOG_MESSAGES.detail, idea.detail],
+    [IDEA_VIEW_MESSAGES.rationale, idea.rationale],
+    [IDEA_VIEW_MESSAGES.relatedFiles, idea.related_files.join("\n")],
+    [IDEA_VIEW_MESSAGES.detail, idea.detail],
   ];
   return [
     ideaElement("p", "idea-summary", idea.summary),
@@ -271,9 +305,9 @@ function renderIdeaSection(label, text) {
 
 function renderIdeaCardNotes(idea) {
   const notes = [];
-  if (idea.related_issue_number) notes.push(IDEA_DIALOG_MESSAGES.relatedIssue(idea.related_issue_number));
-  if (idea.created_issue_number) notes.push(IDEA_DIALOG_MESSAGES.createdIssue(idea.created_issue_number));
-  if (idea.reject_reason) notes.push(IDEA_DIALOG_MESSAGES.rejectReason(idea.reject_reason));
+  if (idea.related_issue_number) notes.push(IDEA_VIEW_MESSAGES.relatedIssue(idea.related_issue_number));
+  if (idea.created_issue_number) notes.push(IDEA_VIEW_MESSAGES.createdIssue(idea.created_issue_number));
+  if (idea.reject_reason) notes.push(IDEA_VIEW_MESSAGES.rejectReason(idea.reject_reason));
   return notes.map((text) => ideaElement("p", "idea-note", text));
 }
 
@@ -287,7 +321,7 @@ function renderIdeaActions(idea) {
   if (idea.status === IDEA_STATUS_PROPOSED) return renderProposedActions(idea);
   if (idea.status !== IDEA_STATUS_ISSUE_CREATED) return null;
   const actions = ideaElement("div", "idea-actions");
-  actions.appendChild(ideaActionButton(IDEA_DIALOG_MESSAGES.createSubtaskOnly, true, () =>
+  actions.appendChild(ideaActionButton(IDEA_VIEW_MESSAGES.createSubtaskOnly, true, () =>
     approveIdea(idea, IDEA_APPROVAL_MODES.withSubtask)));
   return actions;
 }
@@ -296,16 +330,16 @@ function renderProposedActions(idea) {
   const actions = ideaElement("div", "idea-actions");
   const reason = ideaElement("input", "idea-reject-reason");
   reason.type = "text";
-  reason.placeholder = IDEA_DIALOG_MESSAGES.rejectPlaceholder;
+  reason.placeholder = IDEA_VIEW_MESSAGES.rejectPlaceholder;
   actions.append(...renderApproveButtons(idea), reason,
-    ideaActionButton(IDEA_DIALOG_MESSAGES.reject, false, () => rejectIdea(idea, reason.value)));
+    ideaActionButton(IDEA_VIEW_MESSAGES.reject, false, () => rejectIdea(idea, reason.value)));
   return actions;
 }
 
 function renderApproveButtons(idea) {
   const label = idea.related_issue_number
-    ? IDEA_DIALOG_MESSAGES.createSubtaskOnly
-    : IDEA_DIALOG_MESSAGES.createWithSubtask;
+    ? IDEA_VIEW_MESSAGES.createSubtaskOnly
+    : IDEA_VIEW_MESSAGES.createWithSubtask;
   return [ideaActionButton(label, true, () => approveIdea(idea, IDEA_APPROVAL_MODES.withSubtask))];
 }
 
@@ -319,31 +353,31 @@ function ideaActionButton(label, primary, onClick) {
 function approveConfirmText(idea, execute) {
   const issueNumber = idea.related_issue_number || idea.created_issue_number;
   const text = issueNumber
-    ? IDEA_DIALOG_MESSAGES.confirmSubtaskOnly(idea.title, issueNumber)
-    : IDEA_DIALOG_MESSAGES.confirmWithSubtask(idea.title);
-  return execute ? `${text}\n${IDEA_DIALOG_MESSAGES.confirmExecute}` : text;
+    ? IDEA_VIEW_MESSAGES.confirmSubtaskOnly(idea.title, issueNumber)
+    : IDEA_VIEW_MESSAGES.confirmWithSubtask(idea.title);
+  return execute ? `${text}\n${IDEA_VIEW_MESSAGES.confirmExecute}` : text;
 }
 
 /**
  * 提案を承認する
  *
  * GitHubへ即時反映されるため、実行前に確認する。
- * 見出し行のチェックがあれば、MR作成後にそのまま実装を開始する。
+ * 実行ボタン横のチェックがあれば、MR作成後にそのまま実装を開始する。
  */
 async function approveIdea(idea, mode) {
-  const execute = document.getElementById("idea-dialog-execute").checked;
+  const execute = document.getElementById("idea-view-execute").checked;
   if (!confirm(approveConfirmText(idea, execute))) return;
   await runIdeaAction(async () => {
     const result = await postIdeaJson(`/api/ideas/${idea.id}/approve`, { mode, execute });
     const issueNumber = result.idea.related_issue_number || result.idea.created_issue_number;
-    setIdeaDialogMessage(IDEA_DIALOG_MESSAGES.approved(issueNumber));
+    setIdeaViewMessage(IDEA_VIEW_MESSAGES.approved(issueNumber));
   });
 }
 
 async function rejectIdea(idea, reason) {
   await runIdeaAction(async () => {
     await postIdeaJson(`/api/ideas/${idea.id}/reject`, { reason });
-    setIdeaDialogMessage("");
+    setIdeaViewMessage("");
   });
 }
 
@@ -353,28 +387,19 @@ async function rejectIdea(idea, reason) {
  * 失敗時は文言を表示する（承認前の状態に戻った提案も一覧に反映する）。
  */
 async function runIdeaAction(action) {
-  const state = ideaDialogState;
+  const state = ideaViewState;
   if (!state || state.busy) return;
   state.busy = true;
   setIdeaActionsDisabled(true);
   try {
     await action();
   } catch (error) {
-    setIdeaDialogMessage(`${IDEA_DIALOG_MESSAGES.actionFailed}: ${error.message}`);
+    if (state === ideaViewState) setIdeaViewMessage(`${IDEA_VIEW_MESSAGES.actionFailed}: ${error.message}`);
   }
   state.busy = false;
   await refreshIdeaList();
 }
 
 function setIdeaActionsDisabled(disabled) {
-  document.querySelectorAll("#idea-dialog-list .idea-action-button").forEach((b) => (b.disabled = disabled));
+  document.querySelectorAll("#idea-view-list .idea-action-button").forEach((b) => (b.disabled = disabled));
 }
-
-function setupIdeaDialog() {
-  document.getElementById("idea-dialog-run").addEventListener("click", onRunIdeaGeneration);
-  document.getElementById("idea-dialog-close").addEventListener("click", closeIdeaDialog);
-  // Escキーで閉じた場合も取得を止める
-  document.getElementById("idea-dialog").addEventListener("close", onIdeaDialogClosed);
-}
-
-setupIdeaDialog();
