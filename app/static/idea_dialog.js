@@ -16,7 +16,8 @@ const IDEA_TABS = [
   { tab: "rejected", label: "却下済み" },
 ];
 // 承認の種類（core/idea_approval.pyのApprovalModeと合わせる）
-const IDEA_APPROVAL_MODES = { issueOnly: "issue_only", withSubtask: "with_subtask" };
+// 画面からはMRまで作成する承認のみ行う
+const IDEA_APPROVAL_MODES = { withSubtask: "with_subtask" };
 // アイデア出しジョブの実行中の状態（core/idea_queue.pyのIdeaJobStatusと合わせる）
 const IDEA_JOB_ACTIVE_STATUSES = ["queued", "running"];
 // 承認・却下の操作を置く提案の状態（core/ideas.pyのIdeaStatusと合わせる）
@@ -61,13 +62,12 @@ const IDEA_DIALOG_MESSAGES = {
   createdIssue: (n) => `作成したIssue #${n}`,
   rejectReason: (r) => `却下理由：${r}`,
   rejectPlaceholder: "却下理由（任意・次回の提案に反映）",
-  createIssue: "Issueを作成",
-  createWithSubtask: "サブタスクも作成",
-  createSubtaskOnly: "サブタスクを作成",
+  createWithSubtask: "Issue・MRを作成",
+  createSubtaskOnly: "MRを作成",
   reject: "却下",
-  confirmIssueOnly: (t) => `提案「${t}」でGitHubにIssueを作成しますか？`,
-  confirmWithSubtask: (t) => `提案「${t}」でIssue・サブタスク（Draft PR）を作成し、実装を開始しますか？`,
-  confirmSubtaskOnly: (t, n) => `提案「${t}」でIssue #${n} にサブタスク（Draft PR）を作成し、実装を開始しますか？`,
+  confirmWithSubtask: (t) => `提案「${t}」でIssue・MR（Draft PR）を作成しますか？`,
+  confirmSubtaskOnly: (t, n) => `提案「${t}」でIssue #${n} にMR（Draft PR）を作成しますか？`,
+  confirmExecute: "作成後、そのまま実装を開始します。",
   approved: (n) => `Issue #${n} に反映しました`,
 };
 
@@ -262,8 +262,8 @@ function renderIdeaCardNotes(idea) {
 /**
  * 提案の状態に応じた操作
  *
- * 未処理：Issueを作成／サブタスクも作成／却下（既存Issue配下はサブタスクを作成／却下）。
- * Issue作成済：サブタスクを作成（作成失敗時の再実行を兼ねる）。
+ * 未処理：Issue・MRを作成／却下（既存Issue配下はMRを作成／却下）。
+ * Issue作成済：MRを作成（作成失敗時の再実行を兼ねる）。
  */
 function renderIdeaActions(idea) {
   if (idea.status === IDEA_STATUS_PROPOSED) return renderProposedActions(idea);
@@ -285,15 +285,10 @@ function renderProposedActions(idea) {
 }
 
 function renderApproveButtons(idea) {
-  if (idea.related_issue_number) {
-    return [ideaActionButton(IDEA_DIALOG_MESSAGES.createSubtaskOnly, true, () =>
-      approveIdea(idea, IDEA_APPROVAL_MODES.withSubtask))];
-  }
-  return [
-    ideaActionButton(IDEA_DIALOG_MESSAGES.createIssue, true, () => approveIdea(idea, IDEA_APPROVAL_MODES.issueOnly)),
-    ideaActionButton(IDEA_DIALOG_MESSAGES.createWithSubtask, false, () =>
-      approveIdea(idea, IDEA_APPROVAL_MODES.withSubtask)),
-  ];
+  const label = idea.related_issue_number
+    ? IDEA_DIALOG_MESSAGES.createSubtaskOnly
+    : IDEA_DIALOG_MESSAGES.createWithSubtask;
+  return [ideaActionButton(label, true, () => approveIdea(idea, IDEA_APPROVAL_MODES.withSubtask))];
 }
 
 function ideaActionButton(label, primary, onClick) {
@@ -303,22 +298,25 @@ function ideaActionButton(label, primary, onClick) {
   return button;
 }
 
-function approveConfirmText(idea, mode) {
+function approveConfirmText(idea, execute) {
   const issueNumber = idea.related_issue_number || idea.created_issue_number;
-  if (issueNumber) return IDEA_DIALOG_MESSAGES.confirmSubtaskOnly(idea.title, issueNumber);
-  if (mode === IDEA_APPROVAL_MODES.issueOnly) return IDEA_DIALOG_MESSAGES.confirmIssueOnly(idea.title);
-  return IDEA_DIALOG_MESSAGES.confirmWithSubtask(idea.title);
+  const text = issueNumber
+    ? IDEA_DIALOG_MESSAGES.confirmSubtaskOnly(idea.title, issueNumber)
+    : IDEA_DIALOG_MESSAGES.confirmWithSubtask(idea.title);
+  return execute ? `${text}\n${IDEA_DIALOG_MESSAGES.confirmExecute}` : text;
 }
 
 /**
  * 提案を承認する
  *
  * GitHubへ即時反映されるため、実行前に確認する。
+ * 見出し行のチェックがあれば、MR作成後にそのまま実装を開始する。
  */
 async function approveIdea(idea, mode) {
-  if (!confirm(approveConfirmText(idea, mode))) return;
+  const execute = document.getElementById("idea-dialog-execute").checked;
+  if (!confirm(approveConfirmText(idea, execute))) return;
   await runIdeaAction(async () => {
-    const result = await postIdeaJson(`/api/ideas/${idea.id}/approve`, { mode });
+    const result = await postIdeaJson(`/api/ideas/${idea.id}/approve`, { mode, execute });
     const issueNumber = result.idea.related_issue_number || result.idea.created_issue_number;
     setIdeaDialogMessage(IDEA_DIALOG_MESSAGES.approved(issueNumber));
   });
