@@ -1,99 +1,81 @@
-# サブタスク: [IdeaMan] サーバー・ワーカーのログ出力をloggingにそろえ、時刻を付けるー①
+# サブタスク: [IdeaMan] ワーカーのジョブ処理で想定外の例外が起きても、ワーカーを停止させないー①
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-サーバー・ワーカーのログ出力をloggingにそろえ、時刻を付ける
+ワーカーのジョブ処理で想定外の例外が起きても、ワーカーを停止させない
 
 ## 概要
 
-ログはprintとloggingが混在していて、logging側の出力設定もありません。失敗の発生時刻が残らず、障害の原因を後から追いにくくなっています。
+ワーカーで想定外の例外が起きると、プロセスが落ちます。対象ジョブは失敗理由が残らないまま、ハートビート途絶まで実行中に残ります。
 
 ## 詳細
 
-- サーバー起動時（app/main.pyのlifespan）とワーカー起動時（worker/main.pyのmain）にlogging.basicConfigを設定する。
-- 出力形式は時刻・ロガー名・レベル付きとする。
-- worker・core配下のprintをlogger.info/warningに置き換える。
-- 既存の[worker]等の接頭辞は、ロガー名で代用する。
-- 必要に応じて、ファイルへの出力やローテーションも設定項目として検討する。
+- process_jobの前処理（set_worker_state・_load_subtask_and_project・record_event）をtryの中に移す。
+- 失敗はfailedとして実際のエラー内容を記録する。
+- run_loopの1周分を例外で保護する。
+- _merge_loopと同じく、ログを出して次の周回へ進む。
+- サブタスク・プロジェクトが削除済みの場合のテストを追加する。
+- DB一時エラーでループが継続することのテストも追加する。
 
 ## 根拠
 
-app・core・worker配下にはlogging.basicConfigがありません。
-そのため、logger.warningは時刻なしで標準エラーに出ます。
-logger.warningの使用箇所は次のとおりです。
-- core/merge_queue.py:163,177
-- core/cli_session.py:369
-- core/subtask_rollback.py:72
-- core/github_client.py:266
-
-logger.infoは出力されません。
-一方、同じ種類の失敗ログをprintで出している箇所もあります。
-- core/pr_sync.py:147,183
-- core/deploy.py:190
-- core/claude_usage.py:134
-
-ワーカーのログはprintのみです（worker/main.py 10か所、worker/pool.py 3か所、worker/idea_runner.py 2か所）。
-#153 では、TLSタイムアウト・バッファ超過による失敗が短期間に何度も起きています。
-時刻付きのログが無いと、ジョブ・同期処理・マージ処理の時系列を突き合わせにくくなります。
+worker/main.py:141-144の前処理はtryの外にあります。
+そのため、サブタスクが見つからないときのAttributeErrorはrun_loopまで伝わり、ワーカーが終了します。
+run_loop（worker/main.py:203-210）には例外の保護がありません。
+_cleanup_stale_recordsでのDBロック等でも同じくワーカーが終了します。
+一方、core/merge_queue.py:172-177の_merge_loopは「DBの一時的な失敗で処理スレッドを止めない」として例外を保護しています。
+ワーカーが落ちると、ジョブはstatus=runningのまま残ります。
+その後、job_stale_timeout後にneeds_attentionになります（core/job_queue.py:123-139）。
+記録される理由は「ワーカーからの応答が途絶えたため中断しました」だけで、本当の原因が残りません。
 
 ## 関連ファイル
 
-- app/main.py:22
-- worker/main.py:232
-- worker/pool.py:88
-- core/pr_sync.py:147
-- core/deploy.py:190
-- core/claude_usage.py:134
-- core/merge_queue.py:163
-## 実行指示（2026-11-23 23:00:30 UTC）
+- worker/main.py:134
+- worker/main.py:197
+- worker/main.py:125
+- core/merge_queue.py:170
+- core/job_queue.py:123
+- worker/pool.py:97
+## 実行指示（2026-11-23 23:04:31 UTC）
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-サーバー・ワーカーのログ出力をloggingにそろえ、時刻を付ける
+ワーカーのジョブ処理で想定外の例外が起きても、ワーカーを停止させない
 
 ## 概要
 
-ログはprintとloggingが混在していて、logging側の出力設定もありません。失敗の発生時刻が残らず、障害の原因を後から追いにくくなっています。
+ワーカーで想定外の例外が起きると、プロセスが落ちます。対象ジョブは失敗理由が残らないまま、ハートビート途絶まで実行中に残ります。
 
 ## 詳細
 
-- サーバー起動時（app/main.pyのlifespan）とワーカー起動時（worker/main.pyのmain）にlogging.basicConfigを設定する。
-- 出力形式は時刻・ロガー名・レベル付きとする。
-- worker・core配下のprintをlogger.info/warningに置き換える。
-- 既存の[worker]等の接頭辞は、ロガー名で代用する。
-- 必要に応じて、ファイルへの出力やローテーションも設定項目として検討する。
+- process_jobの前処理（set_worker_state・_load_subtask_and_project・record_event）をtryの中に移す。
+- 失敗はfailedとして実際のエラー内容を記録する。
+- run_loopの1周分を例外で保護する。
+- _merge_loopと同じく、ログを出して次の周回へ進む。
+- サブタスク・プロジェクトが削除済みの場合のテストを追加する。
+- DB一時エラーでループが継続することのテストも追加する。
 
 ## 根拠
 
-app・core・worker配下にはlogging.basicConfigがありません。
-そのため、logger.warningは時刻なしで標準エラーに出ます。
-logger.warningの使用箇所は次のとおりです。
-- core/merge_queue.py:163,177
-- core/cli_session.py:369
-- core/subtask_rollback.py:72
-- core/github_client.py:266
-
-logger.infoは出力されません。
-一方、同じ種類の失敗ログをprintで出している箇所もあります。
-- core/pr_sync.py:147,183
-- core/deploy.py:190
-- core/claude_usage.py:134
-
-ワーカーのログはprintのみです（worker/main.py 10か所、worker/pool.py 3か所、worker/idea_runner.py 2か所）。
-#153 では、TLSタイムアウト・バッファ超過による失敗が短期間に何度も起きています。
-時刻付きのログが無いと、ジョブ・同期処理・マージ処理の時系列を突き合わせにくくなります。
+worker/main.py:141-144の前処理はtryの外にあります。
+そのため、サブタスクが見つからないときのAttributeErrorはrun_loopまで伝わり、ワーカーが終了します。
+run_loop（worker/main.py:203-210）には例外の保護がありません。
+_cleanup_stale_recordsでのDBロック等でも同じくワーカーが終了します。
+一方、core/merge_queue.py:172-177の_merge_loopは「DBの一時的な失敗で処理スレッドを止めない」として例外を保護しています。
+ワーカーが落ちると、ジョブはstatus=runningのまま残ります。
+その後、job_stale_timeout後にneeds_attentionになります（core/job_queue.py:123-139）。
+記録される理由は「ワーカーからの応答が途絶えたため中断しました」だけで、本当の原因が残りません。
 
 ## 関連ファイル
 
-- app/main.py:22
-- worker/main.py:232
-- worker/pool.py:88
-- core/pr_sync.py:147
-- core/deploy.py:190
-- core/claude_usage.py:134
-- core/merge_queue.py:163
+- worker/main.py:134
+- worker/main.py:197
+- worker/main.py:125
+- core/merge_queue.py:170
+- core/job_queue.py:123
+- worker/pool.py:97
 

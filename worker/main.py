@@ -129,28 +129,39 @@ def _execute_job(job_id: int, subtask: Subtask, project: Project) -> None:
 
 
 def _load_subtask_and_project(subtask_id: int) -> tuple[Subtask, Project]:
+    """ジョブ対象のサブタスクとプロジェクトを読み込む
+
+    削除済みの場合は、原因が分かるメッセージでRuntimeErrorを送出する。
+    """
     with SessionLocal() as session:
         subtask = session.get(Subtask, subtask_id)
+        if subtask is None:
+            raise RuntimeError(f"サブタスク(id={subtask_id})が見つかりません")
         project = session.get(Project, subtask.project_id)
+        if project is None:
+            raise RuntimeError(f"プロジェクト(id={subtask.project_id})が見つかりません")
         session.expunge(subtask)
         session.expunge(project)
     return subtask, project
 
 
+def _start_job(job_id: int, subtask_id: int, worker_id: int) -> None:
+    set_worker_state(worker_id, state=WorkerState.BUSY, current_job_id=job_id)
+    subtask, project = _load_subtask_and_project(subtask_id)
+    record_event(job_id, event_type="instruction", content=subtask.instruction)
+    _run_with_heartbeat(job_id, worker_id, lambda: _execute_job(job_id, subtask, project))
+
+
 def process_job(job: dict, worker_id: int) -> None:
     """実装ジョブを1件実行する
 
+    前処理を含む失敗は、実際のエラー内容をジョブに記録する。
     Claudeの利用上限による失敗は、failedと区別してrate_limitedにする。
     """
     job_id = job["job_id"]
     logger.info("job %s (subtask %s) を実行開始", job_id, job["subtask_id"])
-    set_worker_state(worker_id, state=WorkerState.BUSY, current_job_id=job_id)
-
-    subtask, project = _load_subtask_and_project(job["subtask_id"])
-    record_event(job_id, event_type="instruction", content=subtask.instruction)
-
     try:
-        _run_with_heartbeat(job_id, worker_id, lambda: _execute_job(job_id, subtask, project))
+        _start_job(job_id, job["subtask_id"], worker_id)
     except Exception as exc:  # noqa: BLE001
         record_event(job_id, event_type="error", content=str(exc))
         status = (
@@ -209,15 +220,31 @@ def run_loop(worker_id: int) -> None:
 
     自分のワーカー行が削除された場合は、管理対象外になったとみなして終了する。
     再登録はしないため、停止されたワーカーが設定数を超えて残ることはない。
+    1周分の想定外の例外はログを出して次の周回へ進む。
     """
     while True:
-        if not set_worker_state(worker_id, state=WorkerState.IDLE, current_job_id=None):
-            logger.info("自分のワーカー行が削除されたため終了します")
-            return
-        _cleanup_stale_records()
-
-        if not _process_next_job(worker_id):
+        try:
+            if not _run_iteration(worker_id):
+                return
+        except Exception as exc:  # noqa: BLE001
+            # DBの一時的な失敗等でワーカーを止めない
+            logger.warning("ジョブ処理の周回で例外が発生しました: %r", exc)
             time.sleep(settings.worker_poll_interval_seconds)
+
+
+def _run_iteration(worker_id: int) -> bool:
+    """ジョブの取得・実行を1周分行う
+
+    自分のワーカー行が削除されていた場合はFalseを返す。
+    """
+    if not set_worker_state(worker_id, state=WorkerState.IDLE, current_job_id=None):
+        logger.info("自分のワーカー行が削除されたため終了します")
+        return False
+    _cleanup_stale_records()
+
+    if not _process_next_job(worker_id):
+        time.sleep(settings.worker_poll_interval_seconds)
+    return True
 
 
 def _process_next_job(worker_id: int) -> bool:

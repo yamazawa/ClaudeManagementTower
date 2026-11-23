@@ -2,75 +2,59 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実装レポート サーバー・ワーカーのログ出力をloggingにそろえ、時刻を付けるー①</title>
+<title>作業レポート: ワーカーの例外保護</title>
 <style>
 body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
-h1 { font-size: 1.4em; }
-h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; padding-bottom: .2em; margin-top: 1.6em; }
-table { border-collapse: collapse; margin: .5em 0; }
-th, td { border: 1px solid #bbb; padding: .3em .6em; text-align: left; vertical-align: top; }
-th { background: #f0f0f0; }
-.ok { color: #fff; background: #2a7a2a; padding: .1em .6em; border-radius: 4px; }
-code { background: #f4f4f4; padding: 0 .3em; }
-pre { background: #f4f4f4; padding: .5em; }
+h1 { font-size: 1.4em; } h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; margin-top: 1.6em; }
+table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #bbb; padding: 4px 8px; text-align: left; vertical-align: top; }
+th { background: #f0f0f0; } code { background: #f4f4f4; padding: 0 3px; }
+.ok { color: #0a6b0a; font-weight: bold; }
 </style>
 </head>
 <body>
-<h1>実装レポート</h1>
+<h1>作業レポート: ワーカーのジョブ処理で想定外の例外が起きても、ワーカーを停止させない</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#238</td></tr>
-<tr><th>サブタスク</th><td>[IdeaMan] サーバー・ワーカーのログ出力をloggingにそろえ、時刻を付けるー①</td></tr>
-<tr><th>ブランチ</th><td><code>issue-238-28af7616-subtask-1</code>（PR #239, Draft）</td></tr>
+<tr><th>Issue</th><td>#245（アイデアマン提案）</td></tr>
+<tr><th>サブタスク</th><td>ワーカーのジョブ処理で想定外の例外が起きても、ワーカーを停止させない ①</td></tr>
+<tr><th>ブランチ</th><td><code>issue-245-9bee1daf-subtask-1</code>（push済み）</td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
-<p><span class="ok">成功</span>（run_all経由での実起動確認は未実施）</p>
-<p>サーバー・ワーカー・起動管理の各プロセスでlogging.basicConfigを設定した。</p>
-<p>出力形式は「時刻 レベル [ロガー名] メッセージ」とした。</p>
-<p>app・core・worker・run_all.py配下のprintは全てloggerに置き換えた。</p>
-<pre>2026-11-24 08:03:44 INFO [worker.main] 起動しました: test
-2026-11-24 08:03:44 WARNING [core.pr_sync] 同期に失敗しました: x</pre>
+<p class="ok">成功</p>
+<p>提案の詳細4項目（前処理のtry内移動・failed記録・run_loop保護・テスト追加）をすべて実装した。</p>
 
 <h2>3. 変更内容</h2>
 <table>
-<tr><th>No.</th><th>コミット</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td>logging共通設定を追加</td><td><code>core/logging_config.py</code>（新規）, <code>core/config.py</code>, <code>.env.example</code>, <code>tests/test_logging_config.py</code>（新規）</td><td>configure_logging()と出力形式の定数を追加。設定項目LOG_LEVEL（既定INFO）を追加。</td></tr>
-<tr><td>2</td><td>各プロセスの起動時にlogging設定を適用</td><td><code>app/main.py</code>, <code>worker/main.py</code>, <code>run_all.py</code></td><td>lifespan・ワーカーmain・run_allのmainの先頭でconfigure_logging()を呼ぶ。</td></tr>
-<tr><td>3</td><td>worker配下のprintをloggingに置換</td><td><code>worker/main.py</code>, <code>worker/pool.py</code>, <code>worker/idea_runner.py</code></td><td>print 15か所をlogger.info/warningに置換。</td></tr>
-<tr><td>4</td><td>core配下のprintをlogging.warningに置換</td><td><code>core/pr_sync.py</code>, <code>core/deploy.py</code>, <code>core/claude_usage.py</code></td><td>失敗ログ4か所をlogger.warningに置換。</td></tr>
-<tr><td>5</td><td>run_allのprintをloggingに置換</td><td><code>run_all.py</code></td><td>print 5か所をlogger.infoに置換。</td></tr>
+<tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
+<tr><td>1</td><td><code>worker/main.py</code> <code>_load_subtask_and_project</code></td><td>サブタスク・プロジェクトが削除済みの場合、原因を示すRuntimeErrorを送出する。</td></tr>
+<tr><td>2</td><td><code>worker/main.py</code> <code>_start_job</code>（新規）/ <code>process_job</code></td><td>set_worker_state・読込・record_event・実行を<code>_start_job</code>にまとめ、tryの中で呼ぶ。<br>失敗は実際のエラー内容でfailed（利用上限ならrate_limited）として記録する。</td></tr>
+<tr><td>3</td><td><code>worker/main.py</code> <code>run_loop</code> / <code>_run_iteration</code>（新規）</td><td>1周分を<code>_run_iteration</code>に切り出し、run_loopで例外を保護する。<br>例外時はログを出し、ポーリング間隔だけ待って次の周回へ進む。</td></tr>
+<tr><td>4</td><td><code>tests/test_worker_main.py</code></td><td>サブタスク削除済み・プロジェクト削除済み・前処理でのDBエラー・run_loopの継続のテストを追加。</td></tr>
 </table>
+<p>コミット: 8de67ff（前処理）、3d5c672（run_loop）、96bd283（テスト）</p>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>run_all.pyにもbasicConfigを設定し、printも置換した</td><td>worker/pool.pyはワーカープロセスではなくrun_allのプロセス内で動く。run_allで設定しないとプールのinfoログが出力されないため。</td></tr>
-<tr><td>2</td><td>worker.main・run_allのロガー名を文字列で固定した</td><td>-m起動・直接実行では__name__が__main__になり、接頭辞の代用にならないため。</td></tr>
-<tr><td>3</td><td>basicConfigはforce指定なしとした</td><td>pytestやuvicornが既にハンドラを付けている場合に上書きしないため。uvicornは自前のロガーのみ設定し、ルートは未設定なのでサーバーでは有効になる。</td></tr>
-<tr><td>4</td><td>ファイル出力・ローテーションは今回実装しなかった</td><td>複数ワーカープロセスが同一ファイルをRotatingFileHandlerで書くと、Windowsではローテーション時にファイルロックで失敗する。提案でも「必要に応じて検討」の扱いのため、レベル設定のみに留めた。</td></tr>
-<tr><td>5</td><td>レベルの割り当て</td><td>失敗・要確認化・ワーカー異常終了による再起動はwarning、起動・開始・完了・再投入等はinfo。</td></tr>
-<tr><td>6</td><td>%形式の遅延フォーマットを採用</td><td>既存のlogger.warning呼び出しの書き方にそろえた。</td></tr>
+<tr><td>1</td><td>削除済み時はAttributeErrorではなく明示的なRuntimeErrorを送出する。</td><td>ジョブのerror_messageに本当の原因が分かる文言を残すため。</td></tr>
+<tr><td>2</td><td>ログは<code>logging</code>ではなく<code>print</code>を使う。</td><td>worker配下は既存でprintによるログ出力に統一されているため。</td></tr>
+<tr><td>3</td><td>run_loopの例外時はポーリング間隔だけsleepしてから再試行する。</td><td>DBロックの継続時にビジーループでログが溢れるのを防ぐため。_merge_loopの待機と同等の挙動。</td></tr>
+<tr><td>4</td><td>process_jobのexcept内でrecord_event/finish_jobが失敗した場合は、run_loop側の保護に任せる。</td><td>二重のtryで複雑化させないため。この場合ジョブはハートビート途絶で従来通りneeds_attentionとなるが、ワーカーは停止しない。</td></tr>
+<tr><td>5</td><td>process_idea_jobには手を入れない。</td><td>提案の範囲外。run_loopの保護によりワーカー停止は防がれる。</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<table>
-<tr><th>内容</th><th>結果</th></tr>
-<tr><td><code>./.venv/Scripts/python.exe -m pytest -q</code>（全体）</td><td>526 passed</td></tr>
-<tr><td>新規 <code>tests/test_logging_config.py</code>（形式・レベル・設定値既定・既存ハンドラ維持）</td><td>4 passed</td></tr>
-<tr><td>実プロセスでconfigure_logging後にworker.main・core.pr_syncのロガーから出力</td><td>時刻・レベル・ロガー名付きで出力、DEBUGは非表示を確認</td></tr>
-<tr><td>run_all.py経由でのサーバー・ワーカー実起動</td><td>未実施（稼働中の管理塔と競合するため。人間による確認を依頼）</td></tr>
-</table>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code> → <span class="ok">526 passed</span></p>
+<p>実ワーカー起動での動作確認は未実施（ガイドラインに従い人間に依頼）。</p>
 
-<h2>6. 残課題・リスク・確認ポイント</h2>
+<h2>6. 残課題・レビュー観点</h2>
 <ul>
-<li>ファイル出力・ローテーションは未対応。必要ならプロセスごとのファイル分割等を別タスクで検討する。</li>
-<li>LOG_LEVELに不正な値を設定すると起動時にValueErrorで停止する。</li>
-<li>従来は表示されなかったcore配下のlogger.info（存在する場合）が今後は表示される。</li>
-<li>uvicornのアクセスログは従来どおりuvicorn独自形式（時刻なし）のまま。</li>
-<li>確認ポイント：run_all.pyで起動し、サーバー・ワーカー・プールのログに時刻が付くこと。</li>
-<li>確認ポイント：job完了ログに結果テキスト全文が出る挙動は従来のprintと同じ。</li>
+<li>process_jobの例外処理中（record_event/finish_job）にDBエラーが起きた場合、ジョブの失敗理由は記録されない（判断No.4）。</li>
+<li>DBが恒久的に使えない状態では、ワーカーはポーリング間隔ごとにログを出し続ける。終了させる仕組みは入れていない。</li>
+<li>process_idea_jobの前処理にも同種の問題がないか、別途確認するとよい。</li>
+<li>確認ポイント: <code>worker/main.py</code>の<code>_start_job</code>・<code>run_loop</code>・<code>_run_iteration</code>。</li>
 </ul>
 </body>
 </html>
