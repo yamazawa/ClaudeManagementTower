@@ -1161,6 +1161,14 @@ Issue名・区切り文字・MR固有名を1行に並べる。
   display: none;
 }
 
+/* 操作ボタン下の状態表示
+
+見出し用の負のマージンを打ち消し、ボタンと重ならないようにする。
+*/
+#subtask-action-status {
+  margin: 6px 0 0;
+}
+
 @media (max-width: 680px) {
   /* 長いタイトルで列が広がらないよう、列幅の下限を0にする */
   #issue-view {
