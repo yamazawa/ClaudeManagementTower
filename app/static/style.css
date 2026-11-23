@@ -883,7 +883,7 @@ section.collapsed > .section-title-row {
 
 /* Issue一覧・MR一覧の共通レイアウト
 
-タイトルを左、状態表示を右寄せで1行に並べる。
+番号リンク・タイトル・MR数（状態）・閉じるボタンを1行に並べる。
 */
 #issue-list-items,
 #subtask-list-items {
@@ -895,13 +895,14 @@ section.collapsed > .section-title-row {
 .issue-item,
 .subtask-row {
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
+  justify-content: flex-start;
+  align-items: center;
   gap: 8px;
   padding: 10px var(--list-row-padding-x);
   border: var(--list-row-border-width) solid var(--line);
   border-radius: 6px;
   margin-bottom: 8px;
+  font-size: 13.5px;
   cursor: pointer;
 }
 
@@ -914,17 +915,6 @@ section.collapsed > .section-title-row {
 .subtask-row.active {
   border-color: var(--accent);
   background: var(--soft);
-}
-
-/* Issue一覧・MR一覧の行
-
-見出しと同様に番号リンク・タイトル・MR数（状態）・閉じるボタンを1行に並べる。
-*/
-.issue-item,
-.subtask-row {
-  align-items: center;
-  justify-content: flex-start;
-  font-size: 13.5px;
 }
 
 .issue-item .title-action-button {
