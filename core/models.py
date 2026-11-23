@@ -125,6 +125,8 @@ class CliMessage(Base):
     cli_session_id: Mapped[int] = mapped_column(ForeignKey("cli_sessions.id"))
     role: Mapped[str]
     content: Mapped[str]
+    # 利用者の発言に添付したファイル（ID・ファイル名・画像かどうかのJSON配列）
+    attachments: Mapped[str] = mapped_column(default="[]")
     created_at: Mapped[datetime] = mapped_column(default=_now)
 
 

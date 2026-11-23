@@ -28,6 +28,7 @@ ADDED_COLUMNS = [
     ("idea_jobs", "idea_session_id", "INTEGER REFERENCES idea_sessions(id)"),
     ("cli_sessions", "title", "VARCHAR NOT NULL DEFAULT ''"),
     ("cli_sessions", "state", "VARCHAR NOT NULL DEFAULT 'open'"),
+    ("cli_messages", "attachments", "VARCHAR NOT NULL DEFAULT '[]'"),
 ]
 
 
