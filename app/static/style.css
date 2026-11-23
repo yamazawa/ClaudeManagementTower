@@ -68,7 +68,7 @@
   box-sizing: border-box;
 }
 
-/* ヘッダーの高さ分、スクロール先の位置をずらす（高さはapp.jsで設定する） */
+/* ヘッダーの高さ分、スクロール先の位置をずらす（高さはcommon.jsで設定する） */
 html {
   scroll-padding-top: var(--header-height, 0px);
 }
@@ -1186,7 +1186,7 @@ h2 {
   font-size: 13px;
 }
 
-/* 実装ジョブの状態ごとの見た目（app.jsのJOB_STATUS_CLASSと合わせる） */
+/* 実装ジョブの状態ごとの見た目（common.jsのJOB_STATUS_CLASSと合わせる） */
 .job-status-active::before {
   content: "";
   display: inline-block;

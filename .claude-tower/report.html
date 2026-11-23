@@ -2,65 +2,83 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実行レポート Issue #227 サブタスク1</title>
+<title>実装レポート #235 サブタスク1</title>
 <style>
 body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; }
 h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; padding-bottom: .2em; margin-top: 1.6em; }
-table { border-collapse: collapse; }
+table { border-collapse: collapse; margin: .5em 0; }
 th, td { border: 1px solid #bbb; padding: .3em .6em; text-align: left; vertical-align: top; }
-th { background: #f2f2f2; }
-.ok { color: #fff; background: #2e7d32; padding: .1em .6em; border-radius: 3px; }
-code { background: #f4f4f4; padding: 0 .2em; }
+th { background: #f0f0f0; }
+.ok { color: #fff; background: #2a7a2a; padding: .1em .6em; border-radius: 4px; }
+code { background: #f4f4f4; padding: 0 .3em; }
 </style>
 </head>
 <body>
-<h1>実行レポート</h1>
+<h1>実装レポート</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#227 [IdeaMan] 起動時に、承認処理中のまま残った提案を復旧する</td></tr>
-<tr><th>サブタスク</th><td>サブタスク1（PR #228、base: master）</td></tr>
-<tr><th>ブランチ</th><td><code>issue-227-0b6c3ec7-subtask-1</code></td></tr>
+<tr><th>Issue</th><td>#235 [IdeaMan] app.jsを機能単位のファイルに分割する</td></tr>
+<tr><th>サブタスク</th><td>app.jsを機能単位のファイルに分割するー①</td></tr>
+<tr><th>ブランチ</th><td><code>issue-235-bcd325ef-subtask-1</code></td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
-<p><span class="ok">成功</span></p>
-<p>起動時に承認処理中（approved_*）の提案を承認前の状態へ戻す処理を追加した。</p>
+<p><span class="ok">成功</span>（ブラウザでの実機確認は未実施）</p>
+<p>app.js（2484行）を、共通・機能単位の8ファイルに分割した。</p>
+<p>関数・定数は移動のみで、処理内容は変えていない。</p>
 
-<h2>3. 実施した変更</h2>
+<h2>3. 変更内容</h2>
 <table>
-<tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td><code>core/idea_approval.py</code></td><td>戻す規則を<code>_release</code>に切り出し、<code>release_claim</code>と新設の<code>recover_interrupted_claims</code>で共用</td></tr>
-<tr><td>2</td><td><code>app/main.py</code></td><td>lifespanで<code>recover_interrupted_sessions</code>の直後に<code>recover_interrupted_claims</code>を呼び出し</td></tr>
-<tr><td>3</td><td><code>tests/test_idea_approval.py</code></td><td>状態ごとの復旧結果のテストを2件追加</td></tr>
-<tr><td>4</td><td><code>IMPLEMENTATION_PLAN.md</code></td><td>9章「人間の確認が必要な事項」の手動DB修正の記述を更新し、Issue重複の残存リスクを追記</td></tr>
+<tr><th>No.</th><th>コミット</th><th>内容</th></tr>
+<tr><td>1</td><td>機能単位のファイルへ関数を移動</td><td>提案の区切りでapp.jsから各ファイルへ移動し、index.htmlのscriptタグを依存順に追加した。</td></tr>
+<tr><td>2</td><td>共通処理をcommon.jsに集約</td><td>postJson・postAction・sleepをcommon.jsへ移動した。</td></tr>
+<tr><td>3</td><td>Issue内容の処理をIssueのファイルへ移動</td><td>MRのファイルに混ざっていたIssueの選択・内容表示・開閉・タイトル編集を移動した。<br>renderTitleNumberはcommon.jsへ移動した。</td></tr>
+<tr><td>4</td><td>issue_list.jsをissue_view.jsへ改名</td><td>Issue内容を含むため、subtask_view.jsと名前を揃えた。</td></tr>
+<tr><td>5</td><td>コメントの参照先ファイル名を更新</td><td>style.css・core/lifecycle.py・core/mr_status.pyのapp.js参照を移動先に合わせた。</td></tr>
 </table>
-<p>コミット：5f811d7（復旧処理＋テスト）、78cd315（起動時の呼び出し）、800265f（9章更新）</p>
+
+<p>分割後のファイル構成（index.htmlの読み込み順）</p>
+<table>
+<tr><th>ファイル</th><th>行数</th><th>内容</th></tr>
+<tr><td><code>common.js</code></td><td>504</td><td>共有状態・状態定義・画面ブロック・タイトル編集・escapeHtml・postJson等</td></tr>
+<tr><td><code>mr_status_filter.js</code></td><td>209</td><td>MRステータスフィルタ・レート制限表示</td></tr>
+<tr><td><code>deploy.js</code></td><td>172</td><td>Deployボタン・確認ダイアログ・デプロイ実行</td></tr>
+<tr><td><code>issue_view.js</code></td><td>458</td><td>Issue一覧・Issue内容・Issue一覧のMR数</td></tr>
+<tr><td><code>subtask_view.js</code></td><td>450</td><td>MR一覧・MR内容・MR状態のポーリング・MR操作</td></tr>
+<tr><td><code>attachment.js</code></td><td>136</td><td>添付ファイル</td></tr>
+<tr><td><code>job_runner.js</code></td><td>89</td><td>実装ジョブの実行・レポート表示</td></tr>
+<tr><td><code>app.js</code></td><td>510</td><td>リポジトリ一覧・Issue/MR作成フォーム・画面の初期化（最後に読み込む）</td></tr>
+</table>
 
 <h2>4. 自律判断した事項</h2>
 <table>
-<tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>関数名を<code>recover_interrupted_claims</code>とした</td><td>既存の<code>recover_interrupted_sessions</code>と命名を揃え、<code>claim_idea</code>の対になる名前にした</td></tr>
-<tr><td>2</td><td>戻す規則を<code>_release</code>に共通化した</td><td>「release_claimと同じ規則」を重複なく保証するため</td></tr>
-<tr><td>3</td><td>復旧時に画面向けの通知や履歴は残さない</td><td>提案モデルに履歴欄が無く、状態が戻れば画面から再操作できるため</td></tr>
-<tr><td>4</td><td>Issue重複は自動検出せず、9章に人間の確認事項として記録した</td><td>指示どおり残存リスクの記録に留めた。GitHub側の検索による自動照合は範囲外と判断</td></tr>
+<tr><th>No.</th><th>ファイル</th><th>判断</th><th>理由・前提</th></tr>
+<tr><td>1</td><td>app/static/app.js</td><td>リポジトリ一覧・Issue/MR作成フォーム・初期化処理はapp.jsに残した。</td><td>提案の区切りに含まれないため。<br>初期化処理は全ファイルの読み込み後に実行する必要があり、app.jsを最後に読み込む形にした。</td></tr>
+<tr><td>2</td><td>app/static/common.js</td><td>共有状態・状態定義（LIFECYCLE・MR_STATUS等）もcommon.jsに置いた。</td><td>複数ファイルから参照され、app.jsの定数を読み込み時に参照するファイルがあるため先に読み込む必要がある。</td></tr>
+<tr><td>3</td><td>app/static/issue_view.js</td><td>提案ではMR一覧・詳細側に入るIssue内容の処理を、Issueのファイルへ移した。</td><td>renderSubtaskList〜renderSubtaskActionsの範囲にIssueの処理が混在していたため。</td></tr>
+<tr><td>4</td><td>app/static/subtask_view.js</td><td>MR操作（onClickSubtaskAction等）とMR状態ポーリングはMRのファイルに含めた。</td><td>MR内容の操作ボタンと一体のため。</td></tr>
+<tr><td>5</td><td>app/static/*.js</td><td>新規ファイルの先頭に、cli_view.jsと同形式の説明コメントを付けた。</td><td>既存の機能別ファイルの形式に合わせた。</td></tr>
 </table>
 
-<h2>5. テスト結果</h2>
-<p><code>./.venv/Scripts/python.exe -m pytest -q</code>：511 passed</p>
-<ul>
-<li>APPROVED_ISSUE_ONLY／APPROVED_WITH_SUBTASK（Issue未作成）→ PROPOSED</li>
-<li>APPROVED_WITH_SUBTASK（Issue作成済み）→ ISSUE_CREATED</li>
-<li>PROPOSED・REJECTED・SUBTASK_CREATED は変更されない</li>
-</ul>
-<p>サーバー起動による実機確認は未実施（人間の使用中の可能性があるため）。</p>
+<h2>5. テスト</h2>
+<table>
+<tr><th>No.</th><th>テスト</th><th>結果</th></tr>
+<tr><td>1</td><td><code>pytest -q</code></td><td>509 passed</td></tr>
+<tr><td>2</td><td>全JSの構文チェック（<code>node --check</code>）</td><td>エラーなし</td></tr>
+<tr><td>3</td><td>移動前後で、空行・追加した説明コメントを除く行の集合が一致することを確認</td><td>一致</td></tr>
+<tr><td>4</td><td>Node上でDOMをスタブ化し、index.htmlの順に全スクリプトを読み込む確認（変更前後で比較）</td><td>変更前・変更後ともエラーなし。<br>読み込み順を崩すとReferenceErrorを検出することも確認した。</td></tr>
+<tr><td>5</td><td>FastAPI TestClientで、index.htmlが読み込む全scriptが200で返ることを確認</td><td>全て200</td></tr>
+</table>
+<p>ブラウザでの実機確認は、ガイドラインに従い人間に依頼する。</p>
 
-<h2>6. 残課題・レビュー観点</h2>
+<h2>6. 残課題・確認ポイント</h2>
 <ul>
-<li>Issue作成成功後かつ番号記録前に停止した場合、再承認でIssueが重複しうる（9章に記録済み）。</li>
-<li>復旧は起動時のみ実行するため、承認処理と並行して走ることはない前提。</li>
-<li>レビュー時は<code>core/idea_approval.py</code>の<code>_release</code>切り出しで<code>release_claim</code>の挙動が変わっていないことを確認してほしい。</li>
+<li>ブラウザで、リポジトリ選択・Issue/MR表示・MR作成・実装実行・添付・デプロイ・MRステータスフィルタが従来通り動くか確認してほしい。</li>
+<li>app.jsにはリポジトリ一覧とIssue/MR作成フォームが残っている（約510行）。<br>必要なら後続サブタスクで更に分割する。</li>
+<li>各ファイルはグローバルスコープを共有する通常のscriptのため、ファイル間の依存は読み込み順に依存する。<br>読み込み時に他ファイルの定数を参照する場合は、index.htmlの順序に注意が必要。</li>
+<li>ブラウザキャッシュに旧app.jsが残ると、common.jsとの定数の二重宣言でエラーになり得るため、確認時は強制再読み込みしてほしい。</li>
 </ul>
 </body>
 </html>

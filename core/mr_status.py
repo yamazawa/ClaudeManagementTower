@@ -1,6 +1,6 @@
 """MRの表示ステータス
 
-画面の表示ステータス（app/static/app.jsのMR_STATUS）と値・導出方法を合わせる。
+画面の表示ステータス（app/static/common.jsのMR_STATUS、subtask_view.jsのmrStatus）と値・導出方法を合わせる。
 """
 
 from core.lifecycle import LifecycleState
