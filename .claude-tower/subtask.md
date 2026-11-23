@@ -1,69 +1,32 @@
-# サブタスク: [IdeaMan] MR状態の定期同期をリポジトリごとに並行実行し、1件の失敗で他を止めないー①
+# サブタスク: CLI機能の追加ー⑦
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-MR状態の定期同期をリポジトリごとに並行実行し、1件の失敗で他を止めない
+CLIタブで応答中のClaudeを中断できるようにする
 
 ## 概要
 
-MR状態の同期は全リポジトリを1件ずつ順番に処理するため、リポジトリが増えるほど画面への反映が遅れる。リポジトリごとに並行して実行し、失敗もリポジトリ単位に閉じ込める。
+開発PCのEscキーのように、応答中のClaudeを止める「中断」ボタンをCLIタブに追加する。今は応答が終わるまで待つしかなく、間違った方向の作業を止められない。
 
 ## 詳細
 
-- sync_all_projectsで、リポジトリごとのgh pr list実行をThreadPoolExecutorで並行して実行する。DBセッションはリポジトリごとに分ける。
-- 例外はリポジトリ単位で捕まえてログに残し、他のリポジトリの同期は続ける。
-- 同時実行数は定数にまとめ、GitHubのレート制限を考えて小さめにする。
-- 2リポジトリのうち1件が失敗しても、もう1件が反映されることをpytestで確認する。
+- POST /api/cli-sessions/{id}/interrupt を追加する。
+- run_turnのスレッドごとに中断用の目印（asyncio.Taskなど）を持ち、中断の要求を受けたらClaudeの実行を止める。
+- 中断したら発言一覧に「利用者が中断しました」を残し、状態を発言待ち（idle）に戻す。
+- claude_session_idは保存し、次の発言で会話を続けられるようにする。
+- 画面は応答中だけ送信ボタンの横に中断ボタンを出す。文言はCLI_VIEW_MESSAGESにまとめる。
+- テストでは、中断後にidleへ戻ることと、次の発言を受け付けることを確認する。
 
 ## 根拠
 
-- core/pr_sync.py:121-125 のsync_all_projectsは、全リポジトリを内包表記で順番に処理している。1件あたりgh pr list --state all --limit 200にclosingIssuesReferences付きで実行するため、重い問い合わせになる。
-- core/pr_sync.py:142-149 では例外をループ全体で捕まえているため、途中のリポジトリで失敗すると、残りのリポジトリはその回の同期が行われない。
-- 同期間隔は5秒（core/config.py:21）だが、1周にかかる時間はリポジトリ数に比例して延びる。
-- app.js:179の「サーバー側のPR同期間隔と合わせて10秒以内に反映させる」という前提は、リポジトリが増えると守れなくなる。
+core/cli_session.py:195-222 はClaudeの実行をdaemonスレッドの中のasyncio.runで動かしているが、外から止める手段がない。app/routes/cli.py にも中断のAPIは無い。app/static/cli_view.js:165-175 は応答中に送信ボタンを無効にするだけで、中断の操作がない。なお、応答中を解除しているのはサーバー再起動時の recover_interrupted_sessions（core/cli_session.py:241-251）だけである。
 
 ## 関連ファイル
 
-- core/pr_sync.py:107
-- core/pr_sync.py:121
-- core/pr_sync.py:142
-- core/config.py:21
-- core/github_client.py:187
-- app/static/app.js:179
-## 実行指示（2026-11-23 07:17:15 UTC）
-
-アイデアマンの提案を実装する。
-
-## 提案タイトル
-
-MR状態の定期同期をリポジトリごとに並行実行し、1件の失敗で他を止めない
-
-## 概要
-
-MR状態の同期は全リポジトリを1件ずつ順番に処理するため、リポジトリが増えるほど画面への反映が遅れる。リポジトリごとに並行して実行し、失敗もリポジトリ単位に閉じ込める。
-
-## 詳細
-
-- sync_all_projectsで、リポジトリごとのgh pr list実行をThreadPoolExecutorで並行して実行する。DBセッションはリポジトリごとに分ける。
-- 例外はリポジトリ単位で捕まえてログに残し、他のリポジトリの同期は続ける。
-- 同時実行数は定数にまとめ、GitHubのレート制限を考えて小さめにする。
-- 2リポジトリのうち1件が失敗しても、もう1件が反映されることをpytestで確認する。
-
-## 根拠
-
-- core/pr_sync.py:121-125 のsync_all_projectsは、全リポジトリを内包表記で順番に処理している。1件あたりgh pr list --state all --limit 200にclosingIssuesReferences付きで実行するため、重い問い合わせになる。
-- core/pr_sync.py:142-149 では例外をループ全体で捕まえているため、途中のリポジトリで失敗すると、残りのリポジトリはその回の同期が行われない。
-- 同期間隔は5秒（core/config.py:21）だが、1周にかかる時間はリポジトリ数に比例して延びる。
-- app.js:179の「サーバー側のPR同期間隔と合わせて10秒以内に反映させる」という前提は、リポジトリが増えると守れなくなる。
-
-## 関連ファイル
-
-- core/pr_sync.py:107
-- core/pr_sync.py:121
-- core/pr_sync.py:142
-- core/config.py:21
-- core/github_client.py:187
-- app/static/app.js:179
-
+- core/cli_session.py:195
+- core/cli_session.py:217
+- app/routes/cli.py:51
+- app/static/cli_view.js:46
+- app/static/cli_view.js:165
