@@ -197,45 +197,12 @@ const CIRCLED_NUMBER_RANGES = [
   { first: 36, last: 50, base: 0x32b1 },
 ];
 
-// 縦長表示（ペインを縦1列に並べる画面幅）の判定（style.cssのメディアクエリと合わせる）
-const PORTRAIT_MEDIA_QUERY = "(max-width: 680px)";
-
-// 開閉するペインのID
+// 表示・非表示を切り替えるペインのID
 const SECTION_IDS = {
-  projects: "project-list",
   repo: "issue-list",
   issue: "subtask-list",
   mr: "subtask-detail",
 };
-
-/**
- * ペインの開閉状態を切り替える
- *
- * 閉じたペインは見出し行のみ表示する。
- */
-function setSectionExpanded(sectionId, expanded) {
-  const section = document.getElementById(sectionId);
-  section.classList.toggle("collapsed", !expanded);
-  section.querySelector(".section-title-row > .expander").setAttribute("aria-expanded", String(expanded));
-}
-
-/**
- * 縦長表示の場合のみ、ペインを自動で開く
- *
- * 横長表示では全ペインが並ぶため、利用者の開閉操作のみに従う。
- * 自動では閉じず、閉じる操作は利用者に任せる。
- */
-function autoExpandSection(sectionId) {
-  if (isPortrait()) setSectionExpanded(sectionId, true);
-}
-
-function isPortrait() {
-  return window.matchMedia(PORTRAIT_MEDIA_QUERY).matches;
-}
-
-function isSectionExpanded(sectionId) {
-  return !document.getElementById(sectionId).classList.contains("collapsed");
-}
 
 /**
  * ペインの表示・非表示を切り替える
@@ -341,46 +308,33 @@ function setupHeaderOffset() {
 }
 
 /**
- * エキスパンダの初期化
+ * 開閉欄のエキスパンダの初期化
  *
- * ペインは自動で閉じず、利用者の開閉操作でのみ閉じる。
+ * 開閉欄は閉じている間、見出しのみ表示する。
+ * 開閉の初期状態はHTMLのcollapsedクラスで指定する。
  */
-function setupExpanders() {
-  document.querySelectorAll(".section-title-row > .expander").forEach((button) => {
-    const section = button.closest("section");
-    button.addEventListener("click", () => {
-      setSectionExpanded(section.id, !isSectionExpanded(section.id));
-    });
+function setupFoldExpanders() {
+  document.querySelectorAll(".fold-heading > .expander").forEach((button) => {
+    const block = button.closest(".fold-block");
+    button.addEventListener("click", () => setFoldBlockExpanded(block, block.classList.contains("collapsed")));
   });
 }
 
 /**
- * 作成欄のエキスパンダの初期化
- *
- * 作成欄は閉じた状態で始め、開いた場合のみ作成フォームを表示する。
+ * 開閉欄の開閉状態の設定
  */
-function setupCreateExpanders() {
-  document.querySelectorAll(".create-expander").forEach((button) => {
-    const block = button.closest(".create-block");
-    button.addEventListener("click", () => setCreateBlockExpanded(block, block.classList.contains("collapsed")));
-  });
-}
-
-/**
- * 作成欄の開閉状態の設定
- */
-function setCreateBlockExpanded(block, expanded) {
+function setFoldBlockExpanded(block, expanded) {
   block.classList.toggle("collapsed", !expanded);
-  block.querySelector(".create-expander").setAttribute("aria-expanded", String(expanded));
+  block.querySelector(".fold-heading > .expander").setAttribute("aria-expanded", String(expanded));
 }
 
 /**
- * 作成欄を閉じる
+ * 開閉欄を閉じる
  *
- * 作成フォームなど作成欄内の要素を受け取り、その作成欄を閉じる。
+ * 作成フォームなど開閉欄内の要素を受け取り、その開閉欄を閉じる。
  */
-function collapseCreateBlock(element) {
-  setCreateBlockExpanded(element.closest(".create-block"), false);
+function collapseFoldBlock(element) {
+  setFoldBlockExpanded(element.closest(".fold-block"), false);
 }
 
 function escapeHtml(text) {
@@ -617,7 +571,7 @@ async function onMrStatusFilterChanged() {
   updateMrStatusFilterButtons();
   const active = isMrStatusFilterActive();
   MR_STATUS_FILTER_HIDDEN_IDS.forEach((id) => (document.getElementById(id).hidden = active));
-  if (active) MR_STATUS_FILTER_COLLAPSED_IDS.forEach((id) => setCreateBlockExpanded(document.getElementById(id), false));
+  if (active) MR_STATUS_FILTER_COLLAPSED_IDS.forEach((id) => setFoldBlockExpanded(document.getElementById(id), false));
   const reselected = refreshProjectCounts();
   if (reselected) return reselected;
   if (currentProjectId !== null) await reloadIssues().catch(() => {});
@@ -817,7 +771,6 @@ async function init() {
  * 保持している一覧が無い場合のみ、画面をブロックして取得する。
  * 再取得の前に別リポジトリへ切り替えた場合は、再取得しない。
  * 別リポジトリへ切り替えた場合は、前のIssue・MR・CLI・Ideaの選択を外す。
- * 縦長表示ではIssue一覧を開く。
  */
 async function selectProject(project) {
   if (project.id !== currentProjectId) {
@@ -842,7 +795,6 @@ async function selectProject(project) {
  */
 function showProject(project) {
   highlightSelectedProject();
-  autoExpandSection(SECTION_IDS.repo);
   setSectionShown(SECTION_IDS.repo, true);
   document.getElementById("issue-list-placeholder").hidden = true;
   document.getElementById("repo-panel").hidden = false;
@@ -1364,7 +1316,7 @@ function ensureSubtaskSelection(visibleSubtasks) {
 /**
  * MRの選択を外し、MR未選択の表示に戻す
  *
- * 未選択のまま一覧を描画し直した場合は、ペインの開閉を変えない。
+ * 未選択のまま一覧を描画し直した場合は、MR内容を描画し直さない。
  */
 function clearSubtaskSelection() {
   if (currentSelectedSubtaskId === null && !isSubtaskDetailShown()) return;
@@ -1626,13 +1578,11 @@ function highlightSelectedIssue() {
  *
  * MR一覧に表示中の先頭MRを自動選択する。
  * 表示中のMRが無い場合は未選択とし、MR内容を非表示にする。
- * 縦長表示ではIssue内容を開く。
  */
 function showIssueDetail(issue) {
   currentSelectedSubtaskId = null;
   renderIssueDetail(issue);
   setSectionShown(SECTION_IDS.issue, true);
-  autoExpandSection(SECTION_IDS.issue);
 }
 
 /**
@@ -1778,7 +1728,6 @@ function numberLabel(n) {
 function selectSubtask(subtaskId) {
   currentSelectedSubtaskId = subtaskId;
   highlightSelectedSubtaskRow();
-  autoExpandSection(SECTION_IDS.mr);
   const subtask = currentSubtasks.find((s) => s.id === subtaskId) || null;
   renderSubtaskDetail(subtask);
 }
@@ -2234,7 +2183,7 @@ async function createAndOpenIssue(form, projectId, title, statusEl) {
 function collapseCreatedIssueForm(form, statusEl, created) {
   if (created.subtaskId === null) return;
   statusEl.textContent = "";
-  collapseCreateBlock(form);
+  collapseFoldBlock(form);
 }
 
 /**
@@ -2375,7 +2324,7 @@ async function onSubmitSubtaskForm(event) {
       form.querySelector("button").disabled = false;
       return;
     }
-    collapseCreateBlock(form);
+    collapseFoldBlock(form);
     await openCreatedSubtask(issueNumber, body.id);
   });
 }
@@ -2516,8 +2465,7 @@ async function showReport(jobId, subtaskId) {
 }
 
 setupHeaderOffset();
-setupExpanders();
-setupCreateExpanders();
+setupFoldExpanders();
 setupMrStatusFilter();
 updateDeployButton();
 document.getElementById("deploy-button").addEventListener("click", openDeployDialog);

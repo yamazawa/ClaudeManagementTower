@@ -178,7 +178,6 @@ function selectRepoItem(kind, item) {
     .querySelectorAll(`#${kind}-list-items .repo-item-row`)
     .forEach((li) => li.classList.toggle("active", Number(li.dataset.id) === item?.id));
   renderRepoItemDetail();
-  if (item) autoExpandSection(REPO_ITEM_DETAIL_SECTION_ID);
 }
 
 /**
@@ -273,7 +272,7 @@ async function onSubmitRepoItemForm(kind, event) {
   }
   if (payload.project_id !== currentProjectId) return;
   form.reset();
-  collapseCreateBlock(form);
+  collapseFoldBlock(form);
   statusEl.textContent = "";
   document.getElementById(`${kind}-filter`).value = REPO_ITEM_STATES.open;
   selectedRepoItems[kind] = item;

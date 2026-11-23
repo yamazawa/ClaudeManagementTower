@@ -22,14 +22,12 @@
 <main id="issue-view">
   <section id="project-list" aria-label="リポジトリ一覧">
     <div class="section-title-row">
-      <button type="button" class="expander" aria-expanded="true" aria-label="開閉"></button>
       <h2>リポジトリ一覧</h2>
     </div>
     <ul id="project-list-items"></ul>
   </section>
   <section id="issue-list" aria-label="Issue一覧" hidden>
     <div class="section-title-row">
-      <button type="button" class="expander" aria-expanded="true" aria-label="開閉"></button>
       <h2 id="repo-heading" class="title-heading">Repo</h2>
     </div>
     <p id="issue-list-placeholder" class="empty">一覧からリポジトリを選択してください。</p>
@@ -40,73 +38,75 @@
         <button type="button" class="repo-item-tab" role="tab" data-kind="idea" aria-selected="false">Idea</button>
       </div>
       <div id="issue-panel" class="repo-item-panel" data-kind="issue" role="tabpanel">
-        <div id="issue-create-block" class="create-block collapsed">
-          <h3 class="section-heading section-heading-top create-heading">Issue作成<button type="button" class="expander create-expander" aria-expanded="false" aria-label="作成欄の開閉"></button></h3>
+        <div id="issue-create-block" class="fold-block collapsed">
+          <h3 class="section-heading section-heading-top fold-heading">Issue作成<button type="button" class="expander" aria-expanded="false" aria-label="作成欄の開閉"></button></h3>
           <form id="issue-create-form">
             <input type="text" name="title" placeholder="タイトル" required />
             <button type="submit">Create</button>
             <p id="issue-create-status" class="empty"></p>
           </form>
         </div>
-        <h3 class="section-heading section-heading-with-filter">
-          Issue一覧
-          <select id="issue-filter" class="heading-filter" aria-label="Issue一覧の表示フィルタ">
-            <option value="open" selected>Open</option>
-            <option value="closed_today">Close（Today）</option>
-            <option value="closed">Close</option>
-          </select>
-        </h3>
-        <ul id="issue-list-items"></ul>
+        <div class="fold-block">
+          <h3 class="section-heading fold-heading">Issue一覧<button type="button" class="expander" aria-expanded="true" aria-label="一覧の開閉"></button>
+            <select id="issue-filter" class="heading-filter" aria-label="Issue一覧の表示フィルタ">
+              <option value="open" selected>Open</option>
+              <option value="closed_today">Close（Today）</option>
+              <option value="closed">Close</option>
+            </select>
+          </h3>
+          <ul id="issue-list-items"></ul>
+        </div>
       </div>
       <div id="cli-panel" class="repo-item-panel" data-kind="cli" role="tabpanel" hidden>
-        <div class="create-block collapsed">
-          <h3 class="section-heading section-heading-top create-heading">CLI作成<button type="button" class="expander create-expander" aria-expanded="false" aria-label="作成欄の開閉"></button></h3>
+        <div class="fold-block collapsed">
+          <h3 class="section-heading section-heading-top fold-heading">CLI作成<button type="button" class="expander" aria-expanded="false" aria-label="作成欄の開閉"></button></h3>
           <form id="cli-create-form" class="repo-item-create-form">
             <input type="text" name="title" placeholder="タイトル" maxlength="200" required />
             <button type="submit">Create</button>
             <p id="cli-create-status" class="repo-item-create-status empty"></p>
           </form>
         </div>
-        <h3 class="section-heading section-heading-with-filter">
-          CLI一覧
-          <select id="cli-filter" class="heading-filter" aria-label="CLI一覧の表示フィルタ">
-            <option value="open" selected>Open</option>
-            <option value="closed">Close</option>
-          </select>
-        </h3>
-        <ul id="cli-list-items" class="repo-item-list"></ul>
+        <div class="fold-block">
+          <h3 class="section-heading fold-heading">CLI一覧<button type="button" class="expander" aria-expanded="true" aria-label="一覧の開閉"></button>
+            <select id="cli-filter" class="heading-filter" aria-label="CLI一覧の表示フィルタ">
+              <option value="open" selected>Open</option>
+              <option value="closed">Close</option>
+            </select>
+          </h3>
+          <ul id="cli-list-items" class="repo-item-list"></ul>
+        </div>
       </div>
       <div id="idea-panel" class="repo-item-panel" data-kind="idea" role="tabpanel" hidden>
-        <div class="create-block collapsed">
-          <h3 class="section-heading section-heading-top create-heading">Idea作成<button type="button" class="expander create-expander" aria-expanded="false" aria-label="作成欄の開閉"></button></h3>
+        <div class="fold-block collapsed">
+          <h3 class="section-heading section-heading-top fold-heading">Idea作成<button type="button" class="expander" aria-expanded="false" aria-label="作成欄の開閉"></button></h3>
           <form id="idea-create-form" class="repo-item-create-form">
             <input type="text" name="title" placeholder="タイトル" maxlength="200" required />
             <button type="submit">Create</button>
             <p id="idea-create-status" class="repo-item-create-status empty"></p>
           </form>
         </div>
-        <h3 class="section-heading section-heading-with-filter">
-          Idea一覧
-          <select id="idea-filter" class="heading-filter" aria-label="Idea一覧の表示フィルタ">
-            <option value="open" selected>Open</option>
-            <option value="closed">Close</option>
-          </select>
-        </h3>
-        <ul id="idea-list-items" class="repo-item-list"></ul>
+        <div class="fold-block">
+          <h3 class="section-heading fold-heading">Idea一覧<button type="button" class="expander" aria-expanded="true" aria-label="一覧の開閉"></button>
+            <select id="idea-filter" class="heading-filter" aria-label="Idea一覧の表示フィルタ">
+              <option value="open" selected>Open</option>
+              <option value="closed">Close</option>
+            </select>
+          </h3>
+          <ul id="idea-list-items" class="repo-item-list"></ul>
+        </div>
       </div>
     </div>
   </section>
   <section id="subtask-list" aria-label="Issue内容" hidden>
     <div class="section-title-row">
-      <button type="button" class="expander" aria-expanded="true" aria-label="開閉"></button>
       <h2 id="issue-heading" class="title-heading">Issue</h2>
     </div>
     <div id="subtask-list-body">
       <p class="empty">一覧からIssueを選択してください。</p>
     </div>
     <div id="subtask-panel" hidden>
-      <div id="subtask-create-block" class="create-block collapsed">
-        <h3 class="section-heading section-heading-top create-heading">MR作成<button type="button" class="expander create-expander" aria-expanded="false" aria-label="作成欄の開閉"></button></h3>
+      <div id="subtask-create-block" class="fold-block collapsed">
+        <h3 class="section-heading section-heading-top fold-heading">MR作成<button type="button" class="expander" aria-expanded="false" aria-label="作成欄の開閉"></button></h3>
         <form id="subtask-form">
           <span id="subtask-form-prefix" class="subtask-form-prefix"><span id="subtask-form-prefix-title" class="subtask-form-prefix-title"></span><span id="subtask-form-prefix-separator"></span></span>
           <input type="text" name="title" placeholder="MR名（空欄なら連番）" />
@@ -114,20 +114,20 @@
           <p id="subtask-form-status" class="empty"></p>
         </form>
       </div>
-      <h3 class="section-heading section-heading-with-filter">
-        MR一覧
-        <select id="subtask-filter" class="heading-filter" aria-label="MR一覧の表示フィルタ">
-          <option value="all" selected>全て</option>
-          <option value="unresolved">未完了</option>
-          <option value="solved">完了</option>
-        </select>
-      </h3>
-      <div id="subtask-list-container"></div>
+      <div class="fold-block">
+        <h3 class="section-heading fold-heading">MR一覧<button type="button" class="expander" aria-expanded="true" aria-label="一覧の開閉"></button>
+          <select id="subtask-filter" class="heading-filter" aria-label="MR一覧の表示フィルタ">
+            <option value="all" selected>全て</option>
+            <option value="unresolved">未完了</option>
+            <option value="solved">完了</option>
+          </select>
+        </h3>
+        <div id="subtask-list-container"></div>
+      </div>
     </div>
   </section>
   <section id="subtask-detail" aria-label="MR内容" hidden>
     <div class="section-title-row">
-      <button type="button" class="expander" aria-expanded="true" aria-label="開閉"></button>
       <h2 id="subtask-heading" class="title-heading">MR</h2>
     </div>
     <div id="subtask-detail-body">
@@ -136,7 +136,6 @@
   </section>
   <section id="repo-item-detail" aria-label="CLI・Ideaの内容" hidden>
     <div class="section-title-row">
-      <button type="button" class="expander" aria-expanded="true" aria-label="開閉"></button>
       <h2 id="repo-item-heading" class="title-heading"></h2>
     </div>
     <div id="repo-item-detail-body">
