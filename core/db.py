@@ -22,8 +22,27 @@ engine = make_engine(settings.database_path)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
+# create_allで追加されない既存テーブルへの後付け列（テーブル名, 列名, 列定義）
+ADDED_COLUMNS = [
+    ("idea_jobs", "focus", "VARCHAR NOT NULL DEFAULT ''"),
+]
+
+
+def _add_missing_columns(bind) -> None:
+    """既存テーブルに後付けの列が無ければ追加する
+
+    稼働中の管理塔のDBを作り直さずに起動できるようにする。
+    """
+    with bind.begin() as conn:
+        for table, column, definition in ADDED_COLUMNS:
+            existing = {row[1] for row in conn.exec_driver_sql(f"PRAGMA table_info({table})")}
+            if column not in existing:
+                conn.exec_driver_sql(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
 def init_db(bind=engine) -> None:
     Base.metadata.create_all(bind=bind)
+    _add_missing_columns(bind)
 
 
 def ensure_default_project() -> None:
