@@ -2,72 +2,60 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実行レポート: 実装ジョブの状態表示を日本語・色分けにし、失敗理由を表示するー①</title>
+<title>実行レポート #208 サブタスク1</title>
 <style>
-body { font-family: sans-serif; margin: 24px; line-height: 1.6; color: #222; }
-h1 { font-size: 1.4em; }
-h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; padding-bottom: 4px; margin-top: 28px; }
-table { border-collapse: collapse; width: 100%; margin: 8px 0; }
-th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; vertical-align: top; }
-th { background: #f3f3f3; }
-code { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; }
-.ok { color: #1a7f37; font-weight: bold; }
+body{font-family:sans-serif;max-width:960px;margin:24px auto;padding:0 16px;line-height:1.6;color:#222}
+h1{font-size:1.4em}h2{font-size:1.15em;border-bottom:1px solid #ccc;padding-bottom:4px;margin-top:28px}
+table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:6px 8px;text-align:left;vertical-align:top}
+th{background:#f3f3f3}code{background:#f5f5f5;padding:1px 4px}
+.ok{display:inline-block;background:#2e7d32;color:#fff;padding:2px 10px;border-radius:4px}
 </style>
 </head>
 <body>
-<h1>実行レポート: 実装ジョブの状態表示を日本語・色分けにし、失敗理由を表示するー①</h1>
+<h1>実行レポート</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#205 [IdeaMan] 実装ジョブの状態表示を日本語・色分けにし、失敗理由を表示する</td></tr>
-<tr><th>サブタスク</th><td>実装ジョブの状態表示を日本語・色分けにし、失敗理由を表示するー①（PR #206）</td></tr>
-<tr><th>ブランチ</th><td><code>issue-205-4e188e4b-subtask-1</code>（base: <code>master</code>）</td></tr>
+<tr><th>Issue</th><td>#208</td></tr>
+<tr><th>サブタスク</th><td>[IdeaMan] MR状態の定期同期をリポジトリごとに並行実行し、1件の失敗で他を止めないー①</td></tr>
+<tr><th>ブランチ</th><td><code>issue-208-cd2e0ade-subtask-1</code></td></tr>
+<tr><th>PR</th><td>#209（Draft・既存）</td></tr>
 </table>
 
-<h2>2. 実装結果の要約</h2>
-<p class="ok">成功</p>
-<ul>
-<li>MR内容ペインのジョブ状態を日本語で表示するようにした。</li>
-<li>実行待ち・実行中はスピナー、失敗・要確認・利用上限は警告色、完了はアクセント色にした。</li>
-<li>APIが<code>error_message</code>を返すようにし、失敗時は状態の下に理由を表示するようにした（長い文は省略し、ツールチップで全文を出す）。</li>
-<li>これまで<code>ExecutionJob.error_message</code>はどこからも書き込まれていなかった。そのため、ワーカー側で失敗理由を保存する処理も追加した。</li>
-</ul>
+<h2>2. 実装結果</h2>
+<p><span class="ok">成功</span></p>
+<p>PR状態の同期をリポジトリごとに並行実行するようにした。<br>
+1リポジトリの失敗はログに残し、他のリポジトリの同期は続行する。</p>
 
-<h2>3. 実施した変更と主な変更ファイル</h2>
+<h2>3. 変更内容</h2>
 <table>
-<tr><th>No.</th><th>コミット</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td><code>#205 [ジョブ状態表示] 実装ジョブの失敗理由を記録</code></td><td><code>core/job_queue.py</code>, <code>worker/main.py</code>, <code>tests/test_job_queue.py</code>, <code>tests/test_worker_main.py</code></td><td><code>finish_job</code>に<code>error_message</code>引数を追加した。例外の内容とDraft解除の失敗理由を保存するようにした。ハートビートが途絶えたジョブには<code>STALE_JOB_ERROR_MESSAGE</code>を保存する。利用上限から再投入するときは理由を消す。<code>_finalize_success</code>は(状態, 失敗理由)を返すようにした。</td></tr>
-<tr><td>2</td><td><code>#205 [ジョブ状態表示] ジョブAPIで失敗理由を返す</code></td><td><code>app/routes/jobs.py</code>, <code>app/routes/projects.py</code>, <code>tests/test_job_routes.py</code>（新規）</td><td><code>GET /api/jobs/{id}</code>と<code>_latest_job_summary</code>の返却値に<code>error_message</code>を追加した。</td></tr>
-<tr><td>3</td><td><code>#205 [ジョブ状態表示] ジョブ状態を日本語・色分けで表示</code></td><td><code>app/static/app.js</code>, <code>app/static/style.css</code></td><td><code>JOB_STATUS</code>・<code>JOB_STATUS_LABELS</code>・<code>JOB_STATUS_CLASSES</code>の定数を追加した。<code>renderJobStatus</code>・<code>setJobStatusText</code>を追加した。<code>.job-status-active/success/warning</code>のスタイルを追加した。</td></tr>
-<tr><td>4</td><td><code>#205 [ジョブ状態表示] 失敗時に失敗理由を表示</code></td><td><code>app/static/app.js</code>, <code>app/static/style.css</code></td><td>警告色の状態で<code>error_message</code>がある場合、<code>.job-status-error</code>を状態の下に表示する（1行で省略し、title属性に全文を入れる）。</td></tr>
+<tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
+<tr><td>1</td><td><code>core/pr_sync.py</code></td><td>sync_all_projectsをThreadPoolExecutorによるリポジトリ単位の並行実行に変更。<br>リポジトリごとにDBセッションを生成する<code>_sync_repo</code>を追加。<br>例外をリポジトリ単位で捕捉する<code>_sync_repo_safely</code>を追加。<br>sync_project_statesはPR一覧を引数で受け取る形に変更。</td></tr>
+<tr><td>2</td><td><code>core/config.py</code></td><td>同時実行数<code>pr_sync_max_workers</code>（既定3）を追加。</td></tr>
+<tr><td>3</td><td><code>tests/test_pr_sync.py</code></td><td>1リポジトリ失敗時に他方が反映されるテストを追加。<br>同一リポジトリのgh実行が1回であるテストを追加。</td></tr>
 </table>
+<p>コミット：<code>56fa625</code>（実装）、<code>929318c</code>（テスト）</p>
 
-<h2>4. 自律判断した事項・採用理由・前提</h2>
+<h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>ワーカー側で<code>error_message</code>を保存する処理を追加した（提案の詳細にはない）。</td><td>列はあるのに誰も書き込んでおらず、APIで返すだけでは常に空になるため。</td></tr>
-<tr><td>2</td><td>Draft解除に失敗した場合（<code>needs_attention</code>）とハートビートが途絶えた場合にも理由を保存した。</td><td>「要確認」でも理由が見えるようにするため。ハートビート途絶の文言は<code>core/job_queue.py</code>の定数にまとめた。</td></tr>
-<tr><td>3</td><td><code>rate_limited</code>も警告色にし、理由を表示する。ラベルは「利用上限で中断（上限リセット後に自動で再実行）」にした。</td><td>中断状態ではあるが、自動で再投入されることが分かるようにするため。</td></tr>
-<tr><td>4</td><td>実行開始前の「実行待ち...」はスピナー付き、「実行を開始できませんでした」は警告色にした。入力を促す文言は従来どおり薄い色にした。</td><td>状態欄の見た目を揃えるため。前回のジョブの色が残らないよう、毎回クラスを付け直す。</td></tr>
-<tr><td>5</td><td>スピナーは既存の<code>selection-busy-spin</code>のアニメーションを流用し、サイズは<code>--job-status-spinner-size</code>に切り出した。</td><td>既存の見た目と揃え、あとで調整しやすくするため。</td></tr>
-<tr><td>6</td><td>表示文言は、既存の<code>MR_STATUS_LABELS</code>などと同じく<code>app.js</code>の定数にまとめた。</td><td>このプロジェクトには、フロント文言用のリソースファイルがないため。</td></tr>
-<tr><td>7</td><td>今回のサブタスク（①）で提案の内容をすべて実装した。</td><td>提案の詳細が1PRで実装できる規模だったため。</td></tr>
+<tr><td>1</td><td>同時実行数の定数はSettings（config.py）に置いた。</td><td>同期間隔など既存の同期設定と同じ場所で管理でき、環境変数で調整可能になるため。</td></tr>
+<tr><td>2</td><td>同時実行数は3とした。</td><td>ワーカー数の既定値と揃え、gh APIの同時呼び出しを小さく抑えるため。</td></tr>
+<tr><td>3</td><td>並行単位をプロジェクトではなくリポジトリとし、同一リポジトリを持つ複数プロジェクトはgh実行を1回にまとめた。</td><td>提案の「リポジトリごと」に合わせ、重いgh pr listの重複実行を避けるため。</td></tr>
+<tr><td>4</td><td>sync_project_statesの引数にprsを追加した。</td><td>gh実行とDB反映を分離するため。呼び出し元はpr_sync内のみで影響はない。</td></tr>
+<tr><td>5</td><td>_sync_loopの全体例外捕捉は残した。</td><td>プロジェクト一覧取得などリポジトリ外の失敗でループを止めないため。</td></tr>
+<tr><td>6</td><td>ログ出力は既存に合わせてprintとした。</td><td>pr_syncの既存ログ方式に揃えるため。</td></tr>
 </table>
 
-<h2>5. 実行したテストと結果</h2>
-<ul>
-<li><code>node --check app/static/app.js</code>: 構文エラーなし。</li>
-<li><code>./.venv/Scripts/python.exe -m pytest -q</code>: 428 passed（新規・更新したテストを含む）。</li>
-<li>JSの自動テストがないため、ブラウザでの動作確認はしていない（人間の確認が必要）。</li>
-</ul>
+<h2>5. テスト</h2>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code>：<strong>449 passed</strong></p>
+<p>サーバー起動での動作確認は未実施（稼働中の管理塔に影響させないため）。</p>
 
-<h2>6. 残課題、リスク、レビュー時の確認ポイント</h2>
+<h2>6. 残課題・リスク・確認ポイント</h2>
 <ul>
-<li>MR内容ペインで以下を確認してほしい：実行中はスピナー、完了はアクセント色、失敗・要確認は警告色で表示されること。</li>
-<li>失敗理由の長い文が1行で省略され、ホバーで全文が出ること（ペインの幅によっては省略されない可能性がある）。</li>
-<li>この変更より前に失敗したジョブは<code>error_message</code>が空のため、理由は表示されない。</li>
-<li>例外メッセージをそのまま画面に出すため、内容が長い場合やローカルのパスを含む場合がある（ローカル画面への表示のみ）。</li>
-<li>ワーカーの変更は、ワーカーを再起動するまで反映されない。</li>
+<li>SQLiteへの並行書き込みはWAL・busy_timeout=5000msに依存する。同時実行数3では問題ない想定だが、ロック待ちが長引く場合は該当リポジトリの同期がその回失敗としてスキップされる。</li>
+<li>1周の所要時間は最も遅いリポジトリに律速される。リポジトリ数が同時実行数を超えると再び比例的に延びる。</li>
+<li>レビュー時は<code>core/pr_sync.py</code>のsync_all_projects周辺と、同時実行数の既定値の妥当性を確認してほしい。</li>
 </ul>
 </body>
 </html>
