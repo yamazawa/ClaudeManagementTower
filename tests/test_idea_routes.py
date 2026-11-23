@@ -147,6 +147,16 @@ def test_approve_with_subtask_creates_issue_subtask_and_job(approval_db, github)
     assert result["subtask"]["job"]["job_id"] == 3
 
 
+def test_approve_without_execute_skips_job(approval_db, github):
+    idea_id = _save_idea(approval_db)
+
+    result = ideas.post_approve_idea(idea_id, ideas.ApproveIdeaRequest(mode="with_subtask", execute=False))
+
+    assert result["idea"]["status"] == IdeaStatus.SUBTASK_CREATED
+    assert github["executes"] == []
+    assert result["subtask"]["job"] is None
+
+
 def test_approve_existing_issue_idea_skips_issue_creation(approval_db, github):
     idea_id = _save_idea(approval_db, related_issue_number=7)
 
