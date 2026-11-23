@@ -38,8 +38,8 @@
         <button type="button" class="repo-item-tab" role="tab" data-kind="idea" aria-selected="false">Idea</button>
       </div>
       <div id="issue-panel" class="repo-item-panel" data-kind="issue" role="tabpanel">
-        <div id="issue-create-block" class="create-block collapsed">
-          <h3 class="section-heading section-heading-top create-heading">Issue作成<button type="button" class="expander create-expander" aria-expanded="false" aria-label="作成欄の開閉"></button></h3>
+        <div id="issue-create-block" class="fold-block collapsed">
+          <h3 class="section-heading section-heading-top fold-heading">Issue作成<button type="button" class="expander" aria-expanded="false" aria-label="作成欄の開閉"></button></h3>
           <form id="issue-create-form">
             <input type="text" name="title" placeholder="タイトル" required />
             <button type="submit">Create</button>
@@ -57,8 +57,8 @@
         <ul id="issue-list-items"></ul>
       </div>
       <div id="cli-panel" class="repo-item-panel" data-kind="cli" role="tabpanel" hidden>
-        <div class="create-block collapsed">
-          <h3 class="section-heading section-heading-top create-heading">CLI作成<button type="button" class="expander create-expander" aria-expanded="false" aria-label="作成欄の開閉"></button></h3>
+        <div class="fold-block collapsed">
+          <h3 class="section-heading section-heading-top fold-heading">CLI作成<button type="button" class="expander" aria-expanded="false" aria-label="作成欄の開閉"></button></h3>
           <form id="cli-create-form" class="repo-item-create-form">
             <input type="text" name="title" placeholder="タイトル" maxlength="200" required />
             <button type="submit">Create</button>
@@ -75,8 +75,8 @@
         <ul id="cli-list-items" class="repo-item-list"></ul>
       </div>
       <div id="idea-panel" class="repo-item-panel" data-kind="idea" role="tabpanel" hidden>
-        <div class="create-block collapsed">
-          <h3 class="section-heading section-heading-top create-heading">Idea作成<button type="button" class="expander create-expander" aria-expanded="false" aria-label="作成欄の開閉"></button></h3>
+        <div class="fold-block collapsed">
+          <h3 class="section-heading section-heading-top fold-heading">Idea作成<button type="button" class="expander" aria-expanded="false" aria-label="作成欄の開閉"></button></h3>
           <form id="idea-create-form" class="repo-item-create-form">
             <input type="text" name="title" placeholder="タイトル" maxlength="200" required />
             <button type="submit">Create</button>
@@ -102,8 +102,8 @@
       <p class="empty">一覧からIssueを選択してください。</p>
     </div>
     <div id="subtask-panel" hidden>
-      <div id="subtask-create-block" class="create-block collapsed">
-        <h3 class="section-heading section-heading-top create-heading">MR作成<button type="button" class="expander create-expander" aria-expanded="false" aria-label="作成欄の開閉"></button></h3>
+      <div id="subtask-create-block" class="fold-block collapsed">
+        <h3 class="section-heading section-heading-top fold-heading">MR作成<button type="button" class="expander" aria-expanded="false" aria-label="作成欄の開閉"></button></h3>
         <form id="subtask-form">
           <span id="subtask-form-prefix" class="subtask-form-prefix"><span id="subtask-form-prefix-title" class="subtask-form-prefix-title"></span><span id="subtask-form-prefix-separator"></span></span>
           <input type="text" name="title" placeholder="MR名（空欄なら連番）" />

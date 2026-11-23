@@ -308,32 +308,33 @@ function setupHeaderOffset() {
 }
 
 /**
- * 作成欄のエキスパンダの初期化
+ * 開閉欄のエキスパンダの初期化
  *
- * 作成欄は閉じた状態で始め、開いた場合のみ作成フォームを表示する。
+ * 開閉欄は閉じている間、見出しのみ表示する。
+ * 開閉の初期状態はHTMLのcollapsedクラスで指定する。
  */
-function setupCreateExpanders() {
-  document.querySelectorAll(".create-expander").forEach((button) => {
-    const block = button.closest(".create-block");
-    button.addEventListener("click", () => setCreateBlockExpanded(block, block.classList.contains("collapsed")));
+function setupFoldExpanders() {
+  document.querySelectorAll(".fold-heading > .expander").forEach((button) => {
+    const block = button.closest(".fold-block");
+    button.addEventListener("click", () => setFoldBlockExpanded(block, block.classList.contains("collapsed")));
   });
 }
 
 /**
- * 作成欄の開閉状態の設定
+ * 開閉欄の開閉状態の設定
  */
-function setCreateBlockExpanded(block, expanded) {
+function setFoldBlockExpanded(block, expanded) {
   block.classList.toggle("collapsed", !expanded);
-  block.querySelector(".create-expander").setAttribute("aria-expanded", String(expanded));
+  block.querySelector(".fold-heading > .expander").setAttribute("aria-expanded", String(expanded));
 }
 
 /**
- * 作成欄を閉じる
+ * 開閉欄を閉じる
  *
- * 作成フォームなど作成欄内の要素を受け取り、その作成欄を閉じる。
+ * 作成フォームなど開閉欄内の要素を受け取り、その開閉欄を閉じる。
  */
-function collapseCreateBlock(element) {
-  setCreateBlockExpanded(element.closest(".create-block"), false);
+function collapseFoldBlock(element) {
+  setFoldBlockExpanded(element.closest(".fold-block"), false);
 }
 
 function escapeHtml(text) {
@@ -570,7 +571,7 @@ async function onMrStatusFilterChanged() {
   updateMrStatusFilterButtons();
   const active = isMrStatusFilterActive();
   MR_STATUS_FILTER_HIDDEN_IDS.forEach((id) => (document.getElementById(id).hidden = active));
-  if (active) MR_STATUS_FILTER_COLLAPSED_IDS.forEach((id) => setCreateBlockExpanded(document.getElementById(id), false));
+  if (active) MR_STATUS_FILTER_COLLAPSED_IDS.forEach((id) => setFoldBlockExpanded(document.getElementById(id), false));
   const reselected = refreshProjectCounts();
   if (reselected) return reselected;
   if (currentProjectId !== null) await reloadIssues().catch(() => {});
@@ -2182,7 +2183,7 @@ async function createAndOpenIssue(form, projectId, title, statusEl) {
 function collapseCreatedIssueForm(form, statusEl, created) {
   if (created.subtaskId === null) return;
   statusEl.textContent = "";
-  collapseCreateBlock(form);
+  collapseFoldBlock(form);
 }
 
 /**
@@ -2323,7 +2324,7 @@ async function onSubmitSubtaskForm(event) {
       form.querySelector("button").disabled = false;
       return;
     }
-    collapseCreateBlock(form);
+    collapseFoldBlock(form);
     await openCreatedSubtask(issueNumber, body.id);
   });
 }
@@ -2464,7 +2465,7 @@ async function showReport(jobId, subtaskId) {
 }
 
 setupHeaderOffset();
-setupCreateExpanders();
+setupFoldExpanders();
 setupMrStatusFilter();
 updateDeployButton();
 document.getElementById("deploy-button").addEventListener("click", openDeployDialog);

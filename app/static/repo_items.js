@@ -272,7 +272,7 @@ async function onSubmitRepoItemForm(kind, event) {
   }
   if (payload.project_id !== currentProjectId) return;
   form.reset();
-  collapseCreateBlock(form);
+  collapseFoldBlock(form);
   statusEl.textContent = "";
   document.getElementById(`${kind}-filter`).value = REPO_ITEM_STATES.open;
   selectedRepoItems[kind] = item;

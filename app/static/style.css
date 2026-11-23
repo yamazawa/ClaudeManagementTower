@@ -987,25 +987,25 @@ h2 {
   border-top: none;
 }
 
-/* 作成欄の見出し
+/* 開閉欄（作成欄・一覧）の見出し
 
 見出し文字列の右隣に、文字と同じ大きさのエキスパンダを置く。
 */
-.create-heading {
+.fold-heading {
   display: flex;
   align-items: center;
   gap: 4px;
 }
 
-/* 閉じた作成欄は見出しのみ表示する
+/* 閉じた開閉欄は見出しのみ表示する
 
 作成フォームのID指定のdisplayより優先させる。
 */
-.create-block.collapsed > :not(.create-heading) {
+.fold-block.collapsed > :not(.fold-heading) {
   display: none !important;
 }
 
-.create-block.collapsed > .create-heading {
+.fold-block.collapsed > .fold-heading {
   margin-bottom: 0;
 }
 
