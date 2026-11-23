@@ -2,65 +2,57 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実行レポート #187 gh CLIの一時的な通信エラーを再試行する</title>
+<title>サブタスク実行レポート - Open PR一覧の取得に件数上限を指定するー①</title>
 <style>
-body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
-h1 { font-size: 1.4em; }
-h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; margin-top: 1.6em; }
-table { border-collapse: collapse; width: 100%; }
-th, td { border: 1px solid #ccc; padding: 4px 8px; text-align: left; vertical-align: top; }
-th { background: #f3f3f3; }
-.ok { color: #186a1e; font-weight: bold; }
-code { background: #f5f5f5; padding: 0 3px; }
+body{font-family:sans-serif;margin:2em;line-height:1.6;color:#222;max-width:1100px}
+h1{font-size:1.4em}h2{font-size:1.1em;border-bottom:1px solid #ccc;margin-top:1.6em}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid #bbb;padding:4px 8px;text-align:left;vertical-align:top}
+th{background:#f0f3f8}.ok{color:#13795b;font-weight:bold}.warn{color:#a4650a;font-weight:bold}code{background:#f3f3f3;padding:0 3px}
 </style>
 </head>
 <body>
-<h1>実行レポート</h1>
+<h1>サブタスク実行レポート</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#187 [SPn]タスクn - gh CLIの一時的な通信エラーを再試行する</td></tr>
-<tr><th>サブタスク</th><td>_run_ghの再試行と、Draft解除失敗時のジョブ要確認化</td></tr>
-<tr><th>ブランチ</th><td>issue-187-subtask-1</td></tr>
+<tr><th>Issue</th><td>#184 Open PR一覧の取得に件数上限を指定する</td></tr>
+<tr><th>サブタスク</th><td>Open PR一覧の取得に件数上限を指定するー①</td></tr>
+<tr><th>ブランチ</th><td>issue-184-subtask-1（base: master）</td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
 <p class="ok">成功</p>
-<p>一時的な通信エラー時にgh呼び出しを再試行するようにした。<br>
-Claude実行後のDraft解除に失敗した場合、ジョブをfailedではなくneeds_attentionで終了するようにした。</p>
+<p><code>list_open_pull_requests</code>に<code>--limit</code>で<code>PR_STATE_LIST_LIMIT</code>（200件）を指定しました。</p>
+<p>ghの既定値30件を超えたOpen PRが、自己更新のマージ対象から漏れなくなります。</p>
+<p>取得件数が上限に達した場合は、取りこぼしの可能性を警告ログに出力します。</p>
 
-<h2>3. 変更内容</h2>
+<h2>3. 実施した変更</h2>
 <table>
-<tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td>core/github_client.py</td><td>再試行定数（最大試行3回・間隔3秒×試行回数・対象エラー文言）を追加。<br>_run_ghを1回実行（_run_gh_once）と再試行ループに分割。<br>create_issue・create_draft_pr・merge_pull_requestはretryable=False。</td></tr>
-<tr><td>2</td><td>worker/main.py</td><td>_finalize_successがジョブ終了状態を返すよう変更。<br>mark_pr_ready失敗時はerrorイベントを記録しneeds_attentionを返す。</td></tr>
-<tr><td>3</td><td>tests/test_github_client.py</td><td>再試行成功・上限到達・タイムアウト再試行・恒久エラー非再試行・作成系非再試行のテストを追加。</td></tr>
-<tr><td>4</td><td>tests/test_worker_main.py</td><td>Draft解除失敗時needs_attention、成功時resolvedのテストを追加。</td></tr>
-<tr><td>5</td><td>IMPLEMENTATION_PLAN.md</td><td>再試行対象外の操作と、Draft解除失敗時のジョブ状態を追記。</td></tr>
+<tr><th>No.</th><th>ファイル</th><th>変更</th><th>コミット</th></tr>
+<tr><td>1</td><td>core/github_client.py</td><td><code>list_open_pull_requests</code>の引数に<code>--limit</code>を追加</td><td>45cd28b</td></tr>
+<tr><td>2</td><td>tests/test_github_client.py</td><td>gh呼び出し引数の期待値に<code>--limit</code>を追加</td><td>45cd28b</td></tr>
+<tr><td>3</td><td>core/github_client.py</td><td><code>logger</code>を追加し、取得件数が上限以上なら警告ログを出力</td><td>3edfd18</td></tr>
+<tr><td>4</td><td>tests/test_github_client.py</td><td>上限到達時に警告が出る／未満時は出ないテストを追加</td><td>3edfd18</td></tr>
 </table>
-<p>コミット：d2f5058（再試行）、0893d82（要確認化）、e3e7e55（実装計画）</p>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>issue create・pr createは「作成済み確認」ではなく再試行対象外にした。</td><td>作成済み確認はタイトル一致等の曖昧な判定が必要で、誤判定時の影響が大きいため。</td></tr>
-<tr><td>2</td><td>pr mergeも再試行対象外にした。</td><td>1回目が成功していた場合、2回目は「マージ済み」エラーになり結果の判定が紛らわしいため。</td></tr>
-<tr><td>3</td><td>gh自体のタイムアウト（60秒）も再試行対象にした。</td><td>再試行対象の操作は冪等なため、二重実行しても問題ないと判断した。</td></tr>
-<tr><td>4</td><td>最大3回・待機3秒→6秒の線形バックオフとした。</td><td>ジョブの所要時間を大きく延ばさず、短時間の通信断を吸収できる値とした。</td></tr>
-<tr><td>5</td><td>Draft解除失敗時はlifecycle_stateをresolvedにしない。</td><td>PRがDraftのままなので、解決済みとして扱うのは不整合なため。</td></tr>
-<tr><td>6</td><td>エラー文言はstderrの部分一致（小文字比較）で判定した。</td><td>ghは終了コードで一時的エラーを区別しないため。</td></tr>
+<tr><td>1</td><td>上限値は新設せず<code>PR_STATE_LIST_LIMIT</code>を流用した</td><td>Issueの指示通り。他のPR一覧取得と値を揃えるため</td></tr>
+<tr><td>2</td><td>警告はlogging（<code>logger.warning</code>）で出力し、例外にはしない</td><td>上限内のPRは処理を継続できるため。既存のmerge_queue等と同じ方式に揃えた</td></tr>
+<tr><td>3</td><td>警告条件は「取得件数 ≧ 上限」とした</td><td>ちょうど上限件数の場合も超過の可能性を区別できないため</td></tr>
+<tr><td>4</td><td>他の一覧取得関数には警告を追加しない</td><td>Issueの対象外。変更範囲を最小に保つため</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<p><code>./.venv/Scripts/python.exe -m pytest -q</code>：<span class="ok">368 passed</span></p>
-<p>実際の通信エラーを発生させた実機確認は未実施（再現が難しいため、subprocessのモックで確認）。</p>
+<p class="ok"><code>./.venv/Scripts/python.exe -m pytest -q</code> : 374 passed</p>
+<p>1コミット目時点でも<code>tests/test_github_client.py</code>の12件が成功することを確認済みです。</p>
 
 <h2>6. 残課題・リスク・確認ポイント</h2>
 <ul>
-<li>needs_attentionのジョブでは、画面上でレポートが自動表示されない（app.jsはsucceeded時のみ表示）。必要なら別タスクで対応する。</li>
-<li>needs_attentionになったサブタスクのDraft解除は、人間がGitHub上で手動で行うか、再実行する必要がある。</li>
-<li>再試行対象のエラー文言（GH_TRANSIENT_ERROR_PATTERNS）が十分か確認してほしい。</li>
-<li>Webサーバー側のgh呼び出しも再試行の対象になるため、通信断時はレスポンスが最大約9秒＋gh実行時間だけ遅れる。</li>
+<li>Open PRが200件を超える場合は、引き続き超過分が対象外になります（警告ログのみ）。</li>
+<li>警告は画面には表示されず、サーバーログにのみ出力されます。</li>
+<li>確認ポイント：<code>core/github_client.py</code>の<code>list_open_pull_requests</code>。</li>
 </ul>
 </body>
 </html>
