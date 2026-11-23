@@ -492,3 +492,13 @@ async function postAction(url) {
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/**
+ * 見出しの種別表示
+ *
+ * URLがある場合はGitHubを開くリンクにする。
+ */
+function renderTitleNumber(label, url) {
+  if (!url) return `<span class="title-number">${label}</span>`;
+  return `<a class="title-number" href="${url}" target="_blank" rel="noopener" title="GitHubで開く">${label}</a>`;
+}
