@@ -94,6 +94,18 @@ def test_allows_glob_and_grep_outside_worktree(tmp_path):
     assert isinstance(grep_result, PermissionResultAllow)
 
 
+def test_allows_ls_and_notebook_read_outside_worktree(tmp_path):
+    ls_result = _check(str(tmp_path), "LS", {"path": "C:/git/DevGuidelines"})
+    notebook_result = _check(str(tmp_path), "NotebookRead", {"notebook_path": "C:/git/DevGuidelines/x.ipynb"})
+    assert isinstance(ls_result, PermissionResultAllow)
+    assert isinstance(notebook_result, PermissionResultAllow)
+
+
+def test_denies_notebook_edit_outside_worktree(tmp_path):
+    result = _check(str(tmp_path), "NotebookEdit", {"notebook_path": "C:/git/ClaudeManagementTower/x.ipynb"})
+    assert isinstance(result, PermissionResultDeny)
+
+
 def test_denies_edit_tool_outside_worktree(tmp_path):
     result = _check(str(tmp_path), "Edit", {"file_path": "C:/git/ClaudeManagementTower/core/config.py"})
     assert isinstance(result, PermissionResultDeny)
