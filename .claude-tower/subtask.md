@@ -1,79 +1,69 @@
-# サブタスク: [IdeaMan] Issue選択時のGitHub問い合わせを省き、DB上のMR一覧のみで表示するー①
+# サブタスク: [IdeaMan] MR状態の定期同期をリポジトリごとに並行実行し、1件の失敗で他を止めないー①
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-Issue選択時のGitHub問い合わせを省き、DB上のMR一覧のみで表示する
+MR状態の定期同期をリポジトリごとに並行実行し、1件の失敗で他を止めない
 
 ## 概要
 
-Issueを選択するたびにgh issue viewを実行しているが、画面はIssue本文を使っていない。Issue一覧で取得済みの値とDB上のMR一覧で表示し、選択時の待ち時間をなくす。
+MR状態の同期は全リポジトリを1件ずつ順番に処理するため、リポジトリが増えるほど画面への反映が遅れる。リポジトリごとに並行して実行し、失敗もリポジトリ単位に閉じ込める。
 
 ## 詳細
 
-- Issue選択時は、Issue一覧で取得済みのnumber・title・state・urlと、既存のDB専用API（/issues/{number}/subtasks）でIssue内容を組み立てる。
-- 対象はselectIssue、fetchIssueSelection、refreshIssueDetail（ジョブ完了時）、openCreatedIssueAndSubtaskとする。
-- Issue一覧に無い番号（fetchUnlistedIssue）は、従来どおり詳細APIで取得する。
-- 詳細API（get_issue_detail）は残すが、画面の通常操作では呼ばないようにする。
-- 効果は、Issue切り替え時に出る「更新中…」の時間の短縮を、手動で計測して確認する。
+- sync_all_projectsで、リポジトリごとのgh pr list実行をThreadPoolExecutorで並行して実行する。DBセッションはリポジトリごとに分ける。
+- 例外はリポジトリ単位で捕まえてログに残し、他のリポジトリの同期は続ける。
+- 同時実行数は定数にまとめ、GitHubのレート制限を考えて小さめにする。
+- 2リポジトリのうち1件が失敗しても、もう1件が反映されることをpytestで確認する。
 
 ## 根拠
 
-- app/routes/projects.py:243-249 のget_issue_detailは、毎回get_issue（gh issue view）を実行している。
-- core/github_client.py:114-118 のget_issueはbodyを取得しているが、app.jsでIssueの.bodyを参照している箇所は無い（grepで確認）。
-- 画面で使っているtitle・state・urlは、Issue一覧API（gh issue list --json number,title,state,url）の結果にすでにある。
-- app.js:1506-1515 のselectIssueは、詳細取得が終わるまで画面をブロックして「更新中…」を表示する。
-- app.js:2350 ではジョブ完了のたびにrefreshIssueDetailでgh問い合わせが発生している。
-- MR一覧は、GitHubに問い合わせないAPI（projects.py:286-291）が既にある。
+- core/pr_sync.py:121-125 のsync_all_projectsは、全リポジトリを内包表記で順番に処理している。1件あたりgh pr list --state all --limit 200にclosingIssuesReferences付きで実行するため、重い問い合わせになる。
+- core/pr_sync.py:142-149 では例外をループ全体で捕まえているため、途中のリポジトリで失敗すると、残りのリポジトリはその回の同期が行われない。
+- 同期間隔は5秒（core/config.py:21）だが、1周にかかる時間はリポジトリ数に比例して延びる。
+- app.js:179の「サーバー側のPR同期間隔と合わせて10秒以内に反映させる」という前提は、リポジトリが増えると守れなくなる。
 
 ## 関連ファイル
 
-- app/routes/projects.py:243
-- core/github_client.py:114
-- app/static/app.js:1124
-- app/static/app.js:1506
-- app/static/app.js:1549
-- app/static/app.js:1558
-- app/static/app.js:2175
-- app/static/app.js:2350
-## 実行指示（2026-11-23 07:17:53 UTC）
+- core/pr_sync.py:107
+- core/pr_sync.py:121
+- core/pr_sync.py:142
+- core/config.py:21
+- core/github_client.py:187
+- app/static/app.js:179
+## 実行指示（2026-11-23 07:17:15 UTC）
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-Issue選択時のGitHub問い合わせを省き、DB上のMR一覧のみで表示する
+MR状態の定期同期をリポジトリごとに並行実行し、1件の失敗で他を止めない
 
 ## 概要
 
-Issueを選択するたびにgh issue viewを実行しているが、画面はIssue本文を使っていない。Issue一覧で取得済みの値とDB上のMR一覧で表示し、選択時の待ち時間をなくす。
+MR状態の同期は全リポジトリを1件ずつ順番に処理するため、リポジトリが増えるほど画面への反映が遅れる。リポジトリごとに並行して実行し、失敗もリポジトリ単位に閉じ込める。
 
 ## 詳細
 
-- Issue選択時は、Issue一覧で取得済みのnumber・title・state・urlと、既存のDB専用API（/issues/{number}/subtasks）でIssue内容を組み立てる。
-- 対象はselectIssue、fetchIssueSelection、refreshIssueDetail（ジョブ完了時）、openCreatedIssueAndSubtaskとする。
-- Issue一覧に無い番号（fetchUnlistedIssue）は、従来どおり詳細APIで取得する。
-- 詳細API（get_issue_detail）は残すが、画面の通常操作では呼ばないようにする。
-- 効果は、Issue切り替え時に出る「更新中…」の時間の短縮を、手動で計測して確認する。
+- sync_all_projectsで、リポジトリごとのgh pr list実行をThreadPoolExecutorで並行して実行する。DBセッションはリポジトリごとに分ける。
+- 例外はリポジトリ単位で捕まえてログに残し、他のリポジトリの同期は続ける。
+- 同時実行数は定数にまとめ、GitHubのレート制限を考えて小さめにする。
+- 2リポジトリのうち1件が失敗しても、もう1件が反映されることをpytestで確認する。
 
 ## 根拠
 
-- app/routes/projects.py:243-249 のget_issue_detailは、毎回get_issue（gh issue view）を実行している。
-- core/github_client.py:114-118 のget_issueはbodyを取得しているが、app.jsでIssueの.bodyを参照している箇所は無い（grepで確認）。
-- 画面で使っているtitle・state・urlは、Issue一覧API（gh issue list --json number,title,state,url）の結果にすでにある。
-- app.js:1506-1515 のselectIssueは、詳細取得が終わるまで画面をブロックして「更新中…」を表示する。
-- app.js:2350 ではジョブ完了のたびにrefreshIssueDetailでgh問い合わせが発生している。
-- MR一覧は、GitHubに問い合わせないAPI（projects.py:286-291）が既にある。
+- core/pr_sync.py:121-125 のsync_all_projectsは、全リポジトリを内包表記で順番に処理している。1件あたりgh pr list --state all --limit 200にclosingIssuesReferences付きで実行するため、重い問い合わせになる。
+- core/pr_sync.py:142-149 では例外をループ全体で捕まえているため、途中のリポジトリで失敗すると、残りのリポジトリはその回の同期が行われない。
+- 同期間隔は5秒（core/config.py:21）だが、1周にかかる時間はリポジトリ数に比例して延びる。
+- app.js:179の「サーバー側のPR同期間隔と合わせて10秒以内に反映させる」という前提は、リポジトリが増えると守れなくなる。
 
 ## 関連ファイル
 
-- app/routes/projects.py:243
-- core/github_client.py:114
-- app/static/app.js:1124
-- app/static/app.js:1506
-- app/static/app.js:1549
-- app/static/app.js:1558
-- app/static/app.js:2175
-- app/static/app.js:2350
+- core/pr_sync.py:107
+- core/pr_sync.py:121
+- core/pr_sync.py:142
+- core/config.py:21
+- core/github_client.py:187
+- app/static/app.js:179
 

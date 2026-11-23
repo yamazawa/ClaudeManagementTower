@@ -136,6 +136,43 @@ def test_sync_does_not_import_twice(session_factory, monkeypatch):
     assert _states(session_factory) == {12: "resolved"}
 
 
+def test_sync_continues_when_one_repo_fails(session_factory, monkeypatch):
+    with session_factory() as session:
+        session.add(
+            Project(name="q", github_repo="owner/broken", repo_path="y", default_branch="master")
+        )
+        session.commit()
+    _add_subtask(session_factory, 10, "draft", "b10")
+
+    def list_states(repo):
+        if repo == "owner/broken":
+            raise RuntimeError("gh failed")
+        return [_pr(10, "b10")]
+
+    monkeypatch.setattr(pr_sync, "list_pull_request_states", list_states)
+
+    updated = pr_sync.sync_all_projects(session_factory)
+
+    assert updated == [{"subtask_id": 1, "lifecycle_state": "resolved"}]
+    assert _states(session_factory) == {10: "resolved"}
+
+
+def test_sync_fetches_shared_repo_once(session_factory, monkeypatch):
+    with session_factory() as session:
+        session.add(
+            Project(name="q", github_repo="owner/repo", repo_path="y", default_branch="master")
+        )
+        session.commit()
+    calls = []
+    monkeypatch.setattr(
+        pr_sync, "list_pull_request_states", lambda repo: calls.append(repo) or []
+    )
+
+    pr_sync.sync_all_projects(session_factory)
+
+    assert calls == ["owner/repo"]
+
+
 def test_mark_prs_merged(session_factory):
     _add_subtask(session_factory, 10, "resolved", "b10")
     _add_subtask(session_factory, 11, "resolved", "b11")

@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     supervisor_control_dir: str = ".tower-control"
     supervisor_poll_interval_seconds: float = 1.0
     pr_sync_interval_seconds: float = 5.0
+    # GitHubのレート制限を考慮し、PR状態を同時に問い合わせるリポジトリ数を抑える
+    pr_sync_max_workers: int = 3
     self_repo: str = "yamazawa/ClaudeManagementTower"
     claude_credentials_path: str = ""
     claude_usage_refresh_interval_seconds: float = 300.0
