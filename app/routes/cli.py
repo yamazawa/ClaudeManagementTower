@@ -1,6 +1,6 @@
 """CLIタブのAPI
 
-CLIの項目（対話）の一覧・作成・変更と、発言の送信・取得を扱う。
+CLIの項目（対話）の一覧・作成・変更と、発言の送信・取得・応答の中断を扱う。
 """
 
 from typing import Literal
@@ -11,8 +11,10 @@ from pydantic import BaseModel
 from app.routes.repo_items import RepoItemPatch, item_errors
 from core.cli_session import (
     CliSessionBusy,
+    CliSessionNotRunning,
     create_session,
     get_session,
+    interrupt_turn,
     list_sessions,
     send_message,
     update_session,
@@ -61,6 +63,20 @@ def post_cli_message(cli_session_id: int, payload: SendCliMessageRequest):
         try:
             send_message(cli_session_id, text)
         except CliSessionBusy as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"accepted": True}
+
+
+@router.post("/cli-sessions/{cli_session_id}/interrupt", status_code=202)
+def post_cli_interrupt(cli_session_id: int):
+    """応答中のClaudeを中断する
+
+    中断の完了は待たずに返し、画面は発言一覧の取得で発言待ちに戻ったことを確認する。
+    """
+    with item_errors():
+        try:
+            interrupt_turn(cli_session_id)
+        except CliSessionNotRunning as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"accepted": True}
 
