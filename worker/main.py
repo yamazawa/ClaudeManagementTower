@@ -16,6 +16,7 @@ from core.git_client import append_instruction_history, push_branch
 from core.github_client import GitHubClientError, mark_pr_ready
 from core.idea_queue import claim_next_idea_job, recover_stale_idea_jobs
 from core.lifecycle import LifecycleState
+from core.logging_config import configure_logging
 from core.job_queue import (
     STATUS_RATE_LIMITED,
     claim_next_job,
@@ -230,6 +231,7 @@ def _process_next_job(worker_id: int) -> bool:
 
 
 def main() -> None:
+    configure_logging()
     init_db()
     process_identifier = make_process_identifier(os.getpid())
     worker_id = register_worker(process_identifier)

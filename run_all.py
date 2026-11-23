@@ -8,6 +8,7 @@ from filelock import FileLock, Timeout
 
 from core.config import settings
 from core.db import init_db
+from core.logging_config import configure_logging
 from core.supervisor_control import (
     COMMAND_RESTART_SERVER,
     COMMAND_RESTART_WORKERS,
@@ -99,6 +100,7 @@ def try_acquire_singleton_lock(path: Path) -> FileLock | None:
 
 
 def main() -> None:
+    configure_logging()
     lock = try_acquire_singleton_lock(SINGLETON_LOCK_PATH)
     if lock is None:
         print("[run_all] 既に起動中のため終了します")
