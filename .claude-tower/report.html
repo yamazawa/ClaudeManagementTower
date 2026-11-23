@@ -2,67 +2,75 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実装レポート #241 サブタスク1</title>
+<title>実装レポート サーバー・ワーカーのログ出力をloggingにそろえ、時刻を付けるー①</title>
 <style>
 body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; }
-h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; margin-top: 1.6em; }
-table { border-collapse: collapse; margin: 0.5em 0; }
-th, td { border: 1px solid #bbb; padding: 4px 8px; text-align: left; vertical-align: top; }
-th { background: #f2f2f2; }
-.ok { color: #fff; background: #2e7d32; padding: 2px 8px; border-radius: 4px; }
-code { background: #f5f5f5; padding: 0 3px; }
+h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; padding-bottom: .2em; margin-top: 1.6em; }
+table { border-collapse: collapse; margin: .5em 0; }
+th, td { border: 1px solid #bbb; padding: .3em .6em; text-align: left; vertical-align: top; }
+th { background: #f0f0f0; }
+.ok { color: #fff; background: #2a7a2a; padding: .1em .6em; border-radius: 4px; }
+code { background: #f4f4f4; padding: 0 .3em; }
+pre { background: #f4f4f4; padding: .5em; }
 </style>
 </head>
 <body>
-<h1>実装レポート：実装ジョブ・ワーカーの状態の文字列を、状態クラスにまとめる</h1>
+<h1>実装レポート</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#241（アイデアマン提案の実装）</td></tr>
-<tr><th>サブタスク</th><td>ExecutionJob・Workerの状態文字列を状態クラスに集約する</td></tr>
-<tr><th>ブランチ</th><td><code>issue-241-acd96670-subtask-1</code>（push済み）</td></tr>
+<tr><th>Issue</th><td>#238</td></tr>
+<tr><th>サブタスク</th><td>[IdeaMan] サーバー・ワーカーのログ出力をloggingにそろえ、時刻を付けるー①</td></tr>
+<tr><th>ブランチ</th><td><code>issue-238-28af7616-subtask-1</code>（PR #239, Draft）</td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
-<p><span class="ok">成功</span></p>
-<p>提案の詳細に記載された置き換えをすべて実施した。</p>
-<p>全テスト（522件）が成功した。</p>
+<p><span class="ok">成功</span>（run_all経由での実起動確認は未実施）</p>
+<p>サーバー・ワーカー・起動管理の各プロセスでlogging.basicConfigを設定した。</p>
+<p>出力形式は「時刻 レベル [ロガー名] メッセージ」とした。</p>
+<p>app・core・worker・run_all.py配下のprintは全てloggerに置き換えた。</p>
+<pre>2026-11-24 08:03:44 INFO [worker.main] 起動しました: test
+2026-11-24 08:03:44 WARNING [core.pr_sync] 同期に失敗しました: x</pre>
 
-<h2>3. 実施した変更</h2>
+<h2>3. 変更内容</h2>
 <table>
 <tr><th>No.</th><th>コミット</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td>205c80a</td><td>core/job_queue.py</td><td>ExecutionJobStatus（ACTIVE_STATES含む）・WorkerStateを追加した。<br>ファイル内の状態文字列をクラス定数に置き換えた。<br>_CLAIM_SQLの状態をバインド引数（<code>:running</code>・<code>:queued</code>）にした。<br>STATUS_RATE_LIMITEDを削除しRATE_LIMITEDに統合した。</td></tr>
-<tr><td>2</td><td>ef8dcd3</td><td>worker/main.py<br>worker/idea_runner.py</td><td>ジョブ状態・ワーカー状態をクラス定数に置き換えた。</td></tr>
-<tr><td>3</td><td>46a4af5</td><td>app/routes/subtasks.py<br>core/mr_status.py</td><td>2か所のACTIVE_JOB_STATUSESを削除し、ExecutionJobStatus.ACTIVE_STATESに統一した。<br>ジョブ登録時の<code>"queued"</code>を置き換えた。</td></tr>
-<tr><td>4</td><td>5225acf</td><td>core/idea_context.py</td><td>FAILED_JOB_STATESをクラス定数で定義した。</td></tr>
+<tr><td>1</td><td>logging共通設定を追加</td><td><code>core/logging_config.py</code>（新規）, <code>core/config.py</code>, <code>.env.example</code>, <code>tests/test_logging_config.py</code>（新規）</td><td>configure_logging()と出力形式の定数を追加。設定項目LOG_LEVEL（既定INFO）を追加。</td></tr>
+<tr><td>2</td><td>各プロセスの起動時にlogging設定を適用</td><td><code>app/main.py</code>, <code>worker/main.py</code>, <code>run_all.py</code></td><td>lifespan・ワーカーmain・run_allのmainの先頭でconfigure_logging()を呼ぶ。</td></tr>
+<tr><td>3</td><td>worker配下のprintをloggingに置換</td><td><code>worker/main.py</code>, <code>worker/pool.py</code>, <code>worker/idea_runner.py</code></td><td>print 15か所をlogger.info/warningに置換。</td></tr>
+<tr><td>4</td><td>core配下のprintをlogging.warningに置換</td><td><code>core/pr_sync.py</code>, <code>core/deploy.py</code>, <code>core/claude_usage.py</code></td><td>失敗ログ4か所をlogger.warningに置換。</td></tr>
+<tr><td>5</td><td>run_allのprintをloggingに置換</td><td><code>run_all.py</code></td><td>print 5か所をlogger.infoに置換。</td></tr>
 </table>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>_CLAIM_SQLは<code>text(...).bindparams(...)</code>でモジュール定義時に値を束縛した。</td><td>呼び出し側（claim_next_job）を変えずに済むため。<br>同じ<code>:running</code>を2か所で使える。</td></tr>
-<tr><td>2</td><td>STATUS_RATE_LIMITEDは互換用に残さず削除した。</td><td>利用箇所がworker/main.pyのみで、同PR内で置き換えたため。<br>ガイドラインの「互換性は保たない」に沿う。</td></tr>
-<tr><td>3</td><td>FAILED_JOB_STATESはidea_context.pyに残し、中身だけクラス定数にした。</td><td>提案ではクラスに持たせる組はACTIVE_STATESのみと指定されていたため。<br>利用箇所が1か所のみのため。</td></tr>
-<tr><td>4</td><td>worker/idea_runner.pyも置き換え対象に含めた。</td><td>提案の根拠にワーカー状態の記載箇所として挙がっていたため。</td></tr>
-<tr><td>5</td><td>core/idea_queue.pyの_CLAIM_SQLは変更しなかった。</td><td>提案の対象はExecutionJobのみのため。<br>同様の対応は別提案で行う想定。</td></tr>
-<tr><td>6</td><td>テストコード内の状態文字列は変更しなかった。</td><td>DBに保存される値そのものを検証しており、文字列のままで意味が通るため。</td></tr>
+<tr><td>1</td><td>run_all.pyにもbasicConfigを設定し、printも置換した</td><td>worker/pool.pyはワーカープロセスではなくrun_allのプロセス内で動く。run_allで設定しないとプールのinfoログが出力されないため。</td></tr>
+<tr><td>2</td><td>worker.main・run_allのロガー名を文字列で固定した</td><td>-m起動・直接実行では__name__が__main__になり、接頭辞の代用にならないため。</td></tr>
+<tr><td>3</td><td>basicConfigはforce指定なしとした</td><td>pytestやuvicornが既にハンドラを付けている場合に上書きしないため。uvicornは自前のロガーのみ設定し、ルートは未設定なのでサーバーでは有効になる。</td></tr>
+<tr><td>4</td><td>ファイル出力・ローテーションは今回実装しなかった</td><td>複数ワーカープロセスが同一ファイルをRotatingFileHandlerで書くと、Windowsではローテーション時にファイルロックで失敗する。提案でも「必要に応じて検討」の扱いのため、レベル設定のみに留めた。</td></tr>
+<tr><td>5</td><td>レベルの割り当て</td><td>失敗・要確認化・ワーカー異常終了による再起動はwarning、起動・開始・完了・再投入等はinfo。</td></tr>
+<tr><td>6</td><td>%形式の遅延フォーマットを採用</td><td>既存のlogger.warning呼び出しの書き方にそろえた。</td></tr>
 </table>
 
 <h2>5. テスト</h2>
 <table>
-<tr><th>コマンド</th><th>結果</th></tr>
-<tr><td><code>./.venv/Scripts/python.exe -m pytest -q</code></td><td>522 passed</td></tr>
+<tr><th>内容</th><th>結果</th></tr>
+<tr><td><code>./.venv/Scripts/python.exe -m pytest -q</code>（全体）</td><td>526 passed</td></tr>
+<tr><td>新規 <code>tests/test_logging_config.py</code>（形式・レベル・設定値既定・既存ハンドラ維持）</td><td>4 passed</td></tr>
+<tr><td>実プロセスでconfigure_logging後にworker.main・core.pr_syncのロガーから出力</td><td>時刻・レベル・ロガー名付きで出力、DEBUGは非表示を確認</td></tr>
+<tr><td>run_all.py経由でのサーバー・ワーカー実起動</td><td>未実施（稼働中の管理塔と競合するため。人間による確認を依頼）</td></tr>
 </table>
-<p>_CLAIM_SQLのバインド引数化は、tests/test_job_queue.pyのclaim系テスト（同一サブタスクの多重実行防止を含む）で確認済み。</p>
-<p>サーバー・ワーカーの起動確認は未実施（人間による動作確認を想定）。</p>
 
 <h2>6. 残課題・リスク・確認ポイント</h2>
 <ul>
-<li>コミット1単体ではworker/main.pyがSTATUS_RATE_LIMITEDをimportできず壊れる（コミット2で解消）。</li>
-<li>core/mr_status.pyがcore/job_queue.py経由でcore.dbをimportするようになった（merge_queue経由で既に依存しているため影響なし）。</li>
-<li>app/static/common.jsのJOB_STATUS・ACTIVE_JOB_STATUSESはフロント側の定義として残っている。</li>
-<li>core/idea_queue.pyの_CLAIM_SQLは文字列埋め込みのまま。</li>
+<li>ファイル出力・ローテーションは未対応。必要ならプロセスごとのファイル分割等を別タスクで検討する。</li>
+<li>LOG_LEVELに不正な値を設定すると起動時にValueErrorで停止する。</li>
+<li>従来は表示されなかったcore配下のlogger.info（存在する場合）が今後は表示される。</li>
+<li>uvicornのアクセスログは従来どおりuvicorn独自形式（時刻なし）のまま。</li>
+<li>確認ポイント：run_all.pyで起動し、サーバー・ワーカー・プールのログに時刻が付くこと。</li>
+<li>確認ポイント：job完了ログに結果テキスト全文が出る挙動は従来のprintと同じ。</li>
 </ul>
 </body>
 </html>

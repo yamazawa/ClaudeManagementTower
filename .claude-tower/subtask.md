@@ -1,103 +1,99 @@
-# サブタスク: [IdeaMan] 実装ジョブ・ワーカーの状態の文字列を、状態クラスにまとめるー①
+# サブタスク: [IdeaMan] サーバー・ワーカーのログ出力をloggingにそろえ、時刻を付けるー①
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-実装ジョブ・ワーカーの状態の文字列を、状態クラスにまとめる
+サーバー・ワーカーのログ出力をloggingにそろえ、時刻を付ける
 
 ## 概要
 
-ExecutionJob・Workerの状態は文字列のまま複数ファイルに散らばっています。実行中の状態の組も、2か所で別々に定義されています。
+ログはprintとloggingが混在していて、logging側の出力設定もありません。失敗の発生時刻が残らず、障害の原因を後から追いにくくなっています。
 
 ## 詳細
 
-- core/job_queue.pyにExecutionJobStatusクラスを置く。
-- クラスはMergeJobStatus・IdeaJobStatusと同じ形とする。
-- 状態はQUEUED/RUNNING/SUCCEEDED/FAILED/NEEDS_ATTENTION/RATE_LIMITEDとし、ACTIVE_STATESも持たせる。
-- Workerの状態（idle/busy）用のWorkerStateクラスも置く。
-- worker/main.py・app/routes/subtasks.py・core/mr_status.py・core/idea_context.pyの文字列をこれらのクラスに置き換える。
-- _CLAIM_SQL内の文字列は、バインド引数として渡す形にする。
+- サーバー起動時（app/main.pyのlifespan）とワーカー起動時（worker/main.pyのmain）にlogging.basicConfigを設定する。
+- 出力形式は時刻・ロガー名・レベル付きとする。
+- worker・core配下のprintをlogger.info/warningに置き換える。
+- 既存の[worker]等の接頭辞は、ロガー名で代用する。
+- 必要に応じて、ファイルへの出力やローテーションも設定項目として検討する。
 
 ## 根拠
 
-ガイドラインの「変更する可能性があるModel定義（状態のEnum定義など）は1クラスに纏める」に沿っていません。
-実装ジョブの状態は文字列のまま次の箇所に直接書かれています。
-- core/job_queue.py:13,16,20,136,169
-- worker/main.py:94,100,105,150
-- app/routes/subtasks.py:522
+app・core・worker配下にはlogging.basicConfigがありません。
+そのため、logger.warningは時刻なしで標準エラーに出ます。
+logger.warningの使用箇所は次のとおりです。
+- core/merge_queue.py:163,177
+- core/cli_session.py:369
+- core/subtask_rollback.py:72
+- core/github_client.py:266
 
-実行中の状態の組は2か所で別々に定義されています。
-- app/routes/subtasks.py:51
-- core/mr_status.py:10
+logger.infoは出力されません。
+一方、同じ種類の失敗ログをprintで出している箇所もあります。
+- core/pr_sync.py:147,183
+- core/deploy.py:190
+- core/claude_usage.py:134
 
-ワーカーの状態も文字列のまま書かれています。
-- core/job_queue.py:79,82
-- worker/main.py:141,204
-- worker/idea_runner.py:79
-
-一方、マージ・アイデア出しには状態クラスがあります（core/merge_queue.py:20、core/idea_queue.py:27付近）。
-ジョブの種類ごとに書き方がそろっていません。
+ワーカーのログはprintのみです（worker/main.py 10か所、worker/pool.py 3か所、worker/idea_runner.py 2か所）。
+#153 では、TLSタイムアウト・バッファ超過による失敗が短期間に何度も起きています。
+時刻付きのログが無いと、ジョブ・同期処理・マージ処理の時系列を突き合わせにくくなります。
 
 ## 関連ファイル
 
-- core/job_queue.py:10
-- core/job_queue.py:31
-- worker/main.py:94
-- worker/main.py:150
-- app/routes/subtasks.py:51
-- core/mr_status.py:10
-- core/idea_context.py:18
-- core/merge_queue.py:20
-## 実行指示（2026-11-23 23:01:47 UTC）
+- app/main.py:22
+- worker/main.py:232
+- worker/pool.py:88
+- core/pr_sync.py:147
+- core/deploy.py:190
+- core/claude_usage.py:134
+- core/merge_queue.py:163
+## 実行指示（2026-11-23 23:00:30 UTC）
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-実装ジョブ・ワーカーの状態の文字列を、状態クラスにまとめる
+サーバー・ワーカーのログ出力をloggingにそろえ、時刻を付ける
 
 ## 概要
 
-ExecutionJob・Workerの状態は文字列のまま複数ファイルに散らばっています。実行中の状態の組も、2か所で別々に定義されています。
+ログはprintとloggingが混在していて、logging側の出力設定もありません。失敗の発生時刻が残らず、障害の原因を後から追いにくくなっています。
 
 ## 詳細
 
-- core/job_queue.pyにExecutionJobStatusクラスを置く。
-- クラスはMergeJobStatus・IdeaJobStatusと同じ形とする。
-- 状態はQUEUED/RUNNING/SUCCEEDED/FAILED/NEEDS_ATTENTION/RATE_LIMITEDとし、ACTIVE_STATESも持たせる。
-- Workerの状態（idle/busy）用のWorkerStateクラスも置く。
-- worker/main.py・app/routes/subtasks.py・core/mr_status.py・core/idea_context.pyの文字列をこれらのクラスに置き換える。
-- _CLAIM_SQL内の文字列は、バインド引数として渡す形にする。
+- サーバー起動時（app/main.pyのlifespan）とワーカー起動時（worker/main.pyのmain）にlogging.basicConfigを設定する。
+- 出力形式は時刻・ロガー名・レベル付きとする。
+- worker・core配下のprintをlogger.info/warningに置き換える。
+- 既存の[worker]等の接頭辞は、ロガー名で代用する。
+- 必要に応じて、ファイルへの出力やローテーションも設定項目として検討する。
 
 ## 根拠
 
-ガイドラインの「変更する可能性があるModel定義（状態のEnum定義など）は1クラスに纏める」に沿っていません。
-実装ジョブの状態は文字列のまま次の箇所に直接書かれています。
-- core/job_queue.py:13,16,20,136,169
-- worker/main.py:94,100,105,150
-- app/routes/subtasks.py:522
+app・core・worker配下にはlogging.basicConfigがありません。
+そのため、logger.warningは時刻なしで標準エラーに出ます。
+logger.warningの使用箇所は次のとおりです。
+- core/merge_queue.py:163,177
+- core/cli_session.py:369
+- core/subtask_rollback.py:72
+- core/github_client.py:266
 
-実行中の状態の組は2か所で別々に定義されています。
-- app/routes/subtasks.py:51
-- core/mr_status.py:10
+logger.infoは出力されません。
+一方、同じ種類の失敗ログをprintで出している箇所もあります。
+- core/pr_sync.py:147,183
+- core/deploy.py:190
+- core/claude_usage.py:134
 
-ワーカーの状態も文字列のまま書かれています。
-- core/job_queue.py:79,82
-- worker/main.py:141,204
-- worker/idea_runner.py:79
-
-一方、マージ・アイデア出しには状態クラスがあります（core/merge_queue.py:20、core/idea_queue.py:27付近）。
-ジョブの種類ごとに書き方がそろっていません。
+ワーカーのログはprintのみです（worker/main.py 10か所、worker/pool.py 3か所、worker/idea_runner.py 2か所）。
+#153 では、TLSタイムアウト・バッファ超過による失敗が短期間に何度も起きています。
+時刻付きのログが無いと、ジョブ・同期処理・マージ処理の時系列を突き合わせにくくなります。
 
 ## 関連ファイル
 
-- core/job_queue.py:10
-- core/job_queue.py:31
-- worker/main.py:94
-- worker/main.py:150
-- app/routes/subtasks.py:51
-- core/mr_status.py:10
-- core/idea_context.py:18
-- core/merge_queue.py:20
+- app/main.py:22
+- worker/main.py:232
+- worker/pool.py:88
+- core/pr_sync.py:147
+- core/deploy.py:190
+- core/claude_usage.py:134
+- core/merge_queue.py:163
 

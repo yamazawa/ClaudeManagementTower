@@ -11,6 +11,7 @@ from core.claude_usage import start_refresh_loop as start_usage_refresh_loop
 from core.config import settings
 from core.db import ensure_default_project, init_db
 from core.idea_approval import recover_interrupted_claims
+from core.logging_config import configure_logging
 from core.merge_queue import start_merge_loop
 from core.pr_sync import start_sync_loop
 
@@ -20,6 +21,7 @@ BOOT_ID = uuid.uuid4().hex
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    configure_logging()
     init_db()
     ensure_default_project()
     recover_interrupted_sessions()
