@@ -209,7 +209,7 @@ def run_turn(
         on_message = lambda message: _record_entries(cli_session_id, message, session_factory)  # noqa: E731
         claude_session_id = asyncio.run(claude_runner(text, target["repo_path"], target["resume"], on_message))
     except Exception as exc:  # noqa: BLE001
-        logger.warning("CLI実行ダイアログ #%s の応答が失敗しました: %s", cli_session_id, exc)
+        logger.warning("CLIタブの対話 #%s の応答が失敗しました: %s", cli_session_id, exc)
         error = exc
     _finish_turn(cli_session_id, claude_session_id, error, session_factory)
 

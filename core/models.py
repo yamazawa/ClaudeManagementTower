@@ -117,7 +117,7 @@ class CliSession(Base):
 
 
 class CliMessage(Base):
-    """CLI実行ダイアログに表示する発言"""
+    """CLIタブの項目に表示する発言"""
 
     __tablename__ = "cli_messages"
 
