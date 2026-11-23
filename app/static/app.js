@@ -402,6 +402,7 @@ const PROJECT_COUNT_FILTERED_TOOLTIP = "OpenなIssueで、選択中のステー�
 const PROJECT_LIST_NO_PROJECT_TEXT = "リポジトリが登録されていません。";
 const PROJECT_LIST_NO_MATCH_TEXT = "選択中のステータスのMRを持つリポジトリはありません。";
 const PROJECT_CLI_BUTTON_TOOLTIP = "このリポジトリでClaudeと対話する";
+const PROJECT_IDEA_BUTTON_TOOLTIP = "このリポジトリの改善提案（アイデアマン）を確認する";
 
 /**
  * ヘッダーのMRステータスフィルタの初期化
@@ -731,8 +732,8 @@ function renderProjectItems(listEl) {
 /**
  * リポジトリ一覧の1行
  *
- * 「表示名 MR数 CLIボタン」を並べる。
- * CLIボタンはリポジトリを選択せずにCLI実行ダイアログを開く。
+ * 「表示名 MR数 Ideaボタン CLIボタン」を並べる。
+ * Ideaボタン・CLIボタンはリポジトリを選択せずに各ダイアログを開く。
  */
 function renderProjectItem(project) {
   const li = document.createElement("li");
@@ -741,13 +742,19 @@ function renderProjectItem(project) {
   li.innerHTML =
     `<span class="project-name" title="${escapeAttr(project.display_name)}">${escapeHtml(project.display_name)}</span>` +
     `<span class="project-count"></span>` +
-    `<button type="button" class="subtask-action-button project-cli-button" title="${PROJECT_CLI_BUTTON_TOOLTIP}">CLI</button>`;
+    `<button type="button" class="subtask-action-button project-dialog-button project-idea-button" title="${PROJECT_IDEA_BUTTON_TOOLTIP}">Idea</button>` +
+    `<button type="button" class="subtask-action-button project-dialog-button project-cli-button" title="${PROJECT_CLI_BUTTON_TOOLTIP}">CLI</button>`;
   li.addEventListener("click", () => selectProject(project));
-  li.querySelector(".project-cli-button").addEventListener("click", (event) => {
-    event.stopPropagation();
-    openCliDialog(project);
-  });
+  bindProjectDialogButton(li, ".project-idea-button", () => openIdeaDialog(project));
+  bindProjectDialogButton(li, ".project-cli-button", () => openCliDialog(project));
   return li;
+}
+
+function bindProjectDialogButton(li, selector, open) {
+  li.querySelector(selector).addEventListener("click", (event) => {
+    event.stopPropagation();
+    open();
+  });
 }
 
 /**

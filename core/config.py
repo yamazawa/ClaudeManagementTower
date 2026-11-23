@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     idea_max_proposals: int = 5
     idea_history_limit: int = 10
     claude_shared_root: str = "C:/git"
+    rate_limit_retry_delay_seconds: int = 600
 
 
 settings = Settings()

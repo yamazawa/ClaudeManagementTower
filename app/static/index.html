@@ -131,8 +131,22 @@
   </form>
 </dialog>
 
+<dialog id="idea-dialog" class="cli-dialog idea-dialog" aria-label="提案一覧（アイデアマン）">
+  <div class="cli-dialog-header">
+    <span id="idea-dialog-title" class="cli-dialog-title"></span>
+    <span id="idea-dialog-job" class="cli-dialog-status" role="status"></span>
+    <label class="idea-dialog-execute"><input type="checkbox" id="idea-dialog-execute" checked />そのまま実装に進む</label>
+    <button type="button" id="idea-dialog-run" class="subtask-action-button primary">アイデア出し実行</button>
+    <button type="button" id="idea-dialog-close" class="subtask-action-button">閉じる</button>
+  </div>
+  <div id="idea-dialog-tabs" class="idea-dialog-tabs" role="group" aria-label="提案の状態"></div>
+  <p id="idea-dialog-message" class="idea-dialog-message" role="status"></p>
+  <div id="idea-dialog-list" class="cli-dialog-log idea-dialog-list" aria-live="polite"></div>
+</dialog>
+
 <script src="/static/image_editor.js"></script>
 <script src="/static/cli_dialog.js"></script>
+<script src="/static/idea_dialog.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>

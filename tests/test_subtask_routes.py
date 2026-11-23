@@ -1,5 +1,6 @@
 import asyncio
 import io
+import re
 
 import pytest
 from fastapi import HTTPException, UploadFile
@@ -26,7 +27,7 @@ def session_factory(tmp_path, monkeypatch):
 def created(monkeypatch):
     calls = []
 
-    def fake_create(project, issue_number, title, instruction, slug_suffix, slug_source=None):
+    def fake_create(project, issue_number, title, instruction, slug_suffix, slug_source=None, unique_branch=False):
         calls.append({"title": title, "slug_source": slug_source})
         return f"issue-{issue_number}-{slug_suffix}", {"number": 10 + slug_suffix, "url": "u"}
 
@@ -82,8 +83,49 @@ def test_create_subtask_with_issue_title_skips_github_lookup(session_factory, cr
     assert result["title"] == "さしすせそー①"
 
 
+@pytest.fixture
+def pushed(monkeypatch):
+    """worktree作成・push・Draft PR作成に渡したブランチ名を記録する"""
+    branches = []
+
+    def fake_push(project, branch_name, title, instruction, body):
+        branches.append(branch_name)
+        return {"number": 10, "url": "u"}
+
+    monkeypatch.setattr(subtasks, "_push_draft_pr", fake_push)
+    return branches
+
+
+def test_branch_name_uses_slug_and_number(pushed):
+    subtasks._create_branch_and_draft_pr(_project(), 5, "t", "", 2, slug_source="Fix Bug")
+
+    assert pushed == ["issue-5-fix-bug-2"]
+
+
+def test_unique_branch_name_does_not_repeat(pushed):
+    for _ in range(2):
+        subtasks._create_branch_and_draft_pr(_project(), 5, "t", "", 1, unique_branch=True)
+
+    assert all(re.fullmatch(r"issue-5-[0-9a-f]{8}-subtask-1", b) for b in pushed)
+    assert pushed[0] != pushed[1]
+
+
+def test_create_subtask_passes_unique_branch(session_factory, created, monkeypatch):
+    received = []
+
+    def fake_create(*args, **kwargs):
+        received.append(kwargs["unique_branch"])
+        return "issue-5-x", {"number": 10, "url": "u"}
+
+    monkeypatch.setattr(subtasks, "_create_branch_and_draft_pr", fake_create)
+
+    subtasks.create_subtask(subtasks.CreateSubtaskRequest(project_id=1, github_issue_number=5, unique_branch=True))
+
+    assert received == [True]
+
+
 def test_create_subtask_adopts_row_imported_by_sync(session_factory, monkeypatch):
-    def fake_create(project, issue_number, title, instruction, slug_suffix, slug_source=None):
+    def fake_create(project, issue_number, title, instruction, slug_suffix, slug_source=None, unique_branch=False):
         # PR作成直後に自動同期が取り込んだ状態を再現する
         with session_factory() as session:
             session.add(

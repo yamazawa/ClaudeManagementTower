@@ -18,7 +18,7 @@ from core.idea_queue import IdeaJobStatus, finish_idea_job, heartbeat_idea_job
 from core.ideas import IdeaParseError, parse_proposals, save_proposals
 from core.job_queue import set_worker_state
 from core.models import Project
-from core.rate_limits import record_rate_limit
+from core.rate_limits import is_rate_limit_error, record_rate_limit
 
 ERROR_EXCERPT_MAX_LENGTH = 2000
 RESULT_SUMMARY_FORMAT = "{count}件の提案を保存しました"
@@ -80,5 +80,6 @@ def process_idea_job(job: dict, worker_id: int, claude_runner: Callable = _run_c
     try:
         _with_heartbeat(idea_job_id, worker_id, lambda: _execute(idea_job_id, job["project_id"], claude_runner))
     except Exception as exc:  # noqa: BLE001
-        finish_idea_job(idea_job_id, IdeaJobStatus.FAILED, error_message=str(exc))
-        print(f"[worker] idea job {idea_job_id} 失敗: {exc}")
+        status = IdeaJobStatus.RATE_LIMITED if is_rate_limit_error(str(exc)) else IdeaJobStatus.FAILED
+        finish_idea_job(idea_job_id, status, error_message=str(exc))
+        print(f"[worker] idea job {idea_job_id} 失敗（{status}）: {exc}")
