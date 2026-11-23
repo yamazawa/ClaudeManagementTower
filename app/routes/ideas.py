@@ -1,6 +1,7 @@
 """アイデアマンのAPI
 
-アイデア出しジョブの投入、提案一覧の取得、承認・却下を扱う。
+Ideaタブの項目の一覧・作成・変更、項目ごとのアイデア出しジョブの投入、
+提案一覧の取得、承認・却下を扱う。
 承認時のIssue・サブタスク作成は、既存のIssue作成・MR作成・実装実行の処理を使う。
 """
 
@@ -9,6 +10,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from app.routes.repo_items import RepoItemPatch, item_errors
 from app.routes.subtasks import CreateSubtaskRequest, create_subtask, execute_subtask
 from core.db import SessionLocal
 from core.github_client import GitHubClientError, create_issue
@@ -24,14 +26,31 @@ from core.idea_approval import (
     release_claim,
     target_issue_number,
 )
-from core.idea_queue import IdeaJobAlreadyActive, IdeaProjectNotFound, enqueue_idea_job, latest_idea_job
+from core.idea_queue import IdeaJobAlreadyActive
+from core.idea_sessions import (
+    create_session,
+    get_session,
+    list_session_ideas,
+    list_sessions,
+    run_session,
+    update_session,
+)
 from core.ideas import IDEA_TABS, IdeaAlreadyDecided, IdeaNotFound, list_ideas, reject_idea
 from core.models import Project
+from core.repo_items import ItemState
 
 router = APIRouter(prefix="/api")
 
 # アイデアを出してほしい観点の最大文字数
 IDEA_FOCUS_MAX_LENGTH = 1000
+
+
+IdeaTab = Literal["pending", "approved", "rejected", "all"]
+
+
+class CreateIdeaSessionRequest(BaseModel):
+    project_id: int
+    title: str
 
 
 class RunIdeaRequest(BaseModel):
@@ -49,30 +68,57 @@ class ApproveIdeaRequest(BaseModel):
     execute: bool = True
 
 
-@router.post("/projects/{project_id}/ideas/run", status_code=202)
-def run_idea_generation(project_id: int, payload: RunIdeaRequest | None = None):
-    """アイデア出しジョブを投入する
+def _tab_statuses(tab: str) -> tuple[str, ...] | None:
+    return None if tab == "all" else IDEA_TABS[tab]
 
-    結果は待たずに返し、画面は最新ジョブと提案一覧の取得で確認する。
+
+@router.get("/projects/{project_id}/idea-sessions")
+def get_idea_sessions(project_id: int, state: Literal["open", "closed"] = ItemState.OPEN):
+    return list_sessions(project_id, state)
+
+
+@router.post("/idea-sessions")
+def create_idea_session(payload: CreateIdeaSessionRequest):
+    with item_errors():
+        return create_session(payload.project_id, payload.title)
+
+
+@router.get("/idea-sessions/{idea_session_id}")
+def get_idea_session(idea_session_id: int):
+    with item_errors():
+        return get_session(idea_session_id)
+
+
+@router.patch("/idea-sessions/{idea_session_id}")
+def patch_idea_session(idea_session_id: int, payload: RepoItemPatch):
+    with item_errors():
+        return update_session(idea_session_id, payload.title, payload.state)
+
+
+@router.post("/idea-sessions/{idea_session_id}/run", status_code=202)
+def run_idea_generation(idea_session_id: int, payload: RunIdeaRequest | None = None):
+    """項目のアイデア出しジョブを投入する
+
+    結果は待たずに返し、画面は項目と提案一覧の取得で確認する。
     観点の指定は任意とする。
     """
     focus = payload.focus if payload else ""
-    try:
-        return enqueue_idea_job(project_id, focus)
-    except IdeaProjectNotFound as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    except IdeaJobAlreadyActive as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    with item_errors():
+        try:
+            return run_session(idea_session_id, focus)
+        except IdeaJobAlreadyActive as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+
+@router.get("/idea-sessions/{idea_session_id}/ideas")
+def get_idea_session_ideas(idea_session_id: int, tab: IdeaTab = "pending"):
+    with item_errors():
+        return list_session_ideas(idea_session_id, _tab_statuses(tab))
 
 
 @router.get("/projects/{project_id}/ideas")
-def get_ideas(project_id: int, tab: Literal["pending", "approved", "rejected", "all"] = "pending"):
-    return list_ideas(project_id, None if tab == "all" else IDEA_TABS[tab])
-
-
-@router.get("/projects/{project_id}/idea-jobs/latest")
-def get_latest_idea_job(project_id: int):
-    return latest_idea_job(project_id)
+def get_ideas(project_id: int, tab: IdeaTab = "pending"):
+    return list_ideas(project_id, _tab_statuses(tab))
 
 
 @router.post("/ideas/{idea_id}/reject")
