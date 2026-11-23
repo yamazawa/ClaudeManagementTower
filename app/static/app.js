@@ -231,6 +231,28 @@ function isLatestSelectionRequest(requestId) {
 }
 
 /**
+ * 選択の切り替え要求を実行する
+ *
+ * 取得結果は、後発の要求が無い場合のみ表示に反映する。
+ * blockingの場合は、取得中に画面をブロックして更新中を表示する。
+ * 更新中の表示は、最新の要求の終了時（失敗時も含む）に消す。
+ */
+async function runSelectionRequest(load, apply, { blocking = true } = {}) {
+  const requestId = nextSelectionRequest();
+  if (blocking) setSelectionBusy(true);
+  try {
+    const result = await load();
+    if (isLatestSelectionRequest(requestId)) apply(result);
+  } finally {
+    if (isLatestSelectionRequest(requestId)) setSelectionBusy(false);
+  }
+}
+
+function setSelectionBusy(busy) {
+  document.getElementById("selection-busy").hidden = !busy;
+}
+
+/**
  * 表示中のIssueがMR自動作成中か
  *
  * 意図せずMRを2個作らないよう、該当IssueではMR作成ボタンを無効化する。
@@ -518,7 +540,7 @@ function matchedIssueKey() {
  */
 function refreshMatchedIssues() {
   if (matchedIssueKey() === lastMatchedIssueKey) return;
-  if (isMrStatusFilterActive() && currentProjectId !== null) reloadIssues().catch(() => {});
+  if (isMrStatusFilterActive() && currentProjectId !== null) reloadIssues({ blocking: false }).catch(() => {});
 }
 
 async function pollMrStatuses() {
@@ -689,17 +711,14 @@ async function init() {
  * 縦長表示では、Issue一覧の表示が1件のみの場合は閉じる。
  */
 async function selectProject(project) {
-  const requestId = nextSelectionRequest();
   if (project.id !== currentProjectId) currentIssueNumber = null;
   const wasIssueSelected = currentIssueNumber !== null;
   currentProjectId = project.id;
-  const issues = await fetchIssueList();
-  const target = await fetchIssueSelection(issues);
-  if (!isLatestSelectionRequest(requestId)) return;
-
-  showProject(project);
-  applyIssueList(issues, target);
-  if (!wasIssueSelected && issues.length === 1) autoSetSectionExpanded(SECTION_IDS.repo, false);
+  await runSelectionRequest(fetchIssueListWithSelection, ({ issues, target }) => {
+    showProject(project);
+    applyIssueList(issues, target);
+    if (!wasIssueSelected && issues.length === 1) autoSetSectionExpanded(SECTION_IDS.repo, false);
+  });
 }
 
 /**
@@ -1017,13 +1036,23 @@ async function waitForDeployResult(projectId) {
  * 選択中のIssueが一覧から外れた場合は、先頭のIssueを選択し直す。
  * 表示するIssueが無い場合は、Issue・MRの表示を消してペインを閉じる。
  * Issue内容の取得後に、Issue一覧からMR内容までまとめて表示を切り替える。
+ * 定期更新など操作起点でない再読み込みは、blockingをfalseにして画面をブロックしない。
  */
-async function reloadIssues() {
-  const requestId = nextSelectionRequest();
+async function reloadIssues({ blocking = true } = {}) {
+  await runSelectionRequest(
+    fetchIssueListWithSelection,
+    ({ issues, target }) => applyIssueList(issues, target),
+    { blocking }
+  );
+}
+
+/**
+ * Issue一覧と、一覧の更新後に選択するIssueの内容を取得する
+ */
+async function fetchIssueListWithSelection() {
   const issues = await fetchIssueList();
   const target = await fetchIssueSelection(issues);
-  if (!isLatestSelectionRequest(requestId)) return;
-  applyIssueList(issues, target);
+  return { issues, target };
 }
 
 /**
@@ -1409,12 +1438,14 @@ function highlightSelectedSubtaskRow() {
  * Issue内容の取得後に、Issue一覧の選択表示からMR内容までまとめて切り替える。
  */
 async function selectIssue(number) {
-  const requestId = nextSelectionRequest();
-  const detail = await fetchIssueDetail(number);
-  if (!isLatestSelectionRequest(requestId)) return;
-  currentIssueNumber = number;
-  highlightSelectedIssue();
-  showIssueDetail(detail);
+  await runSelectionRequest(
+    () => fetchIssueDetail(number),
+    (detail) => {
+      currentIssueNumber = number;
+      highlightSelectedIssue();
+      showIssueDetail(detail);
+    }
+  );
 }
 
 function highlightSelectedIssue() {

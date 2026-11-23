@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実行レポート: アイデアマンー④</title>
+<title>実行レポート: Issue、MRレイアウト改善ー⑨</title>
 <style>
 body { font-family: sans-serif; margin: 24px; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; }
@@ -15,64 +15,54 @@ code { background: #f5f5f5; padding: 1px 4px; border-radius: 3px; }
 </style>
 </head>
 <body>
-<h1>実行レポート: アイデアマンー④</h1>
+<h1>実行レポート: Issue、MRレイアウト改善ー⑨</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#178 アイデアマン</td></tr>
-<tr><th>サブタスク</th><td>アイデアマンー④（Draft PR #191）</td></tr>
-<tr><th>指示</th><td>アイデアマンに依頼するときに、どういう観点でアイデアを出してほしいか入力可能にして欲しい。</td></tr>
-<tr><th>ブランチ</th><td><code>issue-178-subtask-4</code>（base: <code>master</code>）</td></tr>
+<tr><th>Issue</th><td>#153 Issue、MRレイアウト改善</td></tr>
+<tr><th>サブタスク</th><td>Issue、MRレイアウト改善ー⑨</td></tr>
+<tr><th>指示</th><td>選択を切り替えて、切替の更新待ちの場合にをブロックして更新中なのが分かるようにして。</td></tr>
+<tr><th>ブランチ</th><td><code>issue-153-subtask-9</code>（base: <code>master</code>）</td></tr>
 </table>
 
 <h2>2. 実装結果の要約</h2>
-<p class="ok">成功</p>
+<p class="ok">成功（動作確認は人間に依頼）</p>
 <ul>
-<li>提案一覧ダイアログの見出し行の下に、観点の入力欄（任意・1000文字まで）を追加した。</li>
-<li>入力した観点はアイデア出しジョブ（<code>idea_jobs.focus</code>）に保存し、ワーカーへ渡す。</li>
-<li>観点の指定があれば、Claudeへの指示文の調査依頼の直後に「重視する観点」の節を含める。</li>
-<li>ダイアログを開いた直後は、前回のアイデア出しの観点で入力欄を埋める。</li>
-<li>実行中は入力欄を無効化する。</li>
+<li>リポジトリ・Issueの選択を切り替えたとき、取得が終わるまで画面をオーバーレイでブロックする。</li>
+<li>オーバーレイ中央に回転アイコンと「更新中…」を表示する。</li>
+<li>Issue一覧のフィルタ変更・MRステータスフィルタ変更・Issueのオープン/クローズ後の再読み込みも対象とした。</li>
+<li>定期更新を起点とする再読み込みはブロックしない。</li>
 </ul>
 
 <h2>3. 実施した変更と主な変更ファイル</h2>
 <table>
 <tr><th>No.</th><th>コミット</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td>ジョブに観点の列を追加</td><td><code>core/models.py</code>, <code>core/db.py</code>, <code>tests/test_db.py</code></td><td><code>IdeaJob.focus</code>を追加。起動時に既存DBへ不足列を追加する<code>ADDED_COLUMNS</code>を追加</td></tr>
-<tr><td>2</td><td>観点を受け取りジョブに保存</td><td><code>core/idea_queue.py</code>, <code>app/routes/ideas.py</code>, テスト</td><td><code>POST /api/projects/{id}/ideas/run</code>で<code>{"focus": "..."}</code>を任意で受け取る。投入時に前後空白を除いて保存し、ジョブ取得時に返す</td></tr>
-<tr><td>3</td><td>観点を指示文に含める</td><td><code>core/idea_context.py</code>, <code>worker/idea_runner.py</code>, テスト</td><td><code>build_idea_prompt</code>に<code>focus</code>引数を追加。空なら節を出さない</td></tr>
-<tr><td>4</td><td>提案一覧に観点の入力欄を追加</td><td><code>app/static/index.html</code>, <code>idea_dialog.js</code>, <code>style.css</code></td><td>入力欄の追加、送信、前回の観点での初期表示、実行中の無効化</td></tr>
-<tr><td>5</td><td>実装計画に記録</td><td><code>IMPLEMENTATION_PLAN.md</code></td><td>9章にNo.18（観点の指定）・No.19（列の追加方針）を追記</td></tr>
+<tr><td>1</td><td>#153 [選択切替] 更新中のブロック表示を追加</td><td><code>app/static/index.html</code><br><code>app/static/style.css</code></td><td>更新中オーバーレイ要素とスタイルを追加した。見た目の調整値は<code>:root</code>のCSS変数にまとめた。</td></tr>
+<tr><td>2</td><td>#153 [選択切替] 更新待ちの間に画面をブロック</td><td><code>app/static/app.js</code></td><td>共通関数<code>runSelectionRequest</code>を追加した。<code>selectProject</code>・<code>selectIssue</code>・<code>reloadIssues</code>をこの関数経由に変更した。</td></tr>
 </table>
 
-<h2>4. 自律判断した事項・採用理由・前提</h2>
+<h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>観点は自由記述の1項目とした（選択式にしない）</td><td>指示が「どういう観点で」と自由度の高い要望のため。選択肢は運用を見て追加できる</td></tr>
-<tr><td>2</td><td>観点はジョブ単位で保存し、提案単位には持たせない</td><td>ワーカーがDBからジョブを取得する構成のため、ジョブに保存するのが最小の変更になる</td></tr>
-<tr><td>3</td><td>既存DBへは起動時に列を追加する（<code>ALTER TABLE ... ADD COLUMN</code>）</td><td>DBは<code>create_all</code>のみで列追加されず、そのままでは稼働中の管理塔が<code>idea_jobs</code>参照時に失敗するため。ガイドラインの「移行コードを書かない」と衝突するが、実装計画3章No.3の運用開始後ルール（既存データを消さない）を優先し、9章No.19に記録した</td></tr>
-<tr><td>4</td><td>観点の上限を1000文字とした</td><td>指示文の肥大化を防ぐため。画面の<code>maxlength</code>とAPIの検証（超過は422）を合わせた</td></tr>
-<tr><td>5</td><td>観点に合う提案が無ければ件数を埋めない旨を指示文に含めた</td><td>観点外の提案で件数を埋めると、指定の意味が薄れるため</td></tr>
-<tr><td>6</td><td>前回の観点で入力欄を初期表示する</td><td>同じ観点での再実行を想定。不要なら消して実行すればよい</td></tr>
-<tr><td>7</td><td>リクエスト本文は省略可とした</td><td>既存の呼び出し（本文なし・<code>{}</code>）との互換のため</td></tr>
+<tr><td>1</td><td>対象の「選択」はリポジトリ・Issueの選択とした。</td><td>通信待ちが発生するのはこの2つ。MRの選択は取得済みデータで即時に切り替わるため対象外。</td></tr>
+<tr><td>2</td><td>ブロック範囲はヘッダーを除く画面全体（<code>position: fixed</code>）とした。</td><td>縦長表示でスクロールしても表示が画面中央に出るようにするため。ヘッダーのDeploy等は通信待ちと無関係なので操作可能のままにした。</td></tr>
+<tr><td>3</td><td>操作ブロックは即時、見た目は0.2秒遅れでフェードインする。</td><td>短時間で終わる更新でのちらつきを防ぐため。</td></tr>
+<tr><td>4</td><td>定期更新（MR集計の変化による一覧再取得）はブロックしない。</td><td>ユーザー操作と無関係に画面が数秒ごとに固まるのを避けるため。</td></tr>
+<tr><td>5</td><td>オーバーレイは最新の要求の終了時に消す（失敗時も含む）。</td><td>連続した要求の途中で消えないようにし、通信失敗で固まり続けないようにするため。</td></tr>
 </table>
 
-<h2>5. 実行したテストと結果</h2>
+<h2>5. テスト</h2>
 <ul>
-<li><code>./.venv/Scripts/python.exe -m pytest -q</code>：412件すべて成功。</li>
-<li>追加テスト：既存テーブルへの列追加（2回実行しても失敗しない）、観点の保存と取得、APIの観点受け渡し・文字数超過、指示文への観点の節の有無と位置、ワーカーからの観点の受け渡し。</li>
-<li>FastAPIのTestClientで、本文なし／<code>{}</code>／観点あり／1001文字（422）の応答を確認した。</li>
-<li><code>node --check app/static/idea_dialog.js</code>：構文エラーなし。</li>
-<li>ブラウザでの画面確認は未実施（アプリの起動確認は人間に依頼する運用のため）。</li>
+<li><code>node --check app/static/app.js</code>: 構文エラーなし</li>
+<li><code>./.venv/Scripts/python.exe -m pytest -q</code>: 412 passed</li>
+<li>ブラウザでの動作確認は未実施（アプリを人間が使用中の可能性があるというルールに従った）。</li>
 </ul>
 
-<h2>6. 残課題・リスク・レビュー時の確認ポイント</h2>
+<h2>6. 残課題・レビュー時の確認ポイント</h2>
 <ul>
-<li>画面での見た目（入力欄の位置・スマホ幅での表示）を確認してほしい。</li>
-<li>既存DBへの列追加は、管理塔の再起動時（<code>init_db</code>実行時）に行われる。再起動前に新しいワーカーが動くと<code>focus</code>列が無く失敗する可能性がある。</li>
-<li><code>ADDED_COLUMNS</code>の仕組みを今後のスキーマ変更にも使うか、今回限りとするかの判断が必要。</li>
-<li>観点は提案カードには表示していない。どの観点で出た提案かを表示したい場合は後続で対応する。</li>
-<li>入力欄のプレースホルダーに入力例を入れている。不要であれば削除する。</li>
+<li>リポジトリ・Issueを切り替えたとき「更新中…」が出て、終わると消えるか。</li>
+<li>ブロック範囲（ヘッダーは操作可）と表示までの遅延（0.2秒）が意図に合うか。値は<code>style.css</code>の<code>--selection-busy-*</code>で調整できる。</li>
+<li>MR集計の変化でリポジトリが自動で選び直される場合（<code>selectFirstVisibleProject</code>）もブロックする。これは選択の切替なので対象に含めた。</li>
 </ul>
 </body>
 </html>

@@ -12,6 +12,10 @@
   --create-row-height: 36px;
   --list-row-padding-x: 12px;
   --list-row-border-width: 1px;
+  --selection-busy-backdrop: rgba(244, 246, 250, 0.6);
+  --selection-busy-show-delay: 0.2s;
+  --selection-busy-fade: 0.15s;
+  --selection-busy-spinner-size: 16px;
 }
 
 * {
@@ -650,6 +654,63 @@ Issue名・入力欄・作成ボタンは折り返さず1行に並べる。
 #issue-panel[hidden],
 #issue-list-placeholder[hidden] {
   display: none;
+}
+
+/* 選択切替の更新待ち表示
+
+表示中は画面を覆い、ヘッダー以外の操作をブロックする。
+すぐ終わる更新でちらつかないよう、見た目は少し遅れて表示する。
+*/
+.selection-busy {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--selection-busy-backdrop);
+  cursor: progress;
+  animation: selection-busy-fade-in var(--selection-busy-fade) ease var(--selection-busy-show-delay) both;
+}
+
+.selection-busy[hidden] {
+  display: none;
+}
+
+.selection-busy-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--muted);
+  box-shadow: 0 4px 16px rgba(24, 34, 53, 0.12);
+}
+
+.selection-busy-spinner {
+  width: var(--selection-busy-spinner-size);
+  height: var(--selection-busy-spinner-size);
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: selection-busy-spin 0.8s linear infinite;
+}
+
+@keyframes selection-busy-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes selection-busy-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* メイン画面のペイン配置
