@@ -87,6 +87,35 @@ def test_list_open_pull_requests_parses_json(monkeypatch):
     ]
 
 
+def _fake_run_returning(prs: list[dict]):
+    def run(args, **kwargs):
+        return subprocess.CompletedProcess(args, 0, stdout=json.dumps(prs), stderr="")
+
+    return run
+
+
+def test_list_open_pull_requests_warns_when_limit_reached(monkeypatch, caplog):
+    monkeypatch.setattr(github_client, "PR_STATE_LIST_LIMIT", 2)
+    monkeypatch.setattr(
+        github_client.subprocess, "run", _fake_run_returning([{"number": 1}, {"number": 2}])
+    )
+
+    with caplog.at_level("WARNING", logger=github_client.__name__):
+        list_open_pull_requests("owner/repo")
+
+    assert "取得上限2件" in caplog.text
+
+
+def test_list_open_pull_requests_does_not_warn_below_limit(monkeypatch, caplog):
+    monkeypatch.setattr(github_client, "PR_STATE_LIST_LIMIT", 2)
+    monkeypatch.setattr(github_client.subprocess, "run", _fake_run_returning([{"number": 1}]))
+
+    with caplog.at_level("WARNING", logger=github_client.__name__):
+        list_open_pull_requests("owner/repo")
+
+    assert caplog.text == ""
+
+
 def test_get_pr_mergeable_returns_state(monkeypatch):
     calls = []
 
