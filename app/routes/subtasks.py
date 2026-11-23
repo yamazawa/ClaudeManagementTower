@@ -411,14 +411,18 @@ def reopen_subtask(subtask_id: int):
         return {"id": subtask.id, "lifecycle_state": subtask.lifecycle_state}
 
 
-def _has_active_job(session, subtask_id: int) -> bool:
+def _find_active_job(session, subtask_id: int) -> ExecutionJob | None:
     return (
         session.query(ExecutionJob)
         .filter_by(subtask_id=subtask_id)
         .filter(ExecutionJob.status.in_(ACTIVE_JOB_STATUSES))
+        .order_by(ExecutionJob.id)
         .first()
-        is not None
     )
+
+
+def _has_active_job(session, subtask_id: int) -> bool:
+    return _find_active_job(session, subtask_id) is not None
 
 
 def _ensure_mergeable(session, subtask: Subtask) -> None:
@@ -506,8 +510,26 @@ class ExecuteSubtaskRequest(BaseModel):
     instruction: str | None = None
 
 
+def _ensure_no_active_job(session, subtask_id: int) -> None:
+    """実装ジョブの待機中・実行中は実行を拒否する
+
+    画面側が既存ジョブの監視に切り替えられるよう、ジョブIDと状態を返す。
+    """
+    job = _find_active_job(session, subtask_id)
+    if job is None:
+        return
+    raise HTTPException(
+        status_code=409,
+        detail={"message": "実装の実行中・実行待ちです", "job_id": job.id, "status": job.status},
+    )
+
+
 @router.post("/{subtask_id}/execute")
 def execute_subtask(subtask_id: int, payload: ExecuteSubtaskRequest | None = None):
+    """実装ジョブを登録する
+
+    マージ待ち、または実装ジョブの待機中・実行中は409を返す。
+    """
     with SessionLocal() as session:
         subtask = session.get(Subtask, subtask_id)
         if subtask is None:
@@ -515,6 +537,7 @@ def execute_subtask(subtask_id: int, payload: ExecuteSubtaskRequest | None = Non
 
         if find_active_merge(session, subtask_id) is not None:
             raise HTTPException(status_code=409, detail="マージ待ちのMRは実装できません")
+        _ensure_no_active_job(session, subtask_id)
 
         if payload is not None and payload.instruction:
             subtask.instruction = payload.instruction
