@@ -14,6 +14,7 @@
   --token-usage-rejected: #ff6b6b;
   --image-editor-selected: #e01e1e;
   --expander-size: 24px;
+  --create-expander-size: 16px;
   --title-number-font-size: 0.8em;
   --section-heading-font-size: 12.5px;
   --create-row-height: 36px;
@@ -1008,6 +1009,30 @@ section.collapsed > .section-title-row {
 /* MRステータスフィルタの選択中に隠す作成フォーム */
 .create-block[hidden] {
   display: none;
+}
+
+/* 作成欄の見出し
+
+見出し文字列の右隣に、文字と同じ大きさのエキスパンダを置く。
+*/
+.create-heading {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.create-expander {
+  width: var(--create-expander-size);
+  height: var(--create-expander-size);
+}
+
+/* 閉じた作成欄は見出しのみ表示する */
+.create-block.collapsed > :not(.create-heading) {
+  display: none;
+}
+
+.create-block.collapsed > .create-heading {
+  margin-bottom: 0;
 }
 
 /* 一覧の状態フィルタ
