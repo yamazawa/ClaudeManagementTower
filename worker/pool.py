@@ -4,6 +4,7 @@
 起動時は登録済みの既存ワーカーを停止し、取り残されたプロセスを残さない。
 """
 
+import logging
 import os
 import signal
 import subprocess
@@ -17,6 +18,8 @@ from sqlalchemy.orm import sessionmaker
 from core.config import settings
 from core.db import SessionLocal
 from core.job_queue import delete_all_workers, list_live_worker_pids
+
+logger = logging.getLogger(__name__)
 
 WORKER_ARGS = ["-u", "-m", "worker.main"]
 STOP_TIMEOUT_SECONDS = 10
@@ -85,7 +88,7 @@ class WorkerPool:
 
     def start(self) -> None:
         self.stop()
-        print(f"[pool] worker.count={self.count}個のワーカーを起動します")
+        logger.info("worker.count=%s個のワーカーを起動します", self.count)
         self._slots = [self._new_slot() for _ in range(self.count)]
 
     def stop(self) -> None:
@@ -105,7 +108,7 @@ class WorkerPool:
                 continue
             if now - slot.spawned_at < settings.worker_respawn_delay_seconds:
                 continue
-            print(f"[pool] 終了したワーカー(slot {index})を再起動します")
+            logger.warning("終了したワーカー(slot %s)を再起動します", index)
             self._slots[index] = self._new_slot()
 
     def _new_slot(self) -> _Slot:
@@ -123,5 +126,5 @@ class WorkerPool:
         for pid in foreign_pids:
             self._kill(pid)
         if foreign_pids:
-            print(f"[pool] 登録済みのワーカーを停止しました: {foreign_pids}")
+            logger.info("登録済みのワーカーを停止しました: %s", foreign_pids)
         delete_all_workers(session_factory=self._session_factory)
