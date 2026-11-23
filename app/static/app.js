@@ -217,12 +217,13 @@ function setSectionExpanded(sectionId, expanded) {
 }
 
 /**
- * 縦長表示の場合のみ、ペインを自動で開閉する
+ * 縦長表示の場合のみ、ペインを自動で開く
  *
  * 横長表示では全ペインが並ぶため、利用者の開閉操作のみに従う。
+ * 自動では閉じず、閉じる操作は利用者に任せる。
  */
-function autoSetSectionExpanded(sectionId, expanded) {
-  if (isPortrait()) setSectionExpanded(sectionId, expanded);
+function autoExpandSection(sectionId) {
+  if (isPortrait()) setSectionExpanded(sectionId, true);
 }
 
 function isPortrait() {
@@ -326,7 +327,7 @@ function setAutoMrCreatingIssue(issueNumber) {
 /**
  * エキスパンダの初期化
  *
- * 縦長表示では、親項目が未選択で表示内容が無いペインを閉じておく。
+ * ペインは自動で閉じず、利用者の開閉操作でのみ閉じる。
  */
 function setupExpanders() {
   document.querySelectorAll("section .expander").forEach((button) => {
@@ -335,7 +336,6 @@ function setupExpanders() {
       setSectionExpanded(section.id, !isSectionExpanded(section.id));
     });
   });
-  [SECTION_IDS.repo, SECTION_IDS.issue, SECTION_IDS.mr].forEach((id) => autoSetSectionExpanded(id, false));
 }
 
 function escapeHtml(text) {
@@ -770,20 +770,17 @@ async function init() {
  * 保持している一覧が無い場合のみ、画面をブロックして取得する。
  * 再取得の前に別リポジトリへ切り替えた場合は、再取得しない。
  * 別リポジトリへ切り替えた場合は、前のIssue・MR・CLI・Ideaの選択を外す。
- * 縦長表示ではリポジトリ一覧を閉じ、Issue一覧を開く。
- * 縦長表示では、Issue一覧の表示が1件のみの場合は閉じる。
+ * 縦長表示ではIssue一覧を開く。
  */
 async function selectProject(project) {
   if (project.id !== currentProjectId) {
     currentIssueNumber = null;
     clearRepoItemSelection();
   }
-  const wasIssueSelected = currentIssueNumber !== null;
   currentProjectId = project.id;
   const apply = ({ issues, target }) => {
     showProject(project);
     applyIssueList(issues, target);
-    if (!wasIssueSelected && issues.length === 1) autoSetSectionExpanded(SECTION_IDS.repo, false);
   };
   const cached = issueListCache.get(issueListCacheKey());
   if (!cached) return runSelectionRequest(fetchIssueListWithSelection, apply);
@@ -798,8 +795,7 @@ async function selectProject(project) {
  */
 function showProject(project) {
   highlightSelectedProject();
-  autoSetSectionExpanded(SECTION_IDS.projects, false);
-  autoSetSectionExpanded(SECTION_IDS.repo, true);
+  autoExpandSection(SECTION_IDS.repo);
   setSectionShown(SECTION_IDS.repo, true);
   document.getElementById("issue-list-placeholder").hidden = true;
   document.getElementById("repo-panel").hidden = false;
@@ -1583,15 +1579,13 @@ function highlightSelectedIssue() {
  *
  * MR一覧に表示中の先頭MRを自動選択する。
  * 表示中のMRが無い場合は未選択とし、MR内容を非表示にする。
- * 縦長表示ではIssue内容を開き、MR一覧の表示が1件のみの場合は閉じる。
- * 表示が複数件の場合は、MRを選択し直せるよう開いたままにする。
- * 開閉は内容の切り替え後に行い、切り替え前の内容で開閉しないようにする。
+ * 縦長表示ではIssue内容を開く。
  */
 function showIssueDetail(issue) {
   currentSelectedSubtaskId = null;
   renderIssueDetail(issue);
   setSectionShown(SECTION_IDS.issue, true);
-  autoSetSectionExpanded(SECTION_IDS.issue, filterSubtasks(currentSubtasks).length !== 1);
+  autoExpandSection(SECTION_IDS.issue);
 }
 
 /**
@@ -1737,7 +1731,7 @@ function numberLabel(n) {
 function selectSubtask(subtaskId) {
   currentSelectedSubtaskId = subtaskId;
   highlightSelectedSubtaskRow();
-  autoSetSectionExpanded(SECTION_IDS.mr, true);
+  autoExpandSection(SECTION_IDS.mr);
   const subtask = currentSubtasks.find((s) => s.id === subtaskId) || null;
   renderSubtaskDetail(subtask);
 }
