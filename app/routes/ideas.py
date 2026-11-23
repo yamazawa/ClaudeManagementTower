@@ -113,6 +113,7 @@ def _create_subtask_for(idea: dict, issue_title: str, execute: bool) -> tuple[di
         github_issue_number=target_issue_number(idea),
         instruction=compose_subtask_instruction(idea),
         issue_title=issue_title,
+        unique_branch=True,
     )
     try:
         subtask = create_subtask(payload)

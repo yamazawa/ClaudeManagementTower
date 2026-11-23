@@ -143,6 +143,7 @@ def test_approve_with_subtask_creates_issue_subtask_and_job(approval_db, github)
     payload = github["subtasks"][0]
     assert (payload.github_issue_number, payload.issue_title) == (50, "[IdeaMan] 提案タイトル")
     assert payload.instruction.startswith("アイデアマンの提案を実装する。")
+    assert payload.unique_branch is True
     assert github["executes"] == [9]
     assert result["subtask"]["job"]["job_id"] == 3
 
