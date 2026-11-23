@@ -551,6 +551,17 @@ async function toggleMrStatusFilter(status) {
 }
 
 /**
+ * MRステータスフィルタの選択を外す
+ *
+ * 未選択の場合は何もしない。
+ */
+function clearMrStatusFilter() {
+  if (!isMrStatusFilterActive()) return;
+  selectedMrStatuses.clear();
+  onMrStatusFilterChanged();
+}
+
+/**
  * 選択中のステータスが0件になった場合に、選択を次のステータスへ移す
  *
  * 後続で1件以上あるステータスを選択する。
