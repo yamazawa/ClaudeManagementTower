@@ -248,8 +248,35 @@ async function runSelectionRequest(load, apply, { blocking = true } = {}) {
   }
 }
 
+// 選択の切り替えで更新待ちか
+let selectionBusy = false;
+// 更新待ちの操作の数（並行して実行された操作が全て終わるまで更新中を表示する）
+let busyActionCount = 0;
+
 function setSelectionBusy(busy) {
-  document.getElementById("selection-busy").hidden = !busy;
+  selectionBusy = busy;
+  updateBusyOverlay();
+}
+
+/**
+ * 更新待ちの操作を実行する
+ *
+ * 実行中は選択の切り替えと同じく、画面をブロックして更新中を表示する。
+ * 失敗時も含め、操作の終了時に表示を戻す。
+ */
+async function runBusyAction(action) {
+  busyActionCount += 1;
+  updateBusyOverlay();
+  try {
+    return await action();
+  } finally {
+    busyActionCount -= 1;
+    updateBusyOverlay();
+  }
+}
+
+function updateBusyOverlay() {
+  document.getElementById("selection-busy").hidden = !selectionBusy && busyActionCount === 0;
 }
 
 /**
