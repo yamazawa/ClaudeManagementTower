@@ -13,6 +13,11 @@
     <div id="token-usage" class="token-usage" aria-label="Claudeトークン使用状況"></div>
   </div>
   <div class="header-bottom">
+    <div id="repo-item-switch" class="repo-item-switch" role="group" aria-label="リポジトリの項目の切替">
+      <button type="button" class="repo-item-switch-button" data-kind="issue" aria-pressed="true">Issue</button>
+      <button type="button" class="repo-item-switch-button" data-kind="cli" aria-pressed="false">CLI</button>
+      <button type="button" class="repo-item-switch-button" data-kind="idea" aria-pressed="false">Idea</button>
+    </div>
     <div id="mr-status-filter" role="group" aria-label="MRステータスでの絞り込み"></div>
     <button type="button" id="deploy-button" class="header-deploy-button">Deploy</button>
     <span id="deploy-status" class="header-deploy-status" role="status"></span>
@@ -32,12 +37,7 @@
     </div>
     <p id="issue-list-placeholder" class="empty">一覧からリポジトリを選択してください。</p>
     <div id="repo-panel" hidden>
-      <div id="repo-item-tabs" class="repo-item-tabs" role="tablist" aria-label="リポジトリの項目">
-        <button type="button" class="repo-item-tab" role="tab" data-kind="issue" aria-selected="true">Issue</button>
-        <button type="button" class="repo-item-tab" role="tab" data-kind="cli" aria-selected="false">CLI</button>
-        <button type="button" class="repo-item-tab" role="tab" data-kind="idea" aria-selected="false">Idea</button>
-      </div>
-      <div id="issue-panel" class="repo-item-panel" data-kind="issue" role="tabpanel">
+      <div id="issue-panel" class="repo-item-panel" data-kind="issue">
         <div id="issue-create-block" class="fold-block collapsed">
           <h3 class="section-heading section-heading-top fold-heading">Issue作成<button type="button" class="expander" aria-expanded="false" aria-label="作成欄の開閉"></button></h3>
           <form id="issue-create-form">
@@ -57,7 +57,7 @@
           <ul id="issue-list-items"></ul>
         </div>
       </div>
-      <div id="cli-panel" class="repo-item-panel" data-kind="cli" role="tabpanel" hidden>
+      <div id="cli-panel" class="repo-item-panel" data-kind="cli" hidden>
         <div class="fold-block collapsed">
           <h3 class="section-heading section-heading-top fold-heading">CLI作成<button type="button" class="expander" aria-expanded="false" aria-label="作成欄の開閉"></button></h3>
           <form id="cli-create-form" class="repo-item-create-form">
@@ -76,7 +76,7 @@
           <ul id="cli-list-items" class="repo-item-list"></ul>
         </div>
       </div>
-      <div id="idea-panel" class="repo-item-panel" data-kind="idea" role="tabpanel" hidden>
+      <div id="idea-panel" class="repo-item-panel" data-kind="idea" hidden>
         <div class="fold-block collapsed">
           <h3 class="section-heading section-heading-top fold-heading">Idea作成<button type="button" class="expander" aria-expanded="false" aria-label="作成欄の開閉"></button></h3>
           <form id="idea-create-form" class="repo-item-create-form">
