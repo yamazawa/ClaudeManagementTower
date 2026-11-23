@@ -2,65 +2,72 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>作業レポート Issue #176 サブタスク1</title>
+<title>実行レポート #176 サブタスク1</title>
 <style>
-body { font-family: sans-serif; margin: 24px; color: #182235; line-height: 1.6; }
-h1 { font-size: 20px; } h2 { font-size: 16px; border-bottom: 1px solid #dce3ec; margin-top: 24px; }
-table { border-collapse: collapse; } td, th { border: 1px solid #dce3ec; padding: 4px 8px; text-align: left; vertical-align: top; }
-.ok { color: #1d7342; font-weight: bold; }
-code { background: #eef1f5; padding: 0 4px; }
+body{font-family:sans-serif;max-width:960px;margin:24px auto;padding:0 16px;line-height:1.6;color:#222}
+h1{font-size:1.4em}h2{font-size:1.15em;border-bottom:1px solid #ccc;padding-bottom:4px;margin-top:28px}
+table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:6px 8px;text-align:left;vertical-align:top}
+th{background:#f3f3f3}code{background:#f5f5f5;padding:1px 4px}
+.ok{display:inline-block;background:#2e7d32;color:#fff;padding:2px 10px;border-radius:4px;font-weight:bold}
 </style>
 </head>
 <body>
-<h1>作業レポート</h1>
+<h1>実行レポート：CLIタブで応答中のClaudeを中断できるようにする</h1>
 
 <h2>1. 対象</h2>
 <table>
 <tr><th>Issue</th><td>#176</td></tr>
-<tr><th>サブタスク</th><td>CLIタブにツールの実行結果と拒否理由を表示する</td></tr>
-<tr><th>ブランチ</th><td><code>issue-176-932a5a36-subtask-1</code>（push済み）</td></tr>
+<tr><th>サブタスク</th><td>CLIタブで応答中のClaudeを中断できるようにする（アイデアマンの提案）</td></tr>
+<tr><th>ブランチ</th><td><code>issue-176-c20f6893-subtask-1</code>（push済み）</td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
-<p class="ok">成功</p>
-<p>ツールの実行結果を省略付きで記録し、CLIタブに表示するようにした。<br>
-拒否・失敗した結果は警告色で表示する。<br>
-長い実行結果は折りたたみ、クリックで開ける。</p>
+<p><span class="ok">成功</span></p>
+<p>中断API・中断処理・画面の中断ボタンを実装しました。<br>
+自動テストは全件成功しました（470件）。<br>
+画面での動作確認は未実施です（人間に依頼）。</p>
 
 <h2>3. 変更内容</h2>
 <table>
 <tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td><code>core/cli_session.py</code></td><td>UserMessageのToolResultBlockを<code>tool_result</code>・<code>tool_error</code>として取り出す。<br>結果を省略する<code>truncate_tool_result</code>と上限値の定数を追加した。</td></tr>
-<tr><td>2</td><td><code>tests/test_cli_session.py</code></td><td>実行結果の取り出し・省略のテストを追加した。</td></tr>
-<tr><td>3</td><td><code>app/static/cli_view.js</code></td><td><code>CLI_MESSAGE_ROLES</code>に新しい種類を追加した。<br>長い実行結果を<code>details</code>で折りたたむ。</td></tr>
-<tr><td>4</td><td><code>app/static/style.css</code></td><td>実行結果・拒否結果の表示を追加した。</td></tr>
+<tr><td>1</td><td><code>core/cli_session.py</code></td><td>発言ごとの中断用の目印（<code>_TurnCanceller</code>）と、対話のIDごとの登録先を追加しました。<br><code>run_turn</code>はClaudeの実行をTaskとして動かし、中断の要求が来たらそのTaskをcancelします。<br>中断時は「利用者が中断しました」を残して、状態をidleに戻します。<br>SystemMessage(init)で受け取った会話のIDを保存するので、中断後も次の発言で続きから話せます。<br><code>interrupt_turn</code>を追加しました。</td></tr>
+<tr><td>2</td><td><code>app/routes/cli.py</code></td><td><code>POST /api/cli-sessions/{id}/interrupt</code>を追加しました（202を返します）。<br>応答中でなければ409、対話が無ければ404を返します。</td></tr>
+<tr><td>3</td><td><code>app/static/cli_view.js</code></td><td>応答中だけ送信ボタンの横に「中断」ボタンを出します。<br>要求中はボタンを押せなくし、「中断しています...」と表示します。<br>文言は<code>CLI_VIEW_MESSAGES</code>にまとめました。</td></tr>
+<tr><td>4</td><td><code>tests/test_cli_session.py</code>、<code>tests/test_cli_routes.py</code></td><td>中断のテストを追加しました。</td></tr>
 </table>
-<p>コミット：<code>4d51a18</code>（記録側）、<code>fdca0fb</code>（画面側）</p>
+<p>コミット：<code>d59ab94</code>（中断処理）、<code>e2b47e3</code>（API）、<code>d334e45</code>（画面）</p>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>is_errorの結果は別の種類<code>tool_error</code>として記録した。</td><td>画面側でCSSのクラスだけで警告色を切り替えられるため。</td></tr>
-<tr><td>2</td><td>上限は20行・2000文字とし、省略した文字数を末尾に表示する。</td><td>DBの肥大化を抑えつつ、Bash出力の要点が読める量とした。</td></tr>
-<tr><td>3</td><td>空の成功結果は表示しない。<br>空の失敗結果は固定文言で表示する。</td><td>失敗の発生だけは必ず見えるようにするため。</td></tr>
-<tr><td>4</td><td>画像など文字以外の結果は除外した。</td><td>画面は文字表示のみのため。</td></tr>
-<tr><td>5</td><td>3行を超える成功結果のみ折りたたむ。<br>拒否・失敗は折りたたまない。</td><td>拒否理由を目立たせる提案の趣旨に合わせた。</td></tr>
-<tr><td>6</td><td>画面側の変更は1コミットにまとめた。</td><td>折りたたみが表示処理と同じ関数に入り、分割すると途中状態が成立しないため。</td></tr>
+<tr><td>1</td><td>中断の目印はスレッドの開始前に<code>send_message</code>で登録します。Taskがまだ無いうちに中断が要求された場合は、Taskの開始時にcancelします。</td><td>発言の受付からClaude実行の開始までの間に中断が来ても、取りこぼさないためです。</td></tr>
+<tr><td>2</td><td>会話のIDは、<code>run_claude</code>の戻り値に加えてSystemMessage(init)からも取り込みます。</td><td>中断すると戻り値を受け取れないので、そのままでは会話のIDを保存できないためです。</td></tr>
+<tr><td>3</td><td>中断の通知は既存のrole（<code>error</code>）で発言一覧に残します。</td><td>サーバー再起動による中断の表示と揃えました。新しいroleを増やさずに済みます。</td></tr>
+<tr><td>4</td><td>APIは中断の完了を待たずに202を返します。</td><td>発言の送信と同じ方式です。画面はポーリングでidleに戻ったことを確認します。</td></tr>
+<tr><td>5</td><td>応答中なのに実行スレッドが見つからない対話は、その場でidleに戻します。</td><td>応答中から抜けられなくなる状態を防ぐためです。</td></tr>
+<tr><td>6</td><td>目印の登録を外すのは、登録したのと同じ発言の目印だけにします。</td><td>終了処理と次の発言の受付が前後しても、次の発言の目印を消さないためです。</td></tr>
+<tr><td>7</td><td>PRの作成はしていません（push済み）。</td><td>指示はcommitとpushまでのため、PRは管理塔側の手順に任せます。</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<ul>
-<li><code>./.venv/Scripts/python.exe -m pytest -q</code>：467件すべて成功。</li>
-<li><code>node --check app/static/cli_view.js</code>：構文エラーなし。</li>
-<li>画面での動作確認は未実施（アプリ起動での確認は人間に依頼する規約のため）。</li>
-</ul>
+<table>
+<tr><th>テスト</th><th>結果</th></tr>
+<tr><td><code>./.venv/Scripts/python.exe -m pytest -q</code>（全件）</td><td>470 passed</td></tr>
+<tr><td>追加：中断するとidleに戻り、会話のIDを保存したまま次の発言を受け付ける</td><td>成功</td></tr>
+<tr><td>追加：実行開始前の中断要求が、開始時に反映される</td><td>成功</td></tr>
+<tr><td>追加：idleの対話への中断は拒否される／実行スレッドの無い応答中はidleに戻る</td><td>成功</td></tr>
+<tr><td>追加：中断APIの呼び出しとエラー対応（404・409）</td><td>成功</td></tr>
+<tr><td><code>node --check app/static/cli_view.js</code></td><td>構文OK</td></tr>
+<tr><td>画面での動作確認・実際のClaudeの中断</td><td>未実施です。ガイドラインに従い、起動しての確認は人間に依頼します。</td></tr>
+</table>
 
-<h2>6. 残課題・確認ポイント</h2>
+<h2>6. 残課題・リスク・レビュー時の確認ポイント</h2>
 <ul>
-<li>参照ルールで拒否された際、SDKがis_error付きのToolResultBlockを返す前提で実装した。<br>実機で拒否理由が警告色で出るか確認してほしい。</li>
-<li>折りたたみ表示（先頭行が見出し、クリックで残りを表示）の見た目を確認してほしい。</li>
-<li>既存の発言はDBに実行結果を持たないため、新しい応答から表示される。</li>
-<li>上限値（20行・2000文字・折りたたみ3行）が適切か確認してほしい。</li>
+<li>実際のClaude CLIのサブプロセスが中断で止まるかは、自動テストでは確認していません。SDK（0.2.183）の<code>process_query</code>は、cancel時に<code>finally</code>で<code>query.close()</code>を呼ぶことをコードで確認済みです。</li>
+<li>中断の時点までにClaudeが行ったファイル変更は元に戻りません（開発PCでEscを押した場合と同じです）。</li>
+<li>Claudeが会話のIDを通知する前に中断した場合は、会話のIDを保存しません。次の発言は前回の会話の続きか、新しい会話として始まります。</li>
+<li>画面では、中断ボタンを押してから応答が止まるまでの間「中断しています...」が表示されるか、その後に送信できるようになるかを確認してください。</li>
+<li><code>.claude-tower/report.html</code>には以前のタスク（#208）のレポートがコミットされていたので、今回の内容で上書きしました。</li>
 </ul>
 </body>
 </html>

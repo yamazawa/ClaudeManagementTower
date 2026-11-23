@@ -3,6 +3,7 @@
 リポジトリのフォルダでClaudeを実行し、開発PCで対話式に実行している時のように会話する。
 対話はリポジトリの項目として、タイトルとOpen・Closeの状態を持つ。
 Webサーバーは応答を待たず、発言ごとに別スレッドでClaudeを実行する。
+応答中のClaudeは、開発PCのEscキーのように利用者が中断できる。
 画面は発言一覧をポーリングして表示する。
 """
 
@@ -16,6 +17,7 @@ from claude_agent_sdk import (
     AssistantMessage,
     RateLimitEvent,
     ResultMessage,
+    SystemMessage,
     TextBlock,
     ToolResultBlock,
     ToolUseBlock,
@@ -79,12 +81,67 @@ TOOL_RESULT_MAX_LINES = 20
 TOOL_RESULT_MAX_LENGTH = 2000
 TOOL_RESULT_OMITTED_MESSAGE = "...（{count}文字省略）"
 INTERRUPTED_MESSAGE = "サーバー再起動により応答が中断されました"
+INTERRUPTED_BY_USER_MESSAGE = "利用者が中断しました"
 RESULT_ERROR_MESSAGE = "Claudeの実行が失敗しました"
 TOOL_ERROR_MESSAGE = "ツールの実行が失敗しました"
 
 
 class CliSessionBusy(Exception):
     pass
+
+
+class CliSessionNotRunning(Exception):
+    pass
+
+
+class _TurnCanceller:
+    """応答中の1回の発言を、別スレッドから中断する目印
+
+    Claude実行のスレッドが、自身のイベントループと実行中のTaskを登録する。
+    中断の要求がTaskの登録前に届いた場合は、登録時に中断する。
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._task: asyncio.Task | None = None
+        self.requested = False
+
+    def attach(self, task: asyncio.Task) -> None:
+        with self._lock:
+            self._loop, self._task = task.get_loop(), task
+            if self.requested:
+                task.cancel()
+
+    def cancel(self) -> None:
+        with self._lock:
+            self.requested = True
+            if self._task is not None:
+                self._loop.call_soon_threadsafe(self._task.cancel)
+
+
+# 応答中の対話ごとの中断の目印（対話のID → 目印）
+_turn_cancellers: dict[int, _TurnCanceller] = {}
+_turn_cancellers_lock = threading.Lock()
+
+
+def _register_canceller(cli_session_id: int) -> _TurnCanceller:
+    canceller = _TurnCanceller()
+    with _turn_cancellers_lock:
+        _turn_cancellers[cli_session_id] = canceller
+    return canceller
+
+
+def _unregister_canceller(cli_session_id: int, canceller: _TurnCanceller) -> None:
+    """自身の目印のみ外す（次の発言の目印は残す）"""
+    with _turn_cancellers_lock:
+        if _turn_cancellers.get(cli_session_id) is canceller:
+            del _turn_cancellers[cli_session_id]
+
+
+def _find_canceller(cli_session_id: int) -> _TurnCanceller | None:
+    with _turn_cancellers_lock:
+        return _turn_cancellers.get(cli_session_id)
 
 
 def _summarize_tool_input(tool_input: dict) -> str:
@@ -243,14 +300,18 @@ def _record_entries(cli_session_id: int, message: object, session_factory: sessi
         session.commit()
 
 
-def _finish_turn(cli_session_id: int, claude_session_id: str | None, error: Exception | None, session_factory) -> None:
+def _finish_turn(cli_session_id: int, claude_session_id: str | None, notice: str | None, session_factory) -> None:
+    """発言待ちに戻し、続きの発言で使う会話のIDを保存する
+
+    失敗・中断の旨は発言一覧に残す。
+    """
     with session_factory() as session:
         cli_session = session.get(CliSession, cli_session_id)
         cli_session.status = CliSessionStatus.IDLE
         if claude_session_id:
             cli_session.claude_session_id = claude_session_id
-        if error is not None:
-            _add_message(session, cli_session_id, CliMessageRole.ERROR, str(error) or RESULT_ERROR_MESSAGE)
+        if notice is not None:
+            _add_message(session, cli_session_id, CliMessageRole.ERROR, notice)
         session.commit()
 
 
@@ -266,26 +327,49 @@ async def _run_claude_for_dialog(text: str, repo_path: str, resume: str | None, 
     return session_id
 
 
+async def _run_cancellable(coro, canceller: _TurnCanceller):
+    task = asyncio.ensure_future(coro)
+    canceller.attach(task)
+    return await task
+
+
+def _init_session_id(message: object) -> str | None:
+    if isinstance(message, SystemMessage) and message.subtype == "init":
+        return message.data.get("session_id")
+    return None
+
+
 def run_turn(
     cli_session_id: int,
     text: str,
     target: dict,
     session_factory: sessionmaker = SessionLocal,
     claude_runner: Callable = _run_claude_for_dialog,
+    canceller: _TurnCanceller | None = None,
 ) -> None:
     """1回の発言に対するClaudeの応答を実行する
 
-    失敗は発言一覧にエラーとして残し、次の発言を受け付けられる状態に戻す。
+    失敗・中断は発言一覧に残し、次の発言を受け付けられる状態に戻す。
+    中断時も、開始時に通知された会話のIDを保存して続きの発言で使えるようにする。
     """
-    claude_session_id = None
-    error = None
+    canceller = canceller or _register_canceller(cli_session_id)
+    started = {}
+
+    def on_message(message: object) -> None:
+        started["session_id"] = _init_session_id(message) or started.get("session_id")
+        _record_entries(cli_session_id, message, session_factory)
+
+    claude_session_id, notice = None, None
     try:
-        on_message = lambda message: _record_entries(cli_session_id, message, session_factory)  # noqa: E731
-        claude_session_id = asyncio.run(claude_runner(text, target["repo_path"], target["resume"], on_message))
+        runner = claude_runner(text, target["repo_path"], target["resume"], on_message)
+        claude_session_id = asyncio.run(_run_cancellable(runner, canceller))
+    except asyncio.CancelledError:
+        notice = INTERRUPTED_BY_USER_MESSAGE
     except Exception as exc:  # noqa: BLE001
         logger.warning("CLIタブの対話 #%s の応答が失敗しました: %s", cli_session_id, exc)
-        error = exc
-    _finish_turn(cli_session_id, claude_session_id, error, session_factory)
+        notice = str(exc) or RESULT_ERROR_MESSAGE
+    _finish_turn(cli_session_id, claude_session_id or started.get("session_id"), notice, session_factory)
+    _unregister_canceller(cli_session_id, canceller)
 
 
 def send_message(
@@ -293,18 +377,42 @@ def send_message(
     text: str,
     attachment_ids: list[str] = (),
     session_factory: sessionmaker = SessionLocal,
-) -> None:
+    claude_runner: Callable = _run_claude_for_dialog,
+) -> threading.Thread:
     """発言を受け付け、Claudeの応答を別スレッドで開始する
 
     添付ファイルは、MRの実装指示と同じ形で対応表を発言に付け加えてClaudeに渡す。
     存在しない添付のIDはAttachmentErrorとし、発言を記録しない。
+    応答の開始前に中断できるよう、中断の目印はスレッドの開始前に登録する。
     """
     attachments = resolve_cli_attachments(cli_session_id, list(attachment_ids))
     target = _claim_turn(cli_session_id, text, session_factory, attachments)
     prompt = build_cli_prompt(text, attachments)
-    threading.Thread(
-        target=run_turn, args=(cli_session_id, prompt, target, session_factory), daemon=True
-    ).start()
+    canceller = _register_canceller(cli_session_id)
+    thread = threading.Thread(
+        target=run_turn,
+        args=(cli_session_id, prompt, target, session_factory, claude_runner, canceller),
+        daemon=True,
+    )
+    thread.start()
+    return thread
+
+
+def interrupt_turn(cli_session_id: int, session_factory: sessionmaker = SessionLocal) -> None:
+    """応答中のClaudeの実行を中断する
+
+    中断の完了（発言待ちへの戻し）は、Claude実行のスレッドが行う。
+    実行中のスレッドが無い応答中の対話は、その場で発言待ちに戻す。
+    """
+    with session_factory() as session:
+        cli_session = get_item_or_raise(session, CliSession, cli_session_id)
+        if cli_session.status != CliSessionStatus.RUNNING:
+            raise CliSessionNotRunning("Claudeは応答中ではありません")
+    canceller = _find_canceller(cli_session_id)
+    if canceller is not None:
+        canceller.cancel()
+        return
+    _finish_turn(cli_session_id, None, INTERRUPTED_BY_USER_MESSAGE, session_factory)
 
 
 def ensure_session_open(cli_session_id: int, session_factory: sessionmaker = SessionLocal) -> None:

@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from app.routes import cli
 from core import cli_attachments
 from core.attachments import AttachmentError
-from core.cli_session import CliSessionBusy
+from core.cli_session import CliSessionBusy, CliSessionNotRunning
 from core.repo_items import RepoItemClosed, RepoItemInvalid, RepoItemNotFound
 
 
@@ -45,6 +45,26 @@ def test_post_message_maps_errors(monkeypatch, exc, status):
 
     with pytest.raises(HTTPException) as error:
         cli.post_cli_message(3, cli.SendCliMessageRequest(text="質問"))
+    assert error.value.status_code == status
+
+
+def test_post_interrupt_requests_interrupt(monkeypatch):
+    calls = []
+    monkeypatch.setattr(cli, "interrupt_turn", calls.append)
+
+    assert cli.post_cli_interrupt(3) == {"accepted": True}
+    assert calls == [3]
+
+
+@pytest.mark.parametrize(("exc", "status"), [(RepoItemNotFound("x"), 404), (CliSessionNotRunning("x"), 409)])
+def test_post_interrupt_maps_errors(monkeypatch, exc, status):
+    def fail(session_id):
+        raise exc
+
+    monkeypatch.setattr(cli, "interrupt_turn", fail)
+
+    with pytest.raises(HTTPException) as error:
+        cli.post_cli_interrupt(3)
     assert error.value.status_code == status
 
 

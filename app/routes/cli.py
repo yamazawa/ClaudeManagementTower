@@ -1,6 +1,6 @@
 """CLIタブのAPI
 
-CLIの項目（対話）の一覧・作成・変更と、発言の送信・取得を扱う。
+CLIの項目（対話）の一覧・作成・変更と、発言の送信・取得・応答の中断を扱う。
 発言に付ける添付ファイルの保存・取得・削除も扱う。
 """
 
@@ -15,9 +15,11 @@ from core.attachments import AttachmentError
 from core.cli_attachments import delete_cli_attachment, find_cli_attachment_file, save_cli_attachment
 from core.cli_session import (
     CliSessionBusy,
+    CliSessionNotRunning,
     create_session,
     ensure_session_open,
     get_session,
+    interrupt_turn,
     list_sessions,
     send_message,
     update_session,
@@ -71,6 +73,20 @@ def post_cli_message(cli_session_id: int, payload: SendCliMessageRequest):
             raise HTTPException(status_code=409, detail=str(exc)) from exc
         except AttachmentError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"accepted": True}
+
+
+@router.post("/cli-sessions/{cli_session_id}/interrupt", status_code=202)
+def post_cli_interrupt(cli_session_id: int):
+    """応答中のClaudeを中断する
+
+    中断の完了は待たずに返し、画面は発言一覧の取得で発言待ちに戻ったことを確認する。
+    """
+    with item_errors():
+        try:
+            interrupt_turn(cli_session_id)
+        except CliSessionNotRunning as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"accepted": True}
 
 

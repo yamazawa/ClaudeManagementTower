@@ -1,9 +1,11 @@
 import asyncio
+import threading
 
 import pytest
 from claude_agent_sdk import (
     AssistantMessage,
     ResultMessage,
+    SystemMessage,
     TextBlock,
     ToolResultBlock,
     ToolUseBlock,
@@ -29,6 +31,14 @@ def session_factory(tmp_path):
         session.add(Project(id=1, name="p", github_repo="owner/repo", repo_path="C:/repo", default_branch="master"))
         session.commit()
     return factory
+
+
+@pytest.fixture(autouse=True)
+def clear_cancellers():
+    """テストごとに対話のIDが重なるため、中断の目印を残さない"""
+    cli_session._turn_cancellers.clear()
+    yield
+    cli_session._turn_cancellers.clear()
 
 
 def _assistant(*blocks):
@@ -248,6 +258,66 @@ def test_run_turn_records_error_and_returns_to_idle(session_factory):
     state = cli_session.get_session(session_id, after_id=1, session_factory=session_factory)
     assert state["status"] == CliSessionStatus.IDLE
     assert [(m["role"], m["content"]) for m in state["messages"]] == [(CliMessageRole.ERROR, "CLIが見つからない")]
+
+
+def _blocking_runner(started: threading.Event, claude_session_id="claude-1"):
+    """開始を通知し、中断されるまで応答を続けるClaude実行"""
+
+    async def runner(text, repo_path, resume, on_message):
+        on_message(SystemMessage(subtype="init", data={"session_id": claude_session_id}))
+        started.set()
+        await asyncio.sleep(60)
+        return claude_session_id
+
+    return runner
+
+
+def test_interrupt_turn_returns_to_idle_and_accepts_next_message(session_factory):
+    session_id = cli_session.create_session(1, "調査", session_factory=session_factory)["id"]
+    started = threading.Event()
+    thread = cli_session.send_message(
+        session_id, "調べて", session_factory=session_factory, claude_runner=_blocking_runner(started)
+    )
+    assert started.wait(5)
+
+    cli_session.interrupt_turn(session_id, session_factory)
+    thread.join(5)
+
+    assert not thread.is_alive()
+    state = cli_session.get_session(session_id, after_id=1, session_factory=session_factory)
+    assert state["status"] == CliSessionStatus.IDLE
+    assert [m["content"] for m in state["messages"]] == [cli_session.INTERRUPTED_BY_USER_MESSAGE]
+    assert cli_session._claim_turn(session_id, "続き", session_factory)["resume"] == "claude-1"
+
+
+def test_interrupt_before_claude_starts_cancels_on_start(session_factory):
+    session_id, target = _claim(session_factory)
+    canceller = cli_session._register_canceller(session_id)
+    cli_session.interrupt_turn(session_id, session_factory)
+
+    cli_session.run_turn(session_id, "こんにちは", target, session_factory, _blocking_runner(threading.Event()), canceller)
+
+    state = cli_session.get_session(session_id, after_id=1, session_factory=session_factory)
+    assert state["status"] == CliSessionStatus.IDLE
+    assert [m["content"] for m in state["messages"]] == [cli_session.INTERRUPTED_BY_USER_MESSAGE]
+    assert cli_session._find_canceller(session_id) is None
+
+
+def test_interrupt_turn_rejects_idle_session(session_factory):
+    session_id = cli_session.create_session(1, "調査", session_factory=session_factory)["id"]
+
+    with pytest.raises(cli_session.CliSessionNotRunning):
+        cli_session.interrupt_turn(session_id, session_factory)
+
+
+def test_interrupt_turn_without_running_thread_returns_to_idle(session_factory):
+    session_id, _ = _claim(session_factory)
+
+    cli_session.interrupt_turn(session_id, session_factory)
+
+    state = cli_session.get_session(session_id, after_id=1, session_factory=session_factory)
+    assert state["status"] == CliSessionStatus.IDLE
+    assert [m["content"] for m in state["messages"]] == [cli_session.INTERRUPTED_BY_USER_MESSAGE]
 
 
 def test_recover_interrupted_sessions_returns_running_to_idle(session_factory):
