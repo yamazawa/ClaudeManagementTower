@@ -1,6 +1,7 @@
 /**
  * リポジトリの項目（Issue・CLI・Idea）のタブ
  *
+ * タブの切替はヘッダーのボタンで行い、リポジトリのペインには選択中のタブの一覧のみ表示する。
  * CLI・Ideaのタブは、Issueと同じ作成フォーム・一覧（Open・Closeのフィルタ）で項目を扱う。
  * CLI・Ideaのタブの表示中は、Issue内容・MR内容のペインの代わりに項目の内容のペインを表示する。
  * 項目の内容のペインは、項目を選択していない間は表示しない。
@@ -74,7 +75,7 @@ function isSectionHiddenByTab(sectionId) {
 function selectRepoItemTab(tab) {
   currentRepoItemTab = tab;
   if (isRepoItemKind(tab)) clearMrStatusFilter();
-  document.querySelectorAll(".repo-item-tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.kind === tab)));
+  document.querySelectorAll(".repo-item-switch-button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.kind === tab)));
   document.querySelectorAll(".repo-item-panel").forEach((p) => (p.hidden = p.dataset.kind !== tab));
   REPO_ITEM_ISSUE_SECTION_IDS.forEach((id) => applySectionShown(document.getElementById(id)));
   renderRepoItemDetail();
@@ -291,7 +292,7 @@ async function onSubmitRepoItemForm(kind, event) {
 }
 
 function setupRepoItems() {
-  document.querySelectorAll(".repo-item-tab").forEach((b) => b.addEventListener("click", () => selectRepoItemTab(b.dataset.kind)));
+  document.querySelectorAll(".repo-item-switch-button").forEach((b) => b.addEventListener("click", () => selectRepoItemTab(b.dataset.kind)));
   Object.keys(REPO_ITEM_KINDS).forEach((kind) => {
     document.getElementById(`${kind}-create-form`).addEventListener("submit", (e) => onSubmitRepoItemForm(kind, e));
     document.getElementById(`${kind}-filter`).addEventListener("change", () => reloadRepoItems(kind));

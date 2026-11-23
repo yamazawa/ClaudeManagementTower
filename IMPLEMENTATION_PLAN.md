@@ -48,6 +48,7 @@ Claudeの「hit your limit」系エラーで失敗したジョブは`failed`と�
 アイデア出しジョブは自動で戻さず、画面から再実行する（Issue #185）。
 - Webサーバーはリクエスト処理中にClaude Codeを直接起動して待機しない。
 - リポジトリ表示はIssue・CLI・Ideaのタブで切り替える。\
+タブの切替はヘッダーのボタンで行い、リポジトリ表示にはタブを表示せず選択中のタブの一覧を表示する（Issue #225）。\
 CLI・IdeaのタブはIssueと同じ作成フォーム・一覧（Open・Closeのフィルタ）で項目を扱う。\
 CLI・Ideaのタブでは、Issue内容・MR内容のペインの代わりに、選択中の項目の内容を2列分の幅で表示する（Issue #176）。\
 項目のOpen・Closeは`core/repo_items.py`で共通に扱い、Closeの項目では発言・アイデア出しを実行しない。

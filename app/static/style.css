@@ -789,39 +789,51 @@ section[hidden] {
   display: none;
 }
 
-/* リポジトリの項目（Issue・CLI・Idea）のタブ
+/* ヘッダーのリポジトリの項目（Issue・CLI・Idea）の切替
 
-選択中（aria-selected）のタブはアクセント色にする。
+ボタンは四角にして隙間なく1行に並べる（境界線は重ねて1本にする）。
+選択中（aria-pressed）のボタンはアクセント色にする。
 */
-.repo-item-tabs {
+.repo-item-switch {
   display: flex;
-  gap: 4px;
-  margin: 0 0 12px;
-  border-bottom: 1px solid var(--line);
+  flex-wrap: nowrap;
+  align-self: stretch;
+  white-space: nowrap;
+  font-size: 12.5px;
 }
 
-.repo-item-tab {
+.repo-item-switch-button {
   font: inherit;
-  font-size: 13px;
-  padding: 4px 14px;
-  margin-bottom: -1px;
-  border: 1px solid transparent;
-  border-radius: 6px 6px 0 0;
-  background: transparent;
-  color: var(--muted);
+  padding: 2px 12px;
+  margin-left: -1px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
   cursor: pointer;
 }
 
-.repo-item-tab:hover {
-  color: var(--ink);
-  background: var(--soft);
+.repo-item-switch-button:first-child {
+  margin-left: 0;
+  border-radius: 4px 0 0 4px;
 }
 
-.repo-item-tab[aria-selected="true"] {
-  border-color: var(--line);
-  border-bottom-color: var(--surface);
-  background: var(--surface);
-  color: var(--accent);
+.repo-item-switch-button:last-child {
+  border-radius: 0 4px 4px 0;
+}
+
+/* タッチ端末でタップ後もhoverが残り、選択中の色を上書きしないようにする */
+@media (hover: hover) {
+  .repo-item-switch-button:hover:not([aria-pressed="true"]) {
+    background: rgba(255, 255, 255, 0.24);
+  }
+}
+
+/* 選択中のアクセント色の枠線を隣のボタンの枠線より前に出す */
+.repo-item-switch-button[aria-pressed="true"] {
+  position: relative;
+  z-index: 1;
+  border-color: var(--accent);
+  background: var(--accent);
   font-weight: bold;
 }
 
