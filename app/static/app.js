@@ -1766,8 +1766,13 @@ function renderAttachmentCell(subtaskId, attachment) {
  * 選択したファイルを1件ずつアップロードする
  *
  * IDの採番順を選択順に揃えるため、並列にせず順に送る。
+ * 一覧を読み直すまで更新中を表示する。
  */
 async function uploadAttachments(subtaskId, files) {
+  await runBusyAction(() => uploadAttachmentsInOrder(subtaskId, files));
+}
+
+async function uploadAttachmentsInOrder(subtaskId, files) {
   const statusEl = document.getElementById("attachment-status");
   const errors = [];
   for (const file of files) {
@@ -1783,9 +1788,14 @@ async function uploadAttachments(subtaskId, files) {
  * 確認のうえ添付ファイルを削除し、一覧を読み直す
  *
  * 失敗した場合は添付ボタン横の状態欄に理由を表示する。
+ * 一覧を読み直すまで更新中を表示する。
  */
 async function removeAttachment(subtaskId, attachmentId) {
   if (!confirm(`添付ファイル ${attachmentId} を削除しますか？`)) return;
+  await runBusyAction(() => deleteAttachment(subtaskId, attachmentId));
+}
+
+async function deleteAttachment(subtaskId, attachmentId) {
   const response = await fetch(
     `/api/subtasks/${subtaskId}/attachments/${encodeURIComponent(attachmentId)}`,
     { method: "DELETE" }
