@@ -1,5 +1,6 @@
 import json
 import time
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -74,6 +75,33 @@ def test_refresh_usage_keeps_previous_value_on_failure():
 
     assert claude_usage.refresh_usage(lambda: None) is False
     assert claude_usage.get_usage() == {"n": 1}
+
+
+def test_refresh_usage_if_older_skips_without_event():
+    assert claude_usage.refresh_usage_if_older(None, lambda: {"n": 1}) is False
+    assert claude_usage.get_usage() is None
+
+
+def test_refresh_usage_if_older_refreshes_after_event():
+    claude_usage.refresh_usage(lambda: {"n": 1})
+    event_at = datetime.now(timezone.utc) + timedelta(seconds=1)
+
+    assert claude_usage.refresh_usage_if_older(event_at, lambda: {"n": 2}) is True
+    assert claude_usage.get_usage() == {"n": 2}
+
+
+def test_refresh_usage_if_older_refreshes_only_once_per_event():
+    event_at = datetime.now(timezone.utc)
+    fetched = []
+
+    def fetcher():
+        fetched.append(1)
+        return None
+
+    claude_usage.refresh_usage_if_older(event_at, fetcher)
+    claude_usage.refresh_usage_if_older(event_at, fetcher)
+
+    assert fetched == [1]
 
 
 def test_refresh_loop_fetches_on_start():
