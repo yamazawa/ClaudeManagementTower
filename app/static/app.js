@@ -2126,6 +2126,11 @@ function supplementCreatedIssue(issue) {
     ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
+/**
+ * MR作成フォームの送信
+ *
+ * 作成したMRを開くまで更新中を表示する。
+ */
 async function onSubmitSubtaskForm(event) {
   event.preventDefault();
   if (isCurrentIssueAutoMrCreating()) return;
@@ -2137,14 +2142,15 @@ async function onSubmitSubtaskForm(event) {
   form.querySelector("button").disabled = true;
 
   const issueNumber = currentIssueNumber;
-  const { body, error } = await createSubtask(issueNumber, title);
-  if (error) {
-    statusEl.textContent = `失敗しました: ${error}`;
-    form.querySelector("button").disabled = false;
-    return;
-  }
-
-  await openCreatedSubtask(issueNumber, body.id);
+  await runBusyAction(async () => {
+    const { body, error } = await createSubtask(issueNumber, title);
+    if (error) {
+      statusEl.textContent = `失敗しました: ${error}`;
+      form.querySelector("button").disabled = false;
+      return;
+    }
+    await openCreatedSubtask(issueNumber, body.id);
+  });
 }
 
 /**
