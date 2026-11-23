@@ -1,5 +1,12 @@
 import pytest
-from claude_agent_sdk import AssistantMessage, ResultMessage, TextBlock, ToolUseBlock
+from claude_agent_sdk import (
+    AssistantMessage,
+    ResultMessage,
+    TextBlock,
+    ToolResultBlock,
+    ToolUseBlock,
+    UserMessage,
+)
 from sqlalchemy.orm import sessionmaker
 
 from core import cli_session
@@ -47,6 +54,43 @@ def test_message_entries_extracts_text_and_tool_use():
         (CliMessageRole.ASSISTANT, "調べます"),
         (CliMessageRole.TOOL, "Bash: git status"),
     ]
+
+
+def test_message_entries_extracts_tool_results_from_user_message():
+    message = UserMessage(
+        content=[
+            ToolResultBlock(tool_use_id="a", content="出力", is_error=False),
+            ToolResultBlock(tool_use_id="b", content=[{"type": "text", "text": "拒否しました"}], is_error=True),
+            ToolResultBlock(tool_use_id="c", content=None, is_error=True),
+            ToolResultBlock(tool_use_id="d", content=[{"type": "image"}], is_error=False),
+        ]
+    )
+
+    assert cli_session.message_entries(message) == [
+        (CliMessageRole.TOOL_RESULT, "出力"),
+        (CliMessageRole.TOOL_ERROR, "拒否しました"),
+        (CliMessageRole.TOOL_ERROR, cli_session.TOOL_ERROR_MESSAGE),
+    ]
+
+
+def test_message_entries_ignores_user_text_message():
+    assert cli_session.message_entries(UserMessage(content="質問")) == []
+
+
+def test_truncate_tool_result_keeps_short_text():
+    assert cli_session.truncate_tool_result("a\nb\n") == "a\nb"
+
+
+def test_truncate_tool_result_limits_lines_and_length():
+    lines = "\n".join(f"line{i}" for i in range(cli_session.TOOL_RESULT_MAX_LINES + 5))
+    kept = "\n".join(lines.splitlines()[: cli_session.TOOL_RESULT_MAX_LINES])
+    omitted = cli_session.TOOL_RESULT_OMITTED_MESSAGE.format(count=len(lines) - len(kept))
+    assert cli_session.truncate_tool_result(lines) == f"{kept}\n{omitted}"
+
+    long_text = "x" * (cli_session.TOOL_RESULT_MAX_LENGTH + 10)
+    assert cli_session.truncate_tool_result(long_text) == (
+        "x" * cli_session.TOOL_RESULT_MAX_LENGTH + "\n" + cli_session.TOOL_RESULT_OMITTED_MESSAGE.format(count=10)
+    )
 
 
 def test_message_entries_shows_result_only_on_error():
