@@ -57,18 +57,28 @@ function isRepoItemKind(tab) {
 }
 
 /**
+ * 表示中のタブの対象外のため隠すペインか
+ *
+ * Issue内容・MR内容のペインは、Issueのタブの表示中のみ表示する。
+ */
+function isSectionHiddenByTab(sectionId) {
+  return REPO_ITEM_ISSUE_SECTION_IDS.includes(sectionId) && isRepoItemKind(currentRepoItemTab);
+}
+
+/**
  * タブを切り替える
  *
- * CLI・Ideaのタブでは、Issue内容・MR内容のペインを隠し、一覧を取得し直す。
+ * 表示中のタブの対象のペインのみ表示する。
+ * CLI・Ideaのタブでは、MRステータスフィルタの選択を外し、一覧を取得し直す。
  */
 function selectRepoItemTab(tab) {
   currentRepoItemTab = tab;
+  if (isRepoItemKind(tab)) clearMrStatusFilter();
   document.querySelectorAll(".repo-item-tab").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.kind === tab)));
   document.querySelectorAll(".repo-item-panel").forEach((p) => (p.hidden = p.dataset.kind !== tab));
-  const itemTab = isRepoItemKind(tab);
-  REPO_ITEM_ISSUE_SECTION_IDS.forEach((id) => (document.getElementById(id).hidden = itemTab));
+  REPO_ITEM_ISSUE_SECTION_IDS.forEach((id) => applySectionShown(document.getElementById(id)));
   renderRepoItemDetail();
-  if (itemTab && currentProjectId !== null) reloadRepoItems(tab);
+  if (isRepoItemKind(tab) && currentProjectId !== null) reloadRepoItems(tab);
 }
 
 /**

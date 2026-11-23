@@ -2,71 +2,69 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実行レポート #229</title>
+<title>実装レポート Issue/CLI/Ideaの表示ー①</title>
 <style>
-body{font-family:sans-serif;margin:1.5em;line-height:1.6;color:#222}
-h1{font-size:1.4em}h2{font-size:1.15em;border-bottom:1px solid #ccc;margin-top:1.5em}
-table{border-collapse:collapse;width:100%}th,td{border:1px solid #ccc;padding:4px 8px;text-align:left;vertical-align:top}
-th{background:#f3f3f3}.ok{color:#1a7f37;font-weight:bold}code{background:#f5f5f5;padding:0 3px}
+body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
+h1 { font-size: 1.4em; }
+h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; padding-bottom: .2em; margin-top: 1.6em; }
+table { border-collapse: collapse; margin: .5em 0; }
+th, td { border: 1px solid #bbb; padding: .3em .6em; text-align: left; vertical-align: top; }
+th { background: #f0f0f0; }
+.ok { color: #fff; background: #2a7a2a; padding: .1em .6em; border-radius: 4px; }
+code { background: #f4f4f4; padding: 0 .3em; }
 </style>
 </head>
 <body>
-<h1>実行レポート</h1>
+<h1>実装レポート</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#229 [IdeaMan] サブタスク作成が途中で失敗したとき、作成済みのworktree・ブランチを後始末する</td></tr>
-<tr><th>サブタスク</th><td>①</td></tr>
-<tr><th>ブランチ</th><td><code>issue-229-f3c51d9d-subtask-1</code></td></tr>
+<tr><th>Issue</th><td>未採番（サブタスク作成時点でIssue番号なし）</td></tr>
+<tr><th>サブタスク</th><td>Issue/CLI/Ideaの表示ー①</td></tr>
+<tr><th>ブランチ</th><td><code>issue-new-944cf386-subtask-1</code></td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
-<p class="ok">成功</p>
-<p>Draft PR作成前に失敗した場合、完了した段階を強制なしの操作で取り消すようにした。<br>
-消せずに残ったものは、名前・パスをエラーメッセージに含めて返す。</p>
+<p><span class="ok">成功</span>（ブラウザでの動作確認は未実施）</p>
+<p>①Issueのタブ表示中のみIssue内容・MR内容のペインを表示するようにした。</p>
+<p>CLI・Ideaのタブでは、それぞれの項目の内容のペインのみ表示する。</p>
+<p>②ヘッダーのMRステータスフィルタの切替時に、Issueのタブへ自動で切り替えるようにした。</p>
+<p>CLI・Ideaのタブへ切り替えた際は、MRステータスフィルタの選択を自動で解除するようにした。</p>
 
 <h2>3. 変更内容</h2>
 <table>
-<tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td>core/git_client.py</td><td>worktree削除・ローカル/リモートブランチ削除・ジャンクション解除・未コミット指示ファイル除去の関数を追加</td></tr>
-<tr><td>2</td><td>core/subtask_rollback.py（新規）</td><td>完了段階のEnumと、段階に応じた取り消し処理・結果文言を追加</td></tr>
-<tr><td>3</td><td>app/routes/subtasks.py</td><td>_push_draft_prで完了段階を記録し、失敗時に後始末して例外を投げ直す</td></tr>
-<tr><td>4</td><td>tests/test_subtask_rollback.py（新規）</td><td>一時gitリポジトリでの後始末テスト、ジャンクション先保護のテスト</td></tr>
-<tr><td>5</td><td>tests/test_subtask_routes.py</td><td>段階ごとの失敗時に後始末へ渡す完了段階を検証するテスト</td></tr>
-<tr><td>6</td><td>IMPLEMENTATION_PLAN.md</td><td>5章No.7の状況を「一部対応」に更新</td></tr>
+<tr><th>No.</th><th>ファイル</th><th>変更</th><th>コミット</th></tr>
+<tr><td>1</td><td><code>app/static/app.js</code></td><td><code>setSectionShown</code>で表示指定を保持し、<code>applySectionShown</code>でタブを考慮して反映</td><td>67bc3b0</td></tr>
+<tr><td>2</td><td><code>app/static/repo_items.js</code></td><td><code>isSectionHiddenByTab</code>を追加し、タブ切替時は表示指定に従いペインを再反映</td><td>67bc3b0</td></tr>
+<tr><td>3</td><td><code>app/static/app.js</code></td><td><code>toggleMrStatusFilter</code>でIssueのタブへ切替</td><td>bc5f289</td></tr>
+<tr><td>4</td><td><code>app/static/app.js</code>・<code>repo_items.js</code></td><td><code>clearMrStatusFilter</code>を追加し、CLI・Ideaのタブ選択時に呼び出す</td><td>b32e97f</td></tr>
 </table>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>取り消し順をworktree→ローカルブランチ→リモートブランチとし、厳密な逆順にしない</td><td><code>git branch -d</code>は上流ブランチで取り込み済みかを判定する。先にリモートを消すと追跡ブランチが消え、-dが拒否されるため。</td></tr>
-<tr><td>2</td><td><code>--force</code>・<code>-D</code>は使わない</td><td>3章No.2の方針に従う。</td></tr>
-<tr><td>3</td><td>push前の失敗では、指示コミットを持つローカルブランチが残る</td><td>未pushコミットは-dで削除できないため。残存物としてエラーメッセージで報告する。</td></tr>
-<tr><td>4</td><td>worktree削除前に<code>.venv</code>ジャンクションを<code>cmd /c rmdir</code>で外す</td><td>削除処理がジャンクション先の本体の仮想環境を辿って消す事故を防ぐため。</td></tr>
-<tr><td>5</td><td>コミット前に失敗した場合、自分が作った指示ファイルだけを<code>git rm --cached</code>と削除で取り除く</td><td>強制なしの<code>git worktree remove</code>が、未コミット変更で拒否されるのを避けるため。</td></tr>
-<tr><td>6</td><td>リモートブランチの削除はpush成功時のみ行う</td><td>push失敗時はリモートに無い前提とした。</td></tr>
-<tr><td>7</td><td>後始末後は元の例外型でメッセージを付け直して投げ直す</td><td>呼び出し側のHTTP 500変換をそのまま使えるため。</td></tr>
-<tr><td>8</td><td>後始末処理は新規モジュールcore/subtask_rollback.pyに分離</td><td>routesファイルの肥大化を避け、1クラス1責務に寄せるため。</td></tr>
+<tr><td>1</td><td>「ステータストグル」はヘッダーのMRステータスフィルタ（Draft〜Merged）と解釈</td><td>画面上でトグル選択するステータスはこれのみのため</td></tr>
+<tr><td>2</td><td>①の原因は、CLI・Ideaのタブ表示中に定期更新等で<code>setSectionShown</code>がIssue・MRのペインを再表示することと判断</td><td>従来はタブ切替時のみ隠しており、その後の再描画で表示されていたため</td></tr>
+<tr><td>3</td><td>ペインの「表示指定」を<code>data-shown</code>に保持し、タブとの組み合わせで表示を決める方式を採用</td><td>Issueのタブへ戻した際、未選択のペインを表示しない（従来は無条件に表示していた）ため</td></tr>
+<tr><td>4</td><td>ステータスの選択・選択解除のどちらでもIssueのタブへ切り替える</td><td>指示が「変更時」のため（選択解除はIssueのタブでのみ起こり得る）</td></tr>
+<tr><td>5</td><td>フィルタ解除後のIssue一覧の再取得は、既存の<code>onMrStatusFilterChanged</code>に任せる</td><td>Issueのタブへ戻った際に、通常のフィルタの一覧を表示するため</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<p><code>./.venv/Scripts/python.exe -m pytest -q</code></p>
-<p class="ok">520 passed</p>
-<ul>
-<li>一時リポジトリ（bare origin＋clone）で、worktree作成直後・push後の失敗からの全削除を確認</li>
-<li>push前の失敗でローカルブランチが残り、報告されることを確認</li>
-<li>worktreeに想定外の変更がある場合、強制削除せず残存物として報告されることを確認</li>
-<li>ジャンクションを外しても、リンク先のファイルが残ることを確認</li>
-</ul>
-<p>実リポジトリ・GitHubでの実機確認は未実施（自動テストのみ）。</p>
+<table>
+<tr><th>テスト</th><th>結果</th></tr>
+<tr><td><code>./.venv/Scripts/python.exe -m pytest -q</code></td><td>509 passed</td></tr>
+<tr><td><code>node --check</code>（app.js・repo_items.js）</td><td>構文エラーなし</td></tr>
+<tr><td>ブラウザでの動作確認</td><td>未実施（フロントエンドのJSテスト基盤が無いため、人間による確認を依頼）</td></tr>
+</table>
 
-<h2>6. 残課題・リスク・レビュー観点</h2>
+<h2>6. 残課題・レビュー時の確認ポイント</h2>
 <ul>
-<li>push前の失敗では、ローカルブランチが残る。同じ連番での再作成はブランチ名重複で失敗する。</li>
-<li>pushがタイムアウトしたがリモートには反映済み、というケースではリモートブランチが残る。</li>
-<li>Draft PR作成がタイムアウトしたがPRは作成済み、というケースでは、PRのブランチを削除してしまう可能性がある（PRはクローズ扱いになる）。</li>
-<li>Draft PR作成後のDB保存失敗は取り消さない（自動同期で管理塔外PRとして取り込まれる）。</li>
-<li>レビュー観点：取り消し順の妥当性、<code>git branch -d</code>のみで足りるか、エラーメッセージの文言。</li>
+<li>CLI・Ideaのタブ表示中に定期更新が走っても、Issue内容・MR内容のペインが表示されないこと。</li>
+<li>Issueのタブへ戻した際、Issue選択済みならIssue内容・MR内容が表示されること。</li>
+<li>CLI・Ideaのタブでステータスを押すと、Issueのタブに切り替わり絞り込み表示されること。</li>
+<li>ステータス選択中にCLI・Ideaのタブへ切り替えると、選択が解除されること。</li>
+<li>選択解除時にIssue一覧を再取得するため、一時的に「更新中」の表示が出る。</li>
 </ul>
 </body>
 </html>

@@ -216,9 +216,19 @@ const SECTION_IDS = {
  *
  * 親項目が未選択で表示内容が無いペインは、見出し行ごと非表示にする。
  * 縦長表示・横長表示を問わず切り替える。
+ * 表示中のタブの対象外のペインは、表示指定でも隠す。
  */
 function setSectionShown(sectionId, shown) {
-  document.getElementById(sectionId).hidden = !shown;
+  const section = document.getElementById(sectionId);
+  section.dataset.shown = String(shown);
+  applySectionShown(section);
+}
+
+/**
+ * ペインの表示指定と表示中のタブから、表示・非表示を反映する
+ */
+function applySectionShown(section) {
+  section.hidden = section.dataset.shown !== "true" || isSectionHiddenByTab(section.id);
 }
 
 // 選択の切り替え要求の通番（後発の要求があれば、先発の取得結果で表示を上書きしない）

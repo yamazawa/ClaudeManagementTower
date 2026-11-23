@@ -64,14 +64,27 @@ function updateMrStatusFilterButtons() {
  * MRステータスフィルタの選択を切り替える
  *
  * 選択できるステータスは1つのみとする。
+ * Issueのタブに切り替えてから一覧を再表示する。
  * 一覧の再表示後に、画面の一番下までスクロールする。
  */
 async function toggleMrStatusFilter(status) {
+  if (currentRepoItemTab !== REPO_ITEM_TABS.issue) selectRepoItemTab(REPO_ITEM_TABS.issue);
   const wasSelected = selectedMrStatuses.has(status);
   selectedMrStatuses.clear();
   if (!wasSelected) selectedMrStatuses.add(status);
   await onMrStatusFilterChanged();
   scrollToPageBottom();
+}
+
+/**
+ * MRステータスフィルタの選択を外す
+ *
+ * 未選択の場合は何もしない。
+ */
+function clearMrStatusFilter() {
+  if (!isMrStatusFilterActive()) return;
+  selectedMrStatuses.clear();
+  onMrStatusFilterChanged();
 }
 
 /**
