@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実装レポート #220 サブタスク2</title>
+<title>実装レポート #220 サブタスク3</title>
 <style>
 body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; }
@@ -20,47 +20,48 @@ code { background: #f4f4f4; padding: 0 .3em; }
 <h2>1. 対象</h2>
 <table>
 <tr><th>Issue</th><td>#220</td></tr>
-<tr><th>サブタスク</th><td>エキスパンダルール見直しー②</td></tr>
-<tr><th>ブランチ</th><td><code>issue-220-subtask-2</code></td></tr>
+<tr><th>サブタスク</th><td>エキスパンダルール見直しー③</td></tr>
+<tr><th>ブランチ</th><td><code>issue-220-subtask-3</code></td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
 <p><span class="ok">成功</span>（ブラウザでの見た目の確認は未実施）</p>
-<p>①MR一覧フィルタを「全て／未完了／完了」の3種にし、既定を「全て」にした。</p>
-<p>②Issue・CLI・Idea・MRの作成見出しの右隣に、文字大のエキスパンダを追加した。</p>
-<p>作成欄は閉じた状態が既定で、エキスパンダを開くと作成フォームが表示される。</p>
+<p>①閉じた作成欄で、作成フォーム（入力欄・Createボタン）が表示されていた不具合を修正した。</p>
+<p>②MRステータスフィルタ選択時は、作成欄を隠す代わりに作成欄を閉じるようにした。</p>
+<p>③Issue・MR（およびCLI・Idea）の作成に成功したら、作成欄を自動で閉じるようにした。</p>
 
 <h2>3. 変更内容</h2>
 <table>
 <tr><th>No.</th><th>ファイル</th><th>変更</th><th>コミット</th></tr>
-<tr><td>1</td><td><code>app/static/index.html</code></td><td>MR一覧フィルタの選択肢を全て・未完了・完了に変更</td><td>03ac7c0</td></tr>
-<tr><td>2</td><td><code>app/static/app.js</code></td><td><code>SUBTASK_FILTER_STATES</code>に全状態を表す<code>all</code>を追加</td><td>03ac7c0</td></tr>
-<tr><td>3</td><td><code>app/static/index.html</code></td><td>作成見出し4か所にエキスパンダを追加し、作成欄を閉じた状態で開始</td><td>b9d24ff</td></tr>
-<tr><td>4</td><td><code>app/static/style.css</code></td><td>作成見出しの横並び・エキスパンダの大きさ（16px）・閉じた作成欄の非表示</td><td>b9d24ff</td></tr>
-<tr><td>5</td><td><code>app/static/app.js</code></td><td>作成欄エキスパンダの開閉処理を追加し、ペイン開閉の対象を見出し行のエキスパンダに限定</td><td>4ad28ec</td></tr>
+<tr><td>1</td><td><code>app/static/style.css</code></td><td>閉じた作成欄の非表示指定に<code>!important</code>を付与</td><td>b03b35a</td></tr>
+<tr><td>2</td><td><code>app/static/app.js</code></td><td>作成欄の開閉関数<code>setCreateBlockExpanded</code>・<code>collapseCreateBlock</code>を追加</td><td>211ab26</td></tr>
+<tr><td>3</td><td><code>app/static/app.js</code></td><td>ステータスフィルタ選択時に作成欄を隠す処理を、閉じる処理に置換</td><td>211ab26</td></tr>
+<tr><td>4</td><td><code>app/static/style.css</code></td><td>不要になった<code>.create-block[hidden]</code>関連スタイルを削除</td><td>211ab26</td></tr>
+<tr><td>5</td><td><code>app/static/app.js</code></td><td>Issue・MR作成成功時に作成欄を閉じる</td><td>0f16398</td></tr>
+<tr><td>6</td><td><code>app/static/repo_items.js</code></td><td>CLI・Idea作成成功時に作成欄を閉じる</td><td>0f16398</td></tr>
 </table>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>「全て」はCanceledのMRも表示する</td><td>文言どおり全状態とした。従来はCanceledがどのフィルタでも表示されなかった。</td></tr>
-<tr><td>2</td><td>内部値<code>unresolved</code>・<code>solved</code>は変更せず、表示文言のみ変更</td><td>MR数の集計・表示ステータス判定でも同定義を使っており、影響範囲を抑えるため。</td></tr>
-<tr><td>3</td><td>CLI作成・Idea作成にも同じエキスパンダを適用</td><td>指示が「Issue作成やMR作成」であり、共通操作は同じUIで提供する規約に従った。</td></tr>
-<tr><td>4</td><td>作成欄は閉じた状態を既定とした</td><td>「開いたら作成UIが開く」との指示から、閉じた状態が初期と解釈した。</td></tr>
-<tr><td>5</td><td>エキスパンダの大きさを16pxとした</td><td>小見出しの文字（12.5px）と同程度にするため。CSS変数<code>--create-expander-size</code>で調整できる。</td></tr>
+<tr><td>1</td><td>①の原因はCSSの詳細度と判断し、<code>!important</code>で対応</td><td>フォームのID指定の<code>display:flex/grid</code>が、クラス指定の<code>display:none</code>より優先されていた。HTML構造を変えずに済む最小の修正とした。</td></tr>
+<tr><td>2</td><td>ステータスフィルタ解除時は作成欄を自動で開かない</td><td>指示は「閉じる操作に置き換え」のため、選択時に閉じるのみとした。</td></tr>
+<tr><td>3</td><td>CLI・Idea作成時も作成欄を閉じる</td><td>前回サブタスクと同様、共通操作は同じUIで提供する規約に従った。</td></tr>
+<tr><td>4</td><td>Issue作成でMR作成のみ失敗した場合は閉じない</td><td>失敗メッセージが作成欄内にあり、閉じると見えなくなるため。</td></tr>
+<tr><td>5</td><td>作成失敗時は閉じない</td><td>エラー表示を確認・再送信できるようにするため。</td></tr>
+<tr><td>6</td><td>Issue作成成功で閉じる際、完了メッセージを消す</td><td>次に開いたときに前回の完了表示が残らないようにするため。</td></tr>
 </table>
 
 <h2>5. テスト結果</h2>
 <p><code>./.venv/Scripts/python.exe -m pytest -q</code>：509件すべて成功。</p>
-<p><code>app.js</code>の構文チェック（Node.js）：問題なし。</p>
+<p><code>app.js</code>・<code>repo_items.js</code>の構文チェック（Node.js）：問題なし。</p>
 <p>フロントエンドの自動テストは無いため、画面での確認は未実施。</p>
 
 <h2>6. 残課題・確認ポイント</h2>
 <ul>
-<li>スマホ・PCでエキスパンダの大きさと見出しとの位置が添付画像の意図に合っているか確認してほしい。</li>
-<li>作成欄の開閉状態はページ再読み込みで閉じた状態に戻る（保存しない）。</li>
-<li>Issue作成後もIssue作成欄は開いたままとなる。</li>
-<li>MRステータスフィルタ選択中は従来どおり作成欄ごと非表示になる。</li>
+<li>閉じた状態で見出し「〇〇作成 &gt;」のみが表示されるか、スマホ・PCで確認してほしい。</li>
+<li>ステータスフィルタ選択中も作成欄の見出しは表示され、手動で開けば作成できる（従来は作成欄ごと非表示）。</li>
+<li>ステータスフィルタ選択時、MR作成欄はIssue未選択でも閉じた状態に戻る。</li>
 </ul>
 </body>
 </html>
