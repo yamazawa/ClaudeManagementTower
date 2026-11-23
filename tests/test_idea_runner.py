@@ -93,6 +93,15 @@ def test_process_idea_job_records_exception(session_factory):
     assert job.error_message == "claude down"
 
 
+def test_process_idea_job_marks_rate_limited(session_factory):
+    async def limited_runner(prompt, repo_path):
+        raise RuntimeError("You've hit your 5-hour limit · resets 10pm (exit code: 1)")
+
+    idea_runner.process_idea_job({"idea_job_id": 1, "project_id": 1}, 1, claude_runner=limited_runner)
+
+    assert _job(session_factory).status == IdeaJobStatus.RATE_LIMITED
+
+
 def test_process_next_job_skips_claim_while_rate_limited(monkeypatch):
     monkeypatch.setattr(worker_main, "_is_rate_limited", lambda: True)
     monkeypatch.setattr(worker_main, "claim_next_job", lambda worker_id: pytest.fail("not expected"))

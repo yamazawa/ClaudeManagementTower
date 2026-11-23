@@ -21,6 +21,7 @@ class IdeaJobStatus:
     SUCCEEDED : 完了（提案を保存済み）
     FAILED : 失敗
     NEEDS_ATTENTION : 心拍が途絶えた（要確認）
+    RATE_LIMITED : Claudeの利用上限で中断した
     """
 
     QUEUED = "queued"
@@ -28,6 +29,7 @@ class IdeaJobStatus:
     SUCCEEDED = "succeeded"
     FAILED = "failed"
     NEEDS_ATTENTION = "needs_attention"
+    RATE_LIMITED = "rate_limited"
 
     ACTIVE_STATES = (QUEUED, RUNNING)
 

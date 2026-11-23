@@ -45,6 +45,7 @@ const IDEA_JOB_STATUS_LABELS = {
   succeeded: "前回のアイデア出し：完了",
   failed: "前回のアイデア出し：失敗",
   needs_attention: "前回のアイデア出し：要確認",
+  rate_limited: "前回のアイデア出し：利用上限で中断",
 };
 
 const IDEA_DIALOG_MESSAGES = {
