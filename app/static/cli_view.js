@@ -22,6 +22,10 @@ const CLI_VIEW_MESSAGES = {
   placeholder: "Claudeへの指示（Ctrl+Enterで送信）",
   send: "送信",
   sendFailed: "送信に失敗しました",
+  interrupt: "中断",
+  interruptTitle: "応答中のClaudeを止める（開発PCのEscキー相当）",
+  interrupting: "中断しています...",
+  interruptFailed: "中断に失敗しました",
 };
 
 // 表示中の対話（item・表示済みの最終発言ID・状態）
@@ -48,12 +52,14 @@ function showCliItem(item, container) {
       <textarea id="cli-view-input" aria-label="Claudeへの指示" placeholder="${CLI_VIEW_MESSAGES.placeholder}"></textarea>
       <div class="subtask-actions">
         <button type="submit" id="cli-view-send" class="subtask-action-button primary">${CLI_VIEW_MESSAGES.send}</button>
+        <button type="button" id="cli-view-interrupt" class="subtask-action-button" title="${CLI_VIEW_MESSAGES.interruptTitle}" hidden>${CLI_VIEW_MESSAGES.interrupt}</button>
       </div>
     </form>
     <p id="cli-view-status" class="title-status repo-item-action-status empty" role="status"></p>
     <div id="cli-view-log" class="cli-log" aria-live="polite"></div>
   `;
   document.getElementById("cli-view-form").addEventListener("submit", onSubmitCliView);
+  document.getElementById("cli-view-interrupt").addEventListener("click", onClickCliViewInterrupt);
   document.getElementById("cli-view-input").addEventListener("keydown", onCliViewInputKeydown);
   resetCliViewLog();
   refreshCliView();
@@ -109,6 +115,34 @@ async function postCliMessage(sessionId, text) {
 }
 
 /**
+ * 応答中のClaudeを中断する
+ *
+ * 中断の完了（発言待ちへの戻し）は発言一覧の取得で反映する。
+ * 二重に要求しないよう、要求中は中断ボタンを押せなくする。
+ */
+async function onClickCliViewInterrupt() {
+  const state = cliViewState;
+  if (!state || state.status !== CLI_SESSION_STATUS.running || state.interrupting) return;
+  state.interrupting = true;
+  setCliViewStatus(state.status);
+  try {
+    await postCliInterrupt(state.item.id);
+  } catch (error) {
+    state.interrupting = false;
+    if (state === cliViewState) setCliViewStatus(state.status, error.message);
+    return;
+  }
+  await refreshCliView();
+}
+
+async function postCliInterrupt(sessionId) {
+  const response = await fetch(`/api/cli-sessions/${sessionId}/interrupt`, { method: "POST" });
+  if (response.ok) return;
+  const body = await response.json().catch(() => ({}));
+  throw new Error(`${CLI_VIEW_MESSAGES.interruptFailed}: ${body.detail || response.statusText}`);
+}
+
+/**
  * 未表示の発言を取得して表示する
  *
  * 応答中は一定間隔で取得し直す。
@@ -157,10 +191,11 @@ function appendCliMessage(message) {
 }
 
 /**
- * 状態表示と送信可否を更新する
+ * 状態表示と送信・中断の可否を更新する
  *
  * 失敗時は文言を状態表示に出す。
  * Closeの項目は入力欄を読み取り専用にする。
+ * 中断ボタンは応答中のみ表示する。
  */
 function setCliViewStatus(status, errorText = "") {
   const state = cliViewState;
@@ -168,10 +203,18 @@ function setCliViewStatus(status, errorText = "") {
   state.status = status;
   const open = isCliItemOpen(state);
   const running = status === CLI_SESSION_STATUS.running;
-  const text = errorText || (running ? CLI_VIEW_MESSAGES.running : "") || (open ? "" : CLI_VIEW_MESSAGES.closed);
+  if (!running) state.interrupting = false;
+  const text = errorText || (running ? cliViewRunningText(state) : "") || (open ? "" : CLI_VIEW_MESSAGES.closed);
   document.getElementById("cli-view-status").textContent = text;
   document.getElementById("cli-view-send").disabled = running || !open;
   document.getElementById("cli-view-input").readOnly = !open;
+  const interrupt = document.getElementById("cli-view-interrupt");
+  interrupt.hidden = !running;
+  interrupt.disabled = Boolean(state.interrupting);
+}
+
+function cliViewRunningText(state) {
+  return state.interrupting ? CLI_VIEW_MESSAGES.interrupting : CLI_VIEW_MESSAGES.running;
 }
 
 // Ctrl+Enter（MacはCmd+Enter）で送信し、Enterのみは改行とする
