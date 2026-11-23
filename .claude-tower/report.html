@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>サブタスク実行レポート - アイデアマンー②</title>
+<title>サブタスク実行レポート - 5時間枠の上限中はジョブを取得せず、リセット後に再開するー①</title>
 <style>
 body{font-family:sans-serif;margin:2em;line-height:1.6;color:#222;max-width:1100px}
 h1{font-size:1.4em}h2{font-size:1.1em;border-bottom:1px solid #ccc;margin-top:1.6em}
@@ -15,70 +15,57 @@ th{background:#f0f3f8}.ok{color:#13795b;font-weight:bold}.warn{color:#a4650a;fon
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#178 アイデアマン</td></tr>
-<tr><th>サブタスク</th><td>アイデアマンー②（PR #182、Draft）</td></tr>
-<tr><th>ブランチ</th><td>issue-178-subtask-2（base: master）</td></tr>
-<tr><th>設計書</th><td>Input\アイデアマン_設計案.html（v0.1、リポジトリ未登録のため本体側のファイルを参照）</td></tr>
+<tr><th>Issue</th><td>#185 5時間枠の上限中はジョブを取得せず、リセット後に再開する</td></tr>
+<tr><th>サブタスク</th><td>5時間枠の上限中はジョブを取得せず、リセット後に再開するー①（PR #186、Draft）</td></tr>
+<tr><th>ブランチ</th><td>issue-185-subtask-1（base: master）</td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
-<p class="ok">成功（実機での画面確認・GitHub反映確認は未実施）</p>
-<p>設計案9章のPhase III（提案一覧画面・承認／却下UI）を実装しました。</p>
-<p>Phase IV（承認時のIssue作成・サブタスク作成）を実装しました。</p>
-<p>自動テストは全件成功しています。</p>
+<p class="ok">成功（自動テストは全件成功。ワーカー起動での実機確認は未実施）</p>
+<p>ジョブ取得前に利用上限中かを確認し、上限中は実装・アイデア出しのどちらのジョブも取得しないようにしました。</p>
+<p>「hit your limit」系のエラーで失敗したジョブは、failedと区別して<code>rate_limited</code>にしました。</p>
+<p>実装ジョブは、上限が解除され一定時間が経過した後に自動で待機中へ戻します。</p>
 
 <h2>3. 実施した変更</h2>
 <table>
 <tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td>core/idea_approval.py（新規）</td><td>承認の種類、承認処理中への状態遷移（二重承認防止）、失敗時の差し戻し、Issue本文・サブタスク指示の組み立て</td></tr>
-<tr><td>2</td><td>app/routes/ideas.py</td><td><code>POST /api/ideas/{id}/approve</code>を追加。既存の<code>create_issue</code>・<code>create_subtask</code>・<code>execute_subtask</code>を呼び出す</td></tr>
-<tr><td>3</td><td>app/static/idea_dialog.js（新規）</td><td>提案一覧ダイアログ。タブ（未処理／承認済み／却下済み）、提案カード、承認・却下、アイデア出し実行と状況表示</td></tr>
-<tr><td>4</td><td>app/static/index.html・style.css</td><td>ダイアログのマークアップとスタイル（スマホ幅では縦積み）</td></tr>
-<tr><td>5</td><td>app/static/app.js</td><td>リポジトリ一覧の各行にIdeaボタンを追加。ダイアログを開くボタンの処理を共通化</td></tr>
-<tr><td>6</td><td>IMPLEMENTATION_PLAN.md</td><td>9章に採用方式No.10〜16と残存リスクを追記</td></tr>
-<tr><td>7</td><td>tests/test_idea_approval.py（新規）・tests/test_idea_routes.py</td><td>状態遷移・本文組み立て・承認APIのテスト</td></tr>
+<tr><td>1</td><td>core/rate_limits.py</td><td><code>blocked_until</code>（rejectedかつ未来のリセット時刻の最大値）と<code>is_rate_limit_error</code>（上限エラー判定）を追加</td></tr>
+<tr><td>2</td><td>core/job_queue.py</td><td><code>STATUS_RATE_LIMITED</code>と<code>requeue_rate_limited_jobs</code>を追加。後続ジョブがあるサブタスクは戻さない</td></tr>
+<tr><td>3</td><td>core/config.py・.env.example</td><td><code>rate_limit_retry_delay_seconds</code>（既定600秒）を追加</td></tr>
+<tr><td>4</td><td>worker/main.py</td><td><code>_process_next_job</code>の先頭で上限判定。上限中でなければ再投入。例外が上限エラーなら<code>rate_limited</code>で終了。<code>_load_subtask_and_project</code>を切り出し</td></tr>
+<tr><td>5</td><td>worker/idea_runner.py・core/idea_queue.py</td><td>アイデア出しジョブの上限失敗を<code>RATE_LIMITED</code>にする</td></tr>
+<tr><td>6</td><td>app/static/idea_dialog.js</td><td>「前回のアイデア出し：利用上限で中断」の表示を追加</td></tr>
+<tr><td>7</td><td>IMPLEMENTATION_PLAN.md</td><td>上限中の待機・再投入方針を追記</td></tr>
+<tr><td>8</td><td>tests/test_rate_limits.py・test_job_queue.py・test_worker_main.py・test_idea_runner.py</td><td>上記のテストを追加。既存の<code>_process_next_job</code>テストは上限判定をスタブ化</td></tr>
 </table>
-<p>コミットは状態遷移／承認API／ダイアログ／Ideaボタン／実装計画の5つに分けています。</p>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>提案一覧は新規ペインではなく、リポジトリ一覧のIdeaボタンから開くダイアログにした</td><td>既存4ペイン構成を崩さず、CLIボタンと同じ操作で提供できるため（UI設計ルール「共通操作」）</td></tr>
-<tr><td>2</td><td>承認APIの<code>mode</code>は<code>issue_only</code>／<code>with_subtask</code>の2種とした</td><td>設計案5章の「Issueのみ作成」「Issue作成＋初回サブタスク」に対応させた</td></tr>
-<tr><td>3</td><td>「サブタスクも作成」では作成後に実行ジョブを投入する</td><td>設計案5章で「実装着手」「実行ジョブ投入」まで既存パイプラインを呼ぶと明記されているため。画面では確認ダイアログで「実装を開始」と明示する</td></tr>
-<tr><td>4</td><td>既存Issue配下の提案はIssueを作らずサブタスクのみ作成し、Issueのみの承認は409で拒否する</td><td>設計案4章の<code>related_issue_number</code>の意味に従った</td></tr>
-<tr><td>5</td><td>承認開始時に状態条件付きの更新で<code>approved_*</code>にする</td><td>連打・複数端末からの二重Issue作成を防ぐため</td></tr>
-<tr><td>6</td><td>Issue作成失敗は未処理に戻し、サブタスク作成失敗はIssue作成済みに戻す。Issue作成済みの提案は承認済みタブから「サブタスクを作成」で再実行できる</td><td>取り消せないIssueを重複作成しないため</td></tr>
-<tr><td>7</td><td>Issue名は提案タイトルをそのまま使い、<code>[SPn]タスクn</code>形式は強制しない</td><td>提案側はスプリント番号を知らず、既存のIssue作成画面も形式を強制していないため</td></tr>
-<tr><td>8</td><td>Issue本文に「アイデアマンの提案（ID: n）から作成」を付ける</td><td>GitHub上で起点を追えるようにするため</td></tr>
-<tr><td>9</td><td>承認はGitHubへ即時反映されるため、実行前にconfirmで確認する</td><td>既存のIssueクローズ等と同じ確認方式に合わせた</td></tr>
+<tr><td>1</td><td>上限失敗の状態は<code>needs_attention</code>ではなく新設の<code>rate_limited</code>にした</td><td><code>needs_attention</code>は心拍途絶の意味で使用済みで、自動再実行しない方針のため</td></tr>
+<tr><td>2</td><td>実装ジョブは自動で再投入する（画面からの再実行も従来通り可能）</td><td>提案の目的が「リセット後に再開」のため。人手を介さず再開できる</td></tr>
+<tr><td>3</td><td>再投入は「上限中でない」かつ「中断から600秒経過」を条件とした</td><td>上限エラー時に<code>rejected</code>のRateLimitEventが届かない場合でも、3秒毎の失敗ループを避けるため</td></tr>
+<tr><td>4</td><td>同じサブタスクに後続ジョブがあれば再投入しない</td><td>画面から再実行済みの場合に二重実行を防ぐため</td></tr>
+<tr><td>5</td><td>アイデア出しジョブは自動再投入しない</td><td>画面から再実行でき、1プロジェクト1件の制約と重複しやすいため</td></tr>
+<tr><td>6</td><td>判定対象は全ての枠（five_hour以外も）とし、リセット時刻不明の上限は対象外</td><td>7日枠等の上限でも失敗するため。不明時に無期限停止しないため</td></tr>
+<tr><td>7</td><td>上限エラーの判定は例外メッセージのみとし、結果テキストは見ない</td><td>レポート要約等の正常な結果に同じ語句が含まれ得るため誤判定を避けた</td></tr>
+<tr><td>8</td><td>idea_contextの<code>FAILED_JOB_STATES</code>には<code>rate_limited</code>を含めない</td><td>上限失敗はコードの問題ではなく、アイデアマンへの材料として不要なため</td></tr>
+<tr><td>9</td><td>待機ログはリセット時刻が変わった時のみ出力</td><td>ポーリング毎の出力でログが埋まるのを避けるため</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<table>
-<tr><th>テスト</th><th>結果</th></tr>
-<tr><td><code>./.venv/Scripts/python.exe -m pytest -q</code>（全体）</td><td class="ok">359 passed</td></tr>
-<tr><td>追加分：tests/test_idea_approval.py（11件）、tests/test_idea_routes.py（承認API 7件＋登録確認）</td><td class="ok">成功</td></tr>
-<tr><td><code>node --check</code>（idea_dialog.js・app.js）</td><td class="ok">構文エラーなし</td></tr>
-<tr><td>TestClientでの静的ファイル配信・index.htmlのダイアログ有無・不正modeの422</td><td class="ok">成功</td></tr>
-<tr><td>ブラウザでの画面操作確認</td><td class="warn">未実施（ブラウザ操作手段が無く、人間の使用中の画面と競合し得るため）</td></tr>
-<tr><td>実GitHubでのIssue・Draft PR作成確認（設計案Phase IVの完了条件）</td><td class="warn">未実施（公開リポジトリへ即時反映されるため。テストリポジトリでの人間による確認を推奨）</td></tr>
-</table>
+<p class="ok"><code>./.venv/Scripts/python.exe -m pytest -q</code> : 372 passed</p>
+<p>途中コミット（3048d01）時点でも371 passedを確認済みです。</p>
+<p>ワーカーを起動した実機確認は未実施です（CLAUDE.mdの方針により人間に依頼）。</p>
 
 <h2>6. 残課題・リスク・確認ポイント</h2>
 <ul>
-<li>承認操作中にサーバーが停止すると、提案が承認処理中（Issue作成中／サブタスク作成中）のまま残る。画面から戻す手段は無い。</li>
-<li>承認中はGitHub・git操作の完了まで応答を待つため、数十秒かかる場合がある。</li>
-<li>提案本文はClaudeの出力をそのままIssue本文に使う。公開リポジトリへ反映する前に、内容をカードで確認してから承認する運用とする。</li>
-<li>直近のPRレビューコメントの参照（設計案3章）は前回から引き続き未対応。</li>
-<li>設計案HTMLがリポジトリに未登録。必要ならInput\へ追加する。</li>
-</ul>
-<p>レビュー時の確認ポイント：</p>
-<ul>
-<li>claude-tower-test-repoで「Issueを作成」「サブタスクも作成」「既存Issue配下のサブタスクを作成」「却下」を一通り操作する。</li>
-<li>サブタスク作成直後に実行ジョブが投入される挙動が意図どおりか（自動で実装開始してよいか）。</li>
-<li>スマホ幅での提案カードの表示崩れが無いか。</li>
-<li>app/routes/ideas.pyがapp/routes/subtasks.pyのルート関数を直接呼ぶ構成でよいか。</li>
+<li>実際の上限エラーが例外（ProcessError）で届く前提です。結果メッセージ（is_error）で届く場合は<code>succeeded</code>扱いのままになります。</li>
+<li>上限エラーの文言は#165の実例と「usage limit reached」のみで判定しています。文言が変わると<code>failed</code>になります。</li>
+<li>再投入時に<code>append_instruction_history</code>が再度動くため、subtask.mdに同じ指示が追記され、コミットが1件増えます。</li>
+<li>実装ジョブの状態表示は<code>状態: rate_limited</code>と英語のまま表示されます（既存の表示方式に合わせ、文言化は未対応）。</li>
+<li>上限中もClaudeを使わないため新しいRateLimitEventが届きません。リセット時刻を過ぎると判定は自動で解除されます。</li>
+<li>確認ポイント：<code>worker/main.py</code>の<code>_is_rate_limited</code>、<code>core/job_queue.py</code>の<code>requeue_rate_limited_jobs</code>。</li>
 </ul>
 </body>
 </html>
