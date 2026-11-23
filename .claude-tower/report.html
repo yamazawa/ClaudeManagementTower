@@ -2,69 +2,59 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実装レポート Issue/CLI/Ideaの表示ー①</title>
+<title>作業レポート: ワーカーの例外保護</title>
 <style>
 body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
-h1 { font-size: 1.4em; }
-h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; padding-bottom: .2em; margin-top: 1.6em; }
-table { border-collapse: collapse; margin: .5em 0; }
-th, td { border: 1px solid #bbb; padding: .3em .6em; text-align: left; vertical-align: top; }
-th { background: #f0f0f0; }
-.ok { color: #fff; background: #2a7a2a; padding: .1em .6em; border-radius: 4px; }
-code { background: #f4f4f4; padding: 0 .3em; }
+h1 { font-size: 1.4em; } h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; margin-top: 1.6em; }
+table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #bbb; padding: 4px 8px; text-align: left; vertical-align: top; }
+th { background: #f0f0f0; } code { background: #f4f4f4; padding: 0 3px; }
+.ok { color: #0a6b0a; font-weight: bold; }
 </style>
 </head>
 <body>
-<h1>実装レポート</h1>
+<h1>作業レポート: ワーカーのジョブ処理で想定外の例外が起きても、ワーカーを停止させない</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>未採番（サブタスク作成時点でIssue番号なし）</td></tr>
-<tr><th>サブタスク</th><td>Issue/CLI/Ideaの表示ー①</td></tr>
-<tr><th>ブランチ</th><td><code>issue-new-944cf386-subtask-1</code></td></tr>
+<tr><th>Issue</th><td>#245（アイデアマン提案）</td></tr>
+<tr><th>サブタスク</th><td>ワーカーのジョブ処理で想定外の例外が起きても、ワーカーを停止させない ①</td></tr>
+<tr><th>ブランチ</th><td><code>issue-245-9bee1daf-subtask-1</code>（push済み）</td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
-<p><span class="ok">成功</span>（ブラウザでの動作確認は未実施）</p>
-<p>①Issueのタブ表示中のみIssue内容・MR内容のペインを表示するようにした。</p>
-<p>CLI・Ideaのタブでは、それぞれの項目の内容のペインのみ表示する。</p>
-<p>②ヘッダーのMRステータスフィルタの切替時に、Issueのタブへ自動で切り替えるようにした。</p>
-<p>CLI・Ideaのタブへ切り替えた際は、MRステータスフィルタの選択を自動で解除するようにした。</p>
+<p class="ok">成功</p>
+<p>提案の詳細4項目（前処理のtry内移動・failed記録・run_loop保護・テスト追加）をすべて実装した。</p>
 
 <h2>3. 変更内容</h2>
 <table>
-<tr><th>No.</th><th>ファイル</th><th>変更</th><th>コミット</th></tr>
-<tr><td>1</td><td><code>app/static/app.js</code></td><td><code>setSectionShown</code>で表示指定を保持し、<code>applySectionShown</code>でタブを考慮して反映</td><td>67bc3b0</td></tr>
-<tr><td>2</td><td><code>app/static/repo_items.js</code></td><td><code>isSectionHiddenByTab</code>を追加し、タブ切替時は表示指定に従いペインを再反映</td><td>67bc3b0</td></tr>
-<tr><td>3</td><td><code>app/static/app.js</code></td><td><code>toggleMrStatusFilter</code>でIssueのタブへ切替</td><td>bc5f289</td></tr>
-<tr><td>4</td><td><code>app/static/app.js</code>・<code>repo_items.js</code></td><td><code>clearMrStatusFilter</code>を追加し、CLI・Ideaのタブ選択時に呼び出す</td><td>b32e97f</td></tr>
+<tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
+<tr><td>1</td><td><code>worker/main.py</code> <code>_load_subtask_and_project</code></td><td>サブタスク・プロジェクトが削除済みの場合、原因を示すRuntimeErrorを送出する。</td></tr>
+<tr><td>2</td><td><code>worker/main.py</code> <code>_start_job</code>（新規）/ <code>process_job</code></td><td>set_worker_state・読込・record_event・実行を<code>_start_job</code>にまとめ、tryの中で呼ぶ。<br>失敗は実際のエラー内容でfailed（利用上限ならrate_limited）として記録する。</td></tr>
+<tr><td>3</td><td><code>worker/main.py</code> <code>run_loop</code> / <code>_run_iteration</code>（新規）</td><td>1周分を<code>_run_iteration</code>に切り出し、run_loopで例外を保護する。<br>例外時はログを出し、ポーリング間隔だけ待って次の周回へ進む。</td></tr>
+<tr><td>4</td><td><code>tests/test_worker_main.py</code></td><td>サブタスク削除済み・プロジェクト削除済み・前処理でのDBエラー・run_loopの継続のテストを追加。</td></tr>
 </table>
+<p>コミット: 8de67ff（前処理）、3d5c672（run_loop）、96bd283（テスト）</p>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>「ステータストグル」はヘッダーのMRステータスフィルタ（Draft〜Merged）と解釈</td><td>画面上でトグル選択するステータスはこれのみのため</td></tr>
-<tr><td>2</td><td>①の原因は、CLI・Ideaのタブ表示中に定期更新等で<code>setSectionShown</code>がIssue・MRのペインを再表示することと判断</td><td>従来はタブ切替時のみ隠しており、その後の再描画で表示されていたため</td></tr>
-<tr><td>3</td><td>ペインの「表示指定」を<code>data-shown</code>に保持し、タブとの組み合わせで表示を決める方式を採用</td><td>Issueのタブへ戻した際、未選択のペインを表示しない（従来は無条件に表示していた）ため</td></tr>
-<tr><td>4</td><td>ステータスの選択・選択解除のどちらでもIssueのタブへ切り替える</td><td>指示が「変更時」のため（選択解除はIssueのタブでのみ起こり得る）</td></tr>
-<tr><td>5</td><td>フィルタ解除後のIssue一覧の再取得は、既存の<code>onMrStatusFilterChanged</code>に任せる</td><td>Issueのタブへ戻った際に、通常のフィルタの一覧を表示するため</td></tr>
+<tr><td>1</td><td>削除済み時はAttributeErrorではなく明示的なRuntimeErrorを送出する。</td><td>ジョブのerror_messageに本当の原因が分かる文言を残すため。</td></tr>
+<tr><td>2</td><td>ログは<code>logging</code>ではなく<code>print</code>を使う。</td><td>worker配下は既存でprintによるログ出力に統一されているため。</td></tr>
+<tr><td>3</td><td>run_loopの例外時はポーリング間隔だけsleepしてから再試行する。</td><td>DBロックの継続時にビジーループでログが溢れるのを防ぐため。_merge_loopの待機と同等の挙動。</td></tr>
+<tr><td>4</td><td>process_jobのexcept内でrecord_event/finish_jobが失敗した場合は、run_loop側の保護に任せる。</td><td>二重のtryで複雑化させないため。この場合ジョブはハートビート途絶で従来通りneeds_attentionとなるが、ワーカーは停止しない。</td></tr>
+<tr><td>5</td><td>process_idea_jobには手を入れない。</td><td>提案の範囲外。run_loopの保護によりワーカー停止は防がれる。</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<table>
-<tr><th>テスト</th><th>結果</th></tr>
-<tr><td><code>./.venv/Scripts/python.exe -m pytest -q</code></td><td>509 passed</td></tr>
-<tr><td><code>node --check</code>（app.js・repo_items.js）</td><td>構文エラーなし</td></tr>
-<tr><td>ブラウザでの動作確認</td><td>未実施（フロントエンドのJSテスト基盤が無いため、人間による確認を依頼）</td></tr>
-</table>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code> → <span class="ok">526 passed</span></p>
+<p>実ワーカー起動での動作確認は未実施（ガイドラインに従い人間に依頼）。</p>
 
-<h2>6. 残課題・レビュー時の確認ポイント</h2>
+<h2>6. 残課題・レビュー観点</h2>
 <ul>
-<li>CLI・Ideaのタブ表示中に定期更新が走っても、Issue内容・MR内容のペインが表示されないこと。</li>
-<li>Issueのタブへ戻した際、Issue選択済みならIssue内容・MR内容が表示されること。</li>
-<li>CLI・Ideaのタブでステータスを押すと、Issueのタブに切り替わり絞り込み表示されること。</li>
-<li>ステータス選択中にCLI・Ideaのタブへ切り替えると、選択が解除されること。</li>
-<li>選択解除時にIssue一覧を再取得するため、一時的に「更新中」の表示が出る。</li>
+<li>process_jobの例外処理中（record_event/finish_job）にDBエラーが起きた場合、ジョブの失敗理由は記録されない（判断No.4）。</li>
+<li>DBが恒久的に使えない状態では、ワーカーはポーリング間隔ごとにログを出し続ける。終了させる仕組みは入れていない。</li>
+<li>process_idea_jobの前処理にも同種の問題がないか、別途確認するとよい。</li>
+<li>確認ポイント: <code>worker/main.py</code>の<code>_start_job</code>・<code>run_loop</code>・<code>_run_iteration</code>。</li>
 </ul>
 </body>
 </html>
