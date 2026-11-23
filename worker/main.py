@@ -210,15 +210,31 @@ def run_loop(worker_id: int) -> None:
 
     自分のワーカー行が削除された場合は、管理対象外になったとみなして終了する。
     再登録はしないため、停止されたワーカーが設定数を超えて残ることはない。
+    1周分の想定外の例外はログを出して次の周回へ進む。
     """
     while True:
-        if not set_worker_state(worker_id, state="idle", current_job_id=None):
-            print("[worker] 自分のワーカー行が削除されたため終了します")
-            return
-        _cleanup_stale_records()
-
-        if not _process_next_job(worker_id):
+        try:
+            if not _run_iteration(worker_id):
+                return
+        except Exception as exc:  # noqa: BLE001
+            # DBの一時的な失敗等でワーカーを止めない
+            print(f"[worker] ジョブ処理の周回で例外が発生しました: {exc!r}")
             time.sleep(settings.worker_poll_interval_seconds)
+
+
+def _run_iteration(worker_id: int) -> bool:
+    """ジョブの取得・実行を1周分行う
+
+    自分のワーカー行が削除されていた場合はFalseを返す。
+    """
+    if not set_worker_state(worker_id, state="idle", current_job_id=None):
+        print("[worker] 自分のワーカー行が削除されたため終了します")
+        return False
+    _cleanup_stale_records()
+
+    if not _process_next_job(worker_id):
+        time.sleep(settings.worker_poll_interval_seconds)
+    return True
 
 
 def _process_next_job(worker_id: int) -> bool:
