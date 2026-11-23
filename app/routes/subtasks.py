@@ -37,6 +37,11 @@ from core.models import ExecutionJob, Project, Subtask
 from core.mr_naming import compose_mr_title, next_default_suffix
 from core.merge_queue import enqueue_merge, find_active_merge
 from core.pr_sync import lifecycle_state_from_pr
+from core.subtask_rollback import (
+    SubtaskCreationStage,
+    describe_rollback_result,
+    rollback_subtask_creation,
+)
 
 router = APIRouter(prefix="/api/subtasks")
 
@@ -98,18 +103,44 @@ def _related_issue_body(issue_number: int) -> str:
 
 
 def _push_draft_pr(project: Project, branch_name: str, title: str, instruction: str, body: str) -> dict:
-    """worktreeを作成して指示を記録し、Draft PRを作成する"""
+    """worktreeを作成して指示を記録し、Draft PRを作成する
+
+    途中で失敗した場合、完了した段階を取り消してから例外を投げ直す。
+    後始末で残ったものは例外のメッセージに含める。
+    """
     worktree_path = f"{settings.worktree_base_dir}/{branch_name}"
+    completed: set[SubtaskCreationStage] = set()
+    try:
+        _run_creation_stages(project, branch_name, title, instruction, worktree_path, completed)
+        return create_draft_pr(
+            repo=project.github_repo,
+            base=project.default_branch,
+            head=branch_name,
+            title=title,
+            body=body,
+        )
+    except (GitClientError, GitHubClientError) as exc:
+        if not completed:
+            raise
+        leftovers = rollback_subtask_creation(project.repo_path, worktree_path, branch_name, completed)
+        raise type(exc)(f"{exc}\n{describe_rollback_result(leftovers)}") from exc
+
+
+def _run_creation_stages(
+    project: Project,
+    branch_name: str,
+    title: str,
+    instruction: str,
+    worktree_path: str,
+    completed: set[SubtaskCreationStage],
+) -> None:
+    """Draft PR作成前の段階を実行し、完了した段階をcompletedに記録する"""
     create_worktree(project.repo_path, branch_name, project.default_branch, worktree_path)
+    completed.add(SubtaskCreationStage.WORKTREE_CREATED)
     commit_subtask_instruction(worktree_path, title, instruction)
+    completed.add(SubtaskCreationStage.INSTRUCTION_COMMITTED)
     push_branch(worktree_path, branch_name)
-    return create_draft_pr(
-        repo=project.github_repo,
-        base=project.default_branch,
-        head=branch_name,
-        title=title,
-        body=body,
-    )
+    completed.add(SubtaskCreationStage.BRANCH_PUSHED)
 
 
 def _find_or_add_subtask(session, project_id: int, issue_number: int, branch_name: str) -> Subtask:

@@ -1,6 +1,6 @@
 """MR（サブタスク）のlifecycle_state定義
 
-画面のフィルタ・ボタン定義（app/static/app.js）と値を合わせる。
+画面のフィルタ・ボタン定義（app/static/common.js）と値を合わせる。
 """
 
 

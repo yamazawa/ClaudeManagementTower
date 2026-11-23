@@ -4,8 +4,8 @@ from sqlalchemy.orm import sessionmaker
 from core import idea_approval
 from core.db import init_db, make_engine
 from core.idea_approval import ApprovalMode, IdeaApprovalNotAllowed
-from core.ideas import IdeaAlreadyDecided, IdeaNotFound, IdeaStatus, save_proposals
-from core.models import IdeaJob, Project
+from core.ideas import IdeaAlreadyDecided, IdeaNotFound, IdeaStatus, reject_idea, save_proposals
+from core.models import Idea, IdeaJob, Project
 
 
 @pytest.fixture
@@ -98,6 +98,43 @@ def test_release_keeps_issue_created(session_factory):
 
     assert idea["status"] == IdeaStatus.ISSUE_CREATED
     assert idea["created_issue_number"] == 12
+
+
+def _status(session_factory, idea_id) -> str:
+    with session_factory() as session:
+        return session.get(Idea, idea_id).status
+
+
+def test_recover_interrupted_claims(session_factory):
+    issue_only = _save(session_factory)
+    with_subtask = _save(session_factory)
+    issue_created = _save(session_factory)
+    untouched = _save(session_factory)
+    idea_approval.claim_idea(issue_only, ApprovalMode.ISSUE_ONLY, session_factory=session_factory)
+    idea_approval.claim_idea(with_subtask, ApprovalMode.WITH_SUBTASK, session_factory=session_factory)
+    idea_approval.claim_idea(issue_created, ApprovalMode.ISSUE_ONLY, session_factory=session_factory)
+    idea_approval.record_issue_created(issue_created, 12, session_factory=session_factory)
+    idea_approval.claim_idea(issue_created, ApprovalMode.WITH_SUBTASK, session_factory=session_factory)
+
+    idea_approval.recover_interrupted_claims(session_factory=session_factory)
+
+    assert _status(session_factory, issue_only) == IdeaStatus.PROPOSED
+    assert _status(session_factory, with_subtask) == IdeaStatus.PROPOSED
+    assert _status(session_factory, issue_created) == IdeaStatus.ISSUE_CREATED
+    assert _status(session_factory, untouched) == IdeaStatus.PROPOSED
+
+
+def test_recover_keeps_decided_ideas(session_factory):
+    rejected = _save(session_factory)
+    reject_idea(rejected, "不要", session_factory=session_factory)
+    subtask_created = _save(session_factory, related_issue_number=7)
+    idea_approval.claim_idea(subtask_created, ApprovalMode.WITH_SUBTASK, session_factory=session_factory)
+    idea_approval.record_subtask_created(subtask_created, 3, session_factory=session_factory)
+
+    idea_approval.recover_interrupted_claims(session_factory=session_factory)
+
+    assert _status(session_factory, rejected) == IdeaStatus.REJECTED
+    assert _status(session_factory, subtask_created) == IdeaStatus.SUBTASK_CREATED
 
 
 def test_record_subtask_created(session_factory):
