@@ -4,14 +4,14 @@
 GitHubへの書き込み・コミット・pushは行わない。
 """
 
-import asyncio
 import logging
 from collections.abc import Callable
 from functools import partial
 
 from claude_agent_sdk import RateLimitEvent
 
-from core.claude_client import IDEA_MAN_POLICY_PROMPT, run_read_only_claude
+from core.claude_client import run_read_only_claude
+from core.claude_prompts import IDEA_MAN_POLICY_PROMPT
 from core.config import settings
 from core.db import SessionLocal
 from core.idea_context import build_idea_prompt
@@ -21,6 +21,7 @@ from core.job_queue import WorkerState, set_worker_state
 from core.models import Project
 from core.rate_limits import is_rate_limit_error, record_rate_limit
 from worker.heartbeat import run_with_heartbeat
+from worker.time_limit import run_with_time_limit
 
 logger = logging.getLogger(__name__)
 
@@ -38,13 +39,22 @@ async def _run_claude(prompt: str, repo_path: str) -> tuple[str | None, str | No
 
 
 def _repo_path(project_id: int) -> str:
+    """対象プロジェクトのリポジトリパス
+
+    削除済みの場合は、原因が分かるメッセージでRuntimeErrorを送出する。
+    """
     with SessionLocal() as session:
-        return session.get(Project, project_id).repo_path
+        project = session.get(Project, project_id)
+        if project is None:
+            raise RuntimeError(f"プロジェクト(id={project_id})が見つかりません")
+        return project.repo_path
 
 
 def _execute(idea_job_id: int, project_id: int, focus: str, claude_runner: Callable) -> None:
     prompt = build_idea_prompt(project_id, settings.idea_max_proposals, settings.idea_history_limit, focus)
-    session_id, result_text = asyncio.run(claude_runner(prompt, _repo_path(project_id)))
+    session_id, result_text = run_with_time_limit(
+        claude_runner(prompt, _repo_path(project_id)), settings.idea_job_max_runtime_seconds
+    )
     try:
         proposals = parse_proposals(result_text or "", settings.idea_max_proposals)
     except IdeaParseError as exc:
@@ -61,6 +71,7 @@ def process_idea_job(job: dict, worker_id: int, claude_runner: Callable = _run_c
 
     実行中はワーカーを占有する。
     失敗はジョブのエラーとして残し、ワーカーは次のジョブに進む。
+    最大実行時間を超えた場合も、打ち切った理由を残してfailedにする。
     """
     idea_job_id = job["idea_job_id"]
     logger.info("idea job %s (project %s) を実行開始", idea_job_id, job["project_id"])

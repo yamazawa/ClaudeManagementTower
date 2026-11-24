@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from sqlalchemy.orm import sessionmaker
 
@@ -90,6 +92,11 @@ def test_process_idea_job_fails_on_unparsable_result(session_factory):
     assert "提案はありません" in job.error_message
 
 
+def test_repo_path_of_deleted_project_raises_clear_error(session_factory):
+    with pytest.raises(RuntimeError, match=r"プロジェクト\(id=99\)が見つかりません"):
+        idea_runner._repo_path(99)
+
+
 def test_process_idea_job_records_exception(session_factory):
     async def failing_runner(prompt, repo_path):
         raise RuntimeError("claude down")
@@ -108,6 +115,19 @@ def test_process_idea_job_marks_rate_limited(session_factory):
     idea_runner.process_idea_job({"idea_job_id": 1, "project_id": 1}, 1, claude_runner=limited_runner)
 
     assert _job(session_factory).status == IdeaJobStatus.RATE_LIMITED
+
+
+def test_process_idea_job_marks_failed_on_timeout(session_factory, monkeypatch):
+    async def hanging_runner(prompt, repo_path):
+        await asyncio.sleep(10)
+
+    monkeypatch.setattr(idea_runner.settings, "idea_job_max_runtime_seconds", 0.01)
+
+    idea_runner.process_idea_job({"idea_job_id": 1, "project_id": 1}, 1, claude_runner=hanging_runner)
+
+    job = _job(session_factory)
+    assert job.status == IdeaJobStatus.FAILED
+    assert "最大実行時間" in job.error_message
 
 
 def test_process_next_job_skips_claim_while_rate_limited(monkeypatch):

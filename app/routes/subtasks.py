@@ -7,6 +7,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from app.routes import error_messages as messages
+from app.routes.lookups import get_project_or_404, get_subtask_and_project_or_404, get_subtask_or_404
 from core.attachments import (
     AttachmentError,
     delete_attachment,
@@ -159,7 +160,7 @@ def _find_or_add_subtask(session, project_id: int, issue_number: int, branch_nam
 @router.post("")
 def create_subtask(payload: CreateSubtaskRequest):
     with SessionLocal() as session:
-        project = _get_project_or_404(session, payload.project_id)
+        project = get_project_or_404(session, payload.project_id)
 
         existing_titles = [
             s.title
@@ -228,7 +229,7 @@ def create_pending_subtask(payload: CreatePendingSubtaskRequest):
     if not issue_title:
         raise HTTPException(status_code=400, detail=messages.ISSUE_TITLE_EMPTY)
     with SessionLocal() as session:
-        project = _get_project_or_404(session, payload.project_id)
+        project = get_project_or_404(session, payload.project_id)
     title = compose_mr_title(issue_title, next_default_suffix(issue_title, []))
     branch_name = _unique_branch_name(PENDING_BRANCH_PREFIX)
     try:
@@ -252,13 +253,6 @@ def _unique_branch_name(head: str) -> str:
     return f"{head}-{unique_id}-{DEFAULT_BRANCH_SLUG}-1"
 
 
-def _get_project_or_404(session, project_id: int) -> Project:
-    project = session.get(Project, project_id)
-    if project is None:
-        raise HTTPException(status_code=404, detail=messages.PROJECT_NOT_FOUND)
-    return project
-
-
 class LinkPendingSubtaskRequest(BaseModel):
     project_id: int
     github_issue_number: int
@@ -277,7 +271,7 @@ def link_pending_subtask(payload: LinkPendingSubtaskRequest, background_tasks: B
     if not payload.branch_name.startswith(f"{PENDING_BRANCH_PREFIX}-"):
         raise HTTPException(status_code=400, detail=messages.NOT_UNLINKED_MR)
     with SessionLocal() as session:
-        project = _get_project_or_404(session, payload.project_id)
+        project = get_project_or_404(session, payload.project_id)
         subtask = _find_or_add_subtask(
             session, project.id, payload.github_issue_number, payload.branch_name
         )
@@ -315,7 +309,7 @@ def discard_pending_subtask(payload: DiscardPendingSubtaskRequest):
     worktree・ブランチは残す。
     """
     with SessionLocal() as session:
-        project = _get_project_or_404(session, payload.project_id)
+        project = get_project_or_404(session, payload.project_id)
     try:
         close_pr(project.github_repo, payload.github_pr_number)
     except GitHubClientError as exc:
@@ -338,7 +332,7 @@ def update_subtask_title(subtask_id: int, payload: UpdateSubtaskTitleRequest):
     if not suffix:
         raise HTTPException(status_code=400, detail=messages.TITLE_EMPTY)
     with SessionLocal() as session:
-        subtask, project = _get_subtask_and_project(session, subtask_id)
+        subtask, project = get_subtask_and_project_or_404(session, subtask_id)
 
         try:
             issue_title = get_issue(project.github_repo, subtask.github_issue_number)["title"]
@@ -353,18 +347,6 @@ def update_subtask_title(subtask_id: int, payload: UpdateSubtaskTitleRequest):
         return {"id": subtask.id, "title": subtask.title}
 
 
-def _get_subtask_or_404(session, subtask_id: int) -> Subtask:
-    subtask = session.get(Subtask, subtask_id)
-    if subtask is None:
-        raise HTTPException(status_code=404, detail=messages.SUBTASK_NOT_FOUND)
-    return subtask
-
-
-def _get_subtask_and_project(session, subtask_id: int) -> tuple[Subtask, Project]:
-    subtask = _get_subtask_or_404(session, subtask_id)
-    return subtask, session.get(Project, subtask.project_id)
-
-
 @router.post("/{subtask_id}/close")
 def close_subtask(subtask_id: int):
     """MRをクローズする
@@ -372,7 +354,7 @@ def close_subtask(subtask_id: int):
     マージ済のMRは閉じられないため拒否する。
     """
     with SessionLocal() as session:
-        subtask, project = _get_subtask_and_project(session, subtask_id)
+        subtask, project = get_subtask_and_project_or_404(session, subtask_id)
         if subtask.lifecycle_state not in LifecycleState.OPEN_STATES:
             raise HTTPException(status_code=409, detail=messages.NOT_UNRESOLVED_MR)
         try:
@@ -399,7 +381,7 @@ def reopen_subtask(subtask_id: int):
     再開後の状態はPRのDraft有無から決める。
     """
     with SessionLocal() as session:
-        subtask, project = _get_subtask_and_project(session, subtask_id)
+        subtask, project = get_subtask_and_project_or_404(session, subtask_id)
         if subtask.lifecycle_state != LifecycleState.CANCELED:
             raise HTTPException(status_code=409, detail=messages.NOT_CLOSED_MR)
         try:
@@ -443,7 +425,7 @@ def merge_subtask(subtask_id: int):
     競合時はベースブランチを取り込み、Claudeで競合解決してからマージする。
     """
     with SessionLocal() as session:
-        subtask, _ = _get_subtask_and_project(session, subtask_id)
+        subtask, _ = get_subtask_and_project_or_404(session, subtask_id)
         _ensure_mergeable(session, subtask)
         if find_active_merge(session, subtask.id) is not None:
             raise HTTPException(status_code=409, detail=messages.ALREADY_IN_MERGE_QUEUE)
@@ -457,7 +439,7 @@ def merge_subtask(subtask_id: int):
 
 def _subtask_worktree_path(subtask_id: int) -> str:
     with SessionLocal() as session:
-        subtask = _get_subtask_or_404(session, subtask_id)
+        subtask = get_subtask_or_404(session, subtask_id)
         return f"{settings.worktree_base_dir}/{subtask.branch_name}"
 
 
@@ -529,7 +511,7 @@ def execute_subtask(subtask_id: int, payload: ExecuteSubtaskRequest | None = Non
     マージ待ち、または実装ジョブの待機中・実行中は409を返す。
     """
     with SessionLocal() as session:
-        subtask = _get_subtask_or_404(session, subtask_id)
+        subtask = get_subtask_or_404(session, subtask_id)
 
         if find_active_merge(session, subtask_id) is not None:
             raise HTTPException(status_code=409, detail=messages.EXECUTE_BLOCKED_BY_MERGE_QUEUE)

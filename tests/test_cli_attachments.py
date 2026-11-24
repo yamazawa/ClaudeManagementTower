@@ -5,7 +5,7 @@ import pytest
 from core import cli_attachments
 from core.attachments import AttachmentError
 from core.claude_access_rules import default_access_rules
-from core.claude_client import _worktree_check
+from core.claude_permissions import _worktree_check
 
 
 @pytest.fixture(autouse=True)

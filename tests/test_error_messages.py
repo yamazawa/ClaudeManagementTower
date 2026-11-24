@@ -6,7 +6,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import sessionmaker
 
 from app.routes import error_messages as messages
-from app.routes import jobs, projects, subtasks
+from app.routes import jobs, lookups
 from core.db import init_db, make_engine
 
 ROUTES_DIR = Path(__file__).resolve().parent.parent / "app" / "routes"
@@ -45,9 +45,15 @@ def test_job_not_found_detail_is_japanese(session_factory):
     assert error.value.detail == messages.JOB_NOT_FOUND
 
 
-@pytest.mark.parametrize("module", [projects, subtasks])
-def test_project_404_uses_shared_message(session_factory, module):
+@pytest.mark.parametrize(
+    ("lookup", "expected"),
+    [
+        (lookups.get_project_or_404, messages.PROJECT_NOT_FOUND),
+        (lookups.get_subtask_or_404, messages.SUBTASK_NOT_FOUND),
+    ],
+)
+def test_lookup_404_uses_shared_message(session_factory, lookup, expected):
     with session_factory() as session, pytest.raises(HTTPException) as error:
-        module._get_project_or_404(session, 999)
+        lookup(session, 999)
 
-    assert error.value.detail == messages.PROJECT_NOT_FOUND
+    assert error.value.detail == expected

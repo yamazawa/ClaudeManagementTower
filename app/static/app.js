@@ -59,15 +59,25 @@ function clearProjectSelection() {
 }
 
 async function init() {
+  await loadProjects();
+  pollOpenIssues();
+  pollRateLimits();
+  pollMrStatuses();
+  pollSubtaskStates();
+}
+
+/**
+ * リポジトリ一覧を取得して並べ直す
+ *
+ * 選択中のリポジトリは選択表示を引き継ぐ。
+ */
+async function loadProjects() {
   allProjects = await fetch("/api/projects").then((r) => r.json());
   const listEl = document.getElementById("project-list-items");
   listEl.innerHTML = "";
   if (allProjects.length === 0) listEl.innerHTML = `<li class="empty">${PROJECT_LIST_NO_PROJECT_TEXT}</li>`;
   else renderProjectItems(listEl);
-  pollOpenIssues();
-  pollRateLimits();
-  pollMrStatuses();
-  pollSubtaskStates();
+  highlightSelectedProject();
 }
 
 /**
@@ -498,6 +508,7 @@ document.getElementById("deploy-button").addEventListener("click", openDeployDia
 document.getElementById("deploy-dialog-list").addEventListener("change", updateDeployDialogConfirm);
 document.getElementById("deploy-dialog-cancel").addEventListener("click", () => document.getElementById("deploy-dialog").close());
 document.getElementById("deploy-dialog-confirm").addEventListener("click", onConfirmDeployDialog);
+setupProjectCreateDialog();
 document.getElementById("issue-create-form").addEventListener("submit", onSubmitIssueForm);
 document.getElementById("issue-filter").addEventListener("change", () => reloadIssues().catch(() => {}));
 document.getElementById("subtask-filter").addEventListener("change", renderSubtaskList);

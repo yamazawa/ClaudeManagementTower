@@ -11,6 +11,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from app.routes import error_messages as messages
+from app.routes.lookups import get_project_or_404
 from app.routes.repo_items import RepoItemPatch, item_errors
 from app.routes.subtasks import CreateSubtaskRequest, create_subtask, execute_subtask
 from core.db import SessionLocal
@@ -37,7 +38,6 @@ from core.idea_sessions import (
     update_session,
 )
 from core.ideas import IDEA_TABS, IdeaAlreadyDecided, IdeaNotFound, list_ideas, reject_idea
-from core.models import Project
 from core.repo_items import ItemState
 
 router = APIRouter(prefix="/api")
@@ -143,13 +143,13 @@ def _claim_or_raise(idea_id: int, mode: str) -> dict:
 
 def _github_repo(project_id: int) -> str:
     with SessionLocal() as session:
-        return session.get(Project, project_id).github_repo
+        return get_project_or_404(session, project_id).github_repo
 
 
 def _create_issue_for(idea: dict) -> tuple[dict, str, str]:
     """提案からIssueを作成する
 
-    作成に失敗した場合は承認前の状態へ戻す。
+    作成に失敗した場合は、例外の種類によらず承認前の状態へ戻す。
     """
     title = compose_issue_title(idea)
     try:
@@ -157,6 +157,9 @@ def _create_issue_for(idea: dict) -> tuple[dict, str, str]:
     except GitHubClientError as exc:
         release_claim(idea["id"])
         raise HTTPException(status_code=500, detail=messages.ISSUE_CREATE_FAILED.format(reason=exc)) from exc
+    except Exception:
+        release_claim(idea["id"])
+        raise
     return record_issue_created(idea["id"], issue["number"]), issue["url"], title
 
 
