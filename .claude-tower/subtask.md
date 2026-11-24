@@ -1,61 +1,63 @@
-# サブタスク: [IdeaMan] 実装ジョブ・アイデア出しジョブに最大実行時間を設け、超えたら要確認にするー①
+# サブタスク: [IdeaMan] gitのfetch・push・pullに、一時的な通信エラー時の再試行を入れるー①
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-実装ジョブ・アイデア出しジョブに最大実行時間を設け、超えたら要確認にする
+gitのfetch・push・pullに、一時的な通信エラー時の再試行を入れる
 
 ## 概要
 
-Claude実行に上限時間が無く、Claudeが応答しなくなるとワーカーが手動で止めるまで占有されます。上限時間を設定項目に追加し、超えたら打ち切って要確認にします。
+ghには一時的な通信エラーの再試行がありますが、gitの通信処理にはありません。1回の通信エラーで実装ジョブやサブタスク作成が失敗します。
 
 ## 詳細
 
-- config.pyに、実装ジョブ用とアイデア出し用の最大実行時間を追加する。
-- worker/main.pyの_run_claude_for_jobとidea_runner._executeで、Claude実行をasyncio.wait_forで包む。
-- 上限を超えたら、実装ジョブはneeds_attention、アイデア出しジョブはfailedにする。
-- 打ち切った理由をイベントとエラーメッセージに残す。
-- 上限超過時の状態遷移をテストで確認する。
+- github_client.pyと同じ形で、一時的な通信エラーの判定文字列と再試行の回数・間隔をgit_client.pyに追加する。
+- 判定文字列の例は、Could not resolve host、Connection timed out、RPC failed、early EOFなど。
+- 通信を伴う操作（fetch・push・pull・リモートブランチ削除）にだけ再試行を適用する。
+- 判定処理をgithub_client.pyと共通化できるか検討する。
+- 再試行のテストを追加する。
 
 ## 根拠
 
-worker/main.py:69とworker/idea_runner.py:47は、asyncio.runでClaudeの終了を上限なしに待っている。worker/heartbeat.py:16-18は実行中にハートビートを送り続けるため、recover_stale_jobs(worker/main.py:161)でも回収されない。config.py:13-15に実行時間の上限の設定は無い。CLIタブにはcore/cli_session.py:97の中断の仕組みがあるが、実装ジョブとアイデア出しジョブには無い。
+core/github_client.py:17-34,73-87では、TLS handshake timeoutなどを最大3回まで再試行している。core/git_client.py:19-33の_run_gitは1回失敗するとそのまま例外を投げる。対象はpush_branch(105)、create_worktreeのfetch(52)、prepare_detached_worktreeのfetch(194)、pull_latest(162)。worker/main.py:102はClaudeの実行前にpushするため、1回の通信エラーでジョブ全体がfailedになる。最近の失敗にもTLS handshake timeoutがある（#153⑤）。
 
 ## 関連ファイル
 
-- worker/main.py:58
-- worker/idea_runner.py:47
-- worker/heartbeat.py:9
-- core/config.py:13
-## 実行指示（2026-11-24 10:21:06 UTC）
+- core/git_client.py:19
+- core/git_client.py:105
+- core/git_client.py:52
+- core/github_client.py:73
+- worker/main.py:102
+## 実行指示（2026-11-24 10:11:38 UTC）
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-実装ジョブ・アイデア出しジョブに最大実行時間を設け、超えたら要確認にする
+gitのfetch・push・pullに、一時的な通信エラー時の再試行を入れる
 
 ## 概要
 
-Claude実行に上限時間が無く、Claudeが応答しなくなるとワーカーが手動で止めるまで占有されます。上限時間を設定項目に追加し、超えたら打ち切って要確認にします。
+ghには一時的な通信エラーの再試行がありますが、gitの通信処理にはありません。1回の通信エラーで実装ジョブやサブタスク作成が失敗します。
 
 ## 詳細
 
-- config.pyに、実装ジョブ用とアイデア出し用の最大実行時間を追加する。
-- worker/main.pyの_run_claude_for_jobとidea_runner._executeで、Claude実行をasyncio.wait_forで包む。
-- 上限を超えたら、実装ジョブはneeds_attention、アイデア出しジョブはfailedにする。
-- 打ち切った理由をイベントとエラーメッセージに残す。
-- 上限超過時の状態遷移をテストで確認する。
+- github_client.pyと同じ形で、一時的な通信エラーの判定文字列と再試行の回数・間隔をgit_client.pyに追加する。
+- 判定文字列の例は、Could not resolve host、Connection timed out、RPC failed、early EOFなど。
+- 通信を伴う操作（fetch・push・pull・リモートブランチ削除）にだけ再試行を適用する。
+- 判定処理をgithub_client.pyと共通化できるか検討する。
+- 再試行のテストを追加する。
 
 ## 根拠
 
-worker/main.py:69とworker/idea_runner.py:47は、asyncio.runでClaudeの終了を上限なしに待っている。worker/heartbeat.py:16-18は実行中にハートビートを送り続けるため、recover_stale_jobs(worker/main.py:161)でも回収されない。config.py:13-15に実行時間の上限の設定は無い。CLIタブにはcore/cli_session.py:97の中断の仕組みがあるが、実装ジョブとアイデア出しジョブには無い。
+core/github_client.py:17-34,73-87では、TLS handshake timeoutなどを最大3回まで再試行している。core/git_client.py:19-33の_run_gitは1回失敗するとそのまま例外を投げる。対象はpush_branch(105)、create_worktreeのfetch(52)、prepare_detached_worktreeのfetch(194)、pull_latest(162)。worker/main.py:102はClaudeの実行前にpushするため、1回の通信エラーでジョブ全体がfailedになる。最近の失敗にもTLS handshake timeoutがある（#153⑤）。
 
 ## 関連ファイル
 
-- worker/main.py:58
-- worker/idea_runner.py:47
-- worker/heartbeat.py:9
-- core/config.py:13
+- core/git_client.py:19
+- core/git_client.py:105
+- core/git_client.py:52
+- core/github_client.py:73
+- worker/main.py:102
 

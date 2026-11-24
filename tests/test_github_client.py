@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from core import github_client
+from core import github_client, transient_retry
 from core.github_client import (
     GitHubClientError,
     create_repo_from_local,
@@ -234,7 +234,7 @@ def _sequence_run(calls: list, results: list[tuple[int, str]]):
 @pytest.fixture
 def sleeps(monkeypatch):
     recorded = []
-    monkeypatch.setattr(github_client.time, "sleep", recorded.append)
+    monkeypatch.setattr(transient_retry.time, "sleep", recorded.append)
     return recorded
 
 

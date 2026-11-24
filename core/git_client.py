@@ -6,17 +6,47 @@ from pathlib import Path
 
 from filelock import FileLock, Timeout
 
+from core.transient_retry import TransientError, call_with_retry, contains_any_pattern
+
 GIT_TIMEOUT_SECONDS = 60
 WORKTREE_LOCK_TIMEOUT_SECONDS = 60
 # サブタスク作成時にコミットする指示ファイル（worktreeからの相対パス）
 SUBTASK_INSTRUCTION_PATH = ".claude-tower/subtask.md"
+# 通信を伴う操作の再試行（初回を含む最大試行回数と、試行ごとに伸ばす待ち時間）
+GIT_MAX_ATTEMPTS = 3
+GIT_RETRY_INTERVAL_SECONDS = 3
+# stderrにこれらが含まれる場合は一時的な通信エラーとみなす（小文字で比較）
+GIT_TRANSIENT_ERROR_PATTERNS = (
+    "could not resolve host",
+    "connection timed out",
+    "operation timed out",
+    "connection reset",
+    "connection refused",
+    "failed to connect",
+    "tls handshake timeout",
+    "ssl/tls connection failed",
+    "rpc failed",
+    "early eof",
+    "the remote end hung up unexpectedly",
+    "returned error: 502",
+    "returned error: 503",
+    "returned error: 504",
+)
 
 
 class GitClientError(RuntimeError):
     pass
 
 
-def _run_git(args: list[str], cwd: str) -> str:
+class _TransientGitError(GitClientError, TransientError):
+    pass
+
+
+def is_transient_git_error(stderr: str) -> bool:
+    return contains_any_pattern(stderr, GIT_TRANSIENT_ERROR_PATTERNS)
+
+
+def _run_git_once(args: list[str], cwd: str) -> str:
     try:
         result = subprocess.run(
             ["git", *args],
@@ -27,10 +57,28 @@ def _run_git(args: list[str], cwd: str) -> str:
             timeout=GIT_TIMEOUT_SECONDS,
         )
     except subprocess.TimeoutExpired as exc:
-        raise GitClientError(f"git {' '.join(args)} がタイムアウトしました") from exc
-    if result.returncode != 0:
-        raise GitClientError(result.stderr.strip())
-    return result.stdout
+        raise _TransientGitError(f"git {' '.join(args)} がタイムアウトしました") from exc
+    if result.returncode == 0:
+        return result.stdout
+    stderr = result.stderr.strip()
+    if is_transient_git_error(stderr):
+        raise _TransientGitError(stderr)
+    raise GitClientError(stderr)
+
+
+def _run_git(args: list[str], cwd: str, retryable: bool = False) -> str:
+    """gitを実行し、標準出力を返す
+
+    retryableの場合、一時的な通信エラーは間隔を空けて再試行する。
+    通信を伴う操作（fetch・push・pull）だけretryable=Trueで呼ぶ。
+    """
+    attempts = GIT_MAX_ATTEMPTS if retryable else 1
+    try:
+        return call_with_retry(
+            lambda: _run_git_once(args, cwd), attempts, GIT_RETRY_INTERVAL_SECONDS
+        )
+    except _TransientGitError as exc:
+        raise GitClientError(str(exc)) from exc
 
 
 def slugify(text: str) -> str:
@@ -49,7 +97,7 @@ def create_worktree(
     lock_path = Path(repo_path) / ".git" / "claude-tower-worktree.lock"
     try:
         with FileLock(str(lock_path), timeout=WORKTREE_LOCK_TIMEOUT_SECONDS):
-            _run_git(["fetch", "origin", base_branch], cwd=repo_path)
+            _run_git(["fetch", "origin", base_branch], cwd=repo_path, retryable=True)
             _run_git(
                 ["worktree", "add", "-b", branch_name, worktree_path, f"origin/{base_branch}"],
                 cwd=repo_path,
@@ -117,7 +165,7 @@ def append_instruction_history(worktree_path: str, instruction: str) -> None:
 
 
 def push_branch(worktree_path: str, branch_name: str) -> None:
-    _run_git(["push", "-u", "origin", branch_name], cwd=worktree_path)
+    _run_git(["push", "-u", "origin", branch_name], cwd=worktree_path, retryable=True)
 
 
 def discard_subtask_instruction(worktree_path: str) -> None:
@@ -169,11 +217,11 @@ def delete_local_branch(repo_path: str, branch_name: str) -> None:
 
 
 def delete_remote_branch(repo_path: str, branch_name: str) -> None:
-    _run_git(["push", "origin", "--delete", branch_name], cwd=repo_path)
+    _run_git(["push", "origin", "--delete", branch_name], cwd=repo_path, retryable=True)
 
 
 def pull_latest(repo_path: str, branch: str) -> None:
-    _run_git(["pull", "origin", branch], cwd=repo_path)
+    _run_git(["pull", "origin", branch], cwd=repo_path, retryable=True)
 
 
 def has_remote_updates(repo_path: str, branch: str) -> bool:
@@ -181,7 +229,7 @@ def has_remote_updates(repo_path: str, branch: str) -> bool:
 
     判定前にリモートの最新を取得する。
     """
-    _run_git(["fetch", "origin", branch], cwd=repo_path)
+    _run_git(["fetch", "origin", branch], cwd=repo_path, retryable=True)
     count = _run_git(["rev-list", "--count", f"HEAD..origin/{branch}"], cwd=repo_path)
     return int(count.strip()) > 0
 
@@ -205,7 +253,7 @@ def prepare_detached_worktree(repo_path: str, worktree_path: str, branch: str) -
     ブランチを作らずdetached HEADで扱う。
     worktreeが既にあれば再利用し、途中のマージ状態は破棄する。
     """
-    _run_git(["fetch", "origin"], cwd=repo_path)
+    _run_git(["fetch", "origin"], cwd=repo_path, retryable=True)
     target = f"origin/{branch}"
     if Path(worktree_path).exists():
         _run_git(["checkout", "--force", "--detach", target], cwd=worktree_path)
@@ -246,4 +294,6 @@ def commit_merge(worktree_path: str) -> None:
 
 
 def push_head_to(worktree_path: str, branch: str) -> None:
-    _run_git(["push", "origin", f"HEAD:refs/heads/{branch}"], cwd=worktree_path)
+    _run_git(
+        ["push", "origin", f"HEAD:refs/heads/{branch}"], cwd=worktree_path, retryable=True
+    )

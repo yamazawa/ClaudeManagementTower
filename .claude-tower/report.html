@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>作業レポート: 実装ジョブ・アイデア出しジョブに最大実行時間を設け、超えたら要確認にするー①</title>
+<title>作業レポート: gitのfetch・push・pullに、一時的な通信エラー時の再試行を入れるー①</title>
 <style>
 body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; } h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; margin-top: 1.6em; }
@@ -12,51 +12,51 @@ th { background: #f0f0f0; } code { background: #f4f4f4; padding: 0 3px; }
 </style>
 </head>
 <body>
-<h1>作業レポート: 実装ジョブ・アイデア出しジョブに最大実行時間を設け、超えたら要確認にするー①</h1>
+<h1>作業レポート: gitのfetch・push・pullに、一時的な通信エラー時の再試行を入れるー①</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#259 [IdeaMan] 実装ジョブ・アイデア出しジョブに最大実行時間を設け、超えたら要確認にする</td></tr>
-<tr><th>サブタスク</th><td>実装ジョブ・アイデア出しジョブに最大実行時間を設け、超えたら要確認にするー①</td></tr>
-<tr><th>ブランチ</th><td><code>issue-259-de002832-subtask-1</code></td></tr>
+<tr><th>Issue</th><td>#257 [IdeaMan] gitのfetch・push・pullに、一時的な通信エラー時の再試行を入れる</td></tr>
+<tr><th>サブタスク</th><td>gitのfetch・push・pullに、一時的な通信エラー時の再試行を入れるー①</td></tr>
+<tr><th>ブランチ</th><td><code>issue-257-47deb79c-subtask-1</code>（push済み）</td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
 <p class="ok">成功</p>
-<p>Claude実行を最大実行時間付きで実行するようにした。<br>
-上限超過時、実装ジョブはneeds_attention、アイデア出しジョブはfailedで終了し、ワーカーは解放される。</p>
+<p>通信を伴うgit操作に、ghと同じ方式（最大3回・待ち時間3秒ずつ延長）の再試行を入れた。<br>判定・再試行ループはgithub_clientと共通化した。</p>
 
 <h2>3. 変更内容</h2>
 <table>
 <tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td><code>core/config.py</code></td><td><code>job_max_runtime_seconds</code>（7200）、<code>idea_job_max_runtime_seconds</code>（1800）を追加。</td></tr>
-<tr><td>2</td><td><code>worker/time_limit.py</code>（新規）</td><td><code>run_with_time_limit</code>：<code>asyncio.run(asyncio.wait_for(...))</code>で実行し、超過時は<code>ClaudeTimeoutError</code>を送出。</td></tr>
-<tr><td>3</td><td><code>worker/main.py</code></td><td><code>_run_claude_for_job</code>を<code>run_with_time_limit</code>経由に変更。<br><code>process_job</code>で<code>ClaudeTimeoutError</code>を捕捉し、errorイベント記録＋needs_attentionで終了。</td></tr>
-<tr><td>4</td><td><code>worker/idea_runner.py</code></td><td><code>_execute</code>を<code>run_with_time_limit</code>経由に変更。<br>超過時は既存の例外処理でfailed＋エラーメッセージを記録。</td></tr>
-<tr><td>5</td><td><code>tests/test_worker_time_limit.py</code>（新規）ほか</td><td>打ち切り・キャンセル、実装ジョブのneeds_attention遷移、アイデア出しジョブのfailed遷移、設定既定値のテストを追加。</td></tr>
+<tr><td>1</td><td><code>core/transient_retry.py</code>（新規）</td><td><code>TransientError</code>・<code>contains_any_pattern</code>・<code>call_with_retry</code>を追加。</td></tr>
+<tr><td>2</td><td><code>core/github_client.py</code></td><td><code>is_transient_gh_error</code>と<code>_run_gh</code>を共通処理で置き換え。<br>振る舞いは変更なし。</td></tr>
+<tr><td>3</td><td><code>core/git_client.py</code></td><td><code>GIT_MAX_ATTEMPTS</code>・<code>GIT_RETRY_INTERVAL_SECONDS</code>・<code>GIT_TRANSIENT_ERROR_PATTERNS</code>を追加。<br><code>_run_git</code>に<code>retryable</code>引数（既定False）を追加。<br>fetch（create_worktree・has_remote_updates・prepare_detached_worktree）、push（push_branch・push_head_to）、pull_latest、delete_remote_branchをretryable=Trueにした。</td></tr>
+<tr><td>4</td><td><code>tests/test_transient_retry.py</code>（新規）</td><td>共通処理のテスト。</td></tr>
+<tr><td>5</td><td><code>tests/test_git_client_retry.py</code>（新規）</td><td>git再試行のテスト（成功・上限到達・タイムアウト・恒久エラー・ローカル操作・判定文字列）。</td></tr>
+<tr><td>6</td><td><code>tests/test_github_client.py</code></td><td>sleepのmonkeypatch先を<code>transient_retry.time</code>に変更。</td></tr>
 </table>
-<p>コミット: b465129（設定と共通関数）、2e5414e（実装ジョブ）、e61c38a（アイデア出しジョブ）</p>
+<p>コミット: 595dc32（共通化）、108f0a7（git再試行）、83ec7ea（テスト）</p>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>既定値は実装ジョブ2時間、アイデア出し30分。</td><td>実装ジョブは大きなタスクで長時間かかり得るため、誤打ち切りを避ける余裕を持たせた。<br>アイデア出しは読み取り専用の調査のみのため短めにした。<br>いずれも<code>.env</code>で変更可能。</td></tr>
-<tr><td>2</td><td>打ち切り処理を<code>worker/time_limit.py</code>に共通化した。</td><td>実装ジョブとアイデア出しジョブで同じ処理になるため。<br><code>worker/main.py</code>が<code>idea_runner</code>をimportしており、どちらかに置くと依存が逆転するため。</td></tr>
-<tr><td>3</td><td>専用例外<code>ClaudeTimeoutError</code>を設けた。</td><td>他の失敗（failed）・利用上限（rate_limited）と区別して状態を決めるため。</td></tr>
-<tr><td>4</td><td>実装ジョブのイベント種別は<code>error</code>とした。</td><td>既存のエラー表示や<code>core/idea_context.py</code>のエラー集計にそのまま乗せるため。</td></tr>
-<tr><td>5</td><td>アイデア出しジョブはイベント記録を行わず、エラーメッセージとログのみ残す。</td><td>アイデア出しジョブには実行イベントの仕組みが無いため。</td></tr>
+<tr><td>1</td><td>判定文字列照合と再試行ループを<code>core/transient_retry.py</code>に共通化した。<br>判定文字列自体はgh・gitで別定義のまま。</td><td>ループは同一だが、エラー文言はツールごとに異なるため。</td></tr>
+<tr><td>2</td><td>Issue記載の4箇所に加え、has_remote_updatesのfetch・push_head_toも対象にした。</td><td>「通信を伴う操作にだけ適用」の方針に該当するため。</td></tr>
+<tr><td>3</td><td>gitのタイムアウト（60秒）も一時的なエラーとして再試行する。</td><td>ghの扱いに合わせた。</td></tr>
+<tr><td>4</td><td>「unable to access」「Could not read from remote repository」は判定文字列に入れなかった。</td><td>認証エラー（403等）でも出るため、恒久エラーまで再試行してしまう。</td></tr>
+<tr><td>5</td><td>再試行回数・間隔はghと同じ値（3回・3秒）を別定数で定義した。</td><td>gitとghで個別に調整できるようにするため。</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<p><code>./.venv/Scripts/python.exe -m pytest -q</code> → <span class="ok">554 passed</span></p>
-<p>ワーカー起動・実Claudeでの打ち切り確認は未実施（ガイドラインに従い人間に依頼）。</p>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code>：<span class="ok">566 passed</span></p>
+<p>実際の通信エラーでの動作確認は未実施（再現が困難なため、subprocessを差し替えたテストで確認）。</p>
 
-<h2>6. 残課題・リスク・レビュー観点</h2>
+<h2>6. 残課題・リスク・確認ポイント</h2>
 <ul>
-<li>打ち切り時、Claude Agent SDKの非同期ジェネレータはキャンセルされるが、Claude CLIの子プロセスが確実に終了するかは実機未確認。</li>
-<li>打ち切った実装ジョブはセッションIDを保存しないため、再実行時は前回より古いセッションから再開される。</li>
-<li>上限超過のneeds_attentionはworktreeに途中の変更が残る前提。再実行前にworktreeの状態を確認してほしい。</li>
-<li>既定値（2時間・30分）が運用に合っているか確認してほしい。</li>
+<li>create_worktreeはファイルロック（60秒）保持中にfetchするため、タイムアウト再試行時は最長約3分ロックを保持する。<br>同時に作成中の他サブタスクがロック取得タイムアウトになる可能性がある。</li>
+<li>delete_remote_branchは、初回が実は成功していた場合、再試行で「remote ref does not exist」になり失敗扱いになる。</li>
+<li>push後の応答途中で切れた場合も再試行するが、同じブランチへの同じコミットのpushなので二重実行の害はない想定。</li>
+<li>判定文字列（<code>core/git_client.py</code>の<code>GIT_TRANSIENT_ERROR_PATTERNS</code>）の過不足を確認してほしい。</li>
 </ul>
 </body>
 </html>
