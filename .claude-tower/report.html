@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>作業レポート: subtasksルートの404判定とワーカーのハートビート処理の重複をまとめるー①</title>
+<title>作業レポート: gitのfetch・push・pullに、一時的な通信エラー時の再試行を入れるー①</title>
 <style>
 body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; } h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; margin-top: 1.6em; }
@@ -12,50 +12,51 @@ th { background: #f0f0f0; } code { background: #f4f4f4; padding: 0 3px; }
 </style>
 </head>
 <body>
-<h1>作業レポート: subtasksルートの404判定とワーカーのハートビート処理の重複をまとめるー①</h1>
+<h1>作業レポート: gitのfetch・push・pullに、一時的な通信エラー時の再試行を入れるー①</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#240 [IdeaMan] subtasksルートの404判定とワーカーのハートビート処理の重複をまとめる</td></tr>
-<tr><th>サブタスク</th><td>subtasksルートの404判定とワーカーのハートビート処理の重複をまとめるー①</td></tr>
-<tr><th>ブランチ</th><td><code>issue-240-subtask-1</code>（push済み）</td></tr>
-<tr><th>指示</th><td>subtasksルートの404判定とワーカーのハートビート処理の重複をまとめる</td></tr>
+<tr><th>Issue</th><td>#257 [IdeaMan] gitのfetch・push・pullに、一時的な通信エラー時の再試行を入れる</td></tr>
+<tr><th>サブタスク</th><td>gitのfetch・push・pullに、一時的な通信エラー時の再試行を入れるー①</td></tr>
+<tr><th>ブランチ</th><td><code>issue-257-47deb79c-subtask-1</code>（push済み）</td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
 <p class="ok">成功</p>
-<p>Issueに挙げられた重複箇所をすべて共通関数経由に置き換えた。<br>振る舞い（404の詳細文言・ハートビート間隔）は変更していない。</p>
+<p>通信を伴うgit操作に、ghと同じ方式（最大3回・待ち時間3秒ずつ延長）の再試行を入れた。<br>判定・再試行ループはgithub_clientと共通化した。</p>
 
 <h2>3. 変更内容</h2>
 <table>
 <tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td><code>worker/heartbeat.py</code>（新規）</td><td><code>run_with_heartbeat(heartbeat, action)</code>を追加。<br>ハートビート関数を引数で受け取る。</td></tr>
-<tr><td>2</td><td><code>worker/main.py</code></td><td><code>_run_with_heartbeat</code>を削除し、<code>run_with_heartbeat(partial(heartbeat_job, ...), ...)</code>に置換。<br>不要になった<code>threading</code>・<code>Callable</code>のimportを削除。</td></tr>
-<tr><td>3</td><td><code>worker/idea_runner.py</code></td><td><code>_with_heartbeat</code>を削除し、<code>run_with_heartbeat(partial(heartbeat_idea_job, ...), ...)</code>に置換。</td></tr>
-<tr><td>4</td><td><code>app/routes/subtasks.py</code></td><td><code>_get_subtask_or_404</code>を追加し、<code>_get_subtask_and_project</code>もこれを使う形にした。<br>create_subtask→<code>_get_project_or_404</code>、update_subtask_title→<code>_get_subtask_and_project</code>、_subtask_worktree_path・execute_subtask→<code>_get_subtask_or_404</code>。</td></tr>
-<tr><td>5</td><td><code>tests/test_worker_heartbeat.py</code>（新規）</td><td>ハートビートが実行中に呼ばれること、例外時に停止することのテスト。</td></tr>
-<tr><td>6</td><td><code>tests/test_worker_main.py</code></td><td>monkeypatch対象名を<code>run_with_heartbeat</code>に変更。</td></tr>
-<tr><td>7</td><td><code>tests/test_subtask_routes.py</code></td><td>create_subtask・update_subtask_title・execute_subtaskの404テストを追加。</td></tr>
+<tr><td>1</td><td><code>core/transient_retry.py</code>（新規）</td><td><code>TransientError</code>・<code>contains_any_pattern</code>・<code>call_with_retry</code>を追加。</td></tr>
+<tr><td>2</td><td><code>core/github_client.py</code></td><td><code>is_transient_gh_error</code>と<code>_run_gh</code>を共通処理で置き換え。<br>振る舞いは変更なし。</td></tr>
+<tr><td>3</td><td><code>core/git_client.py</code></td><td><code>GIT_MAX_ATTEMPTS</code>・<code>GIT_RETRY_INTERVAL_SECONDS</code>・<code>GIT_TRANSIENT_ERROR_PATTERNS</code>を追加。<br><code>_run_git</code>に<code>retryable</code>引数（既定False）を追加。<br>fetch（create_worktree・has_remote_updates・prepare_detached_worktree）、push（push_branch・push_head_to）、pull_latest、delete_remote_branchをretryable=Trueにした。</td></tr>
+<tr><td>4</td><td><code>tests/test_transient_retry.py</code>（新規）</td><td>共通処理のテスト。</td></tr>
+<tr><td>5</td><td><code>tests/test_git_client_retry.py</code>（新規）</td><td>git再試行のテスト（成功・上限到達・タイムアウト・恒久エラー・ローカル操作・判定文字列）。</td></tr>
+<tr><td>6</td><td><code>tests/test_github_client.py</code></td><td>sleepのmonkeypatch先を<code>transient_retry.time</code>に変更。</td></tr>
 </table>
-<p>コミット: cb4a9da（ハートビート共通化）、21081e1（404判定共通化）</p>
+<p>コミット: 595dc32（共通化）、108f0a7（git再試行）、83ec7ea（テスト）</p>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>共通関数は新規モジュール<code>worker/heartbeat.py</code>に置く。</td><td><code>worker/main.py</code>が<code>idea_runner</code>をimportしており、どちらかに置くと依存が循環・逆転するため。</td></tr>
-<tr><td>2</td><td>ハートビート関数は引数なしのcallableとし、呼び出し側で<code>functools.partial</code>で束縛する。</td><td>ジョブIDの種類（実装ジョブ／アイデアジョブ）に依存しない汎用的な形にするため。</td></tr>
-<tr><td>3</td><td>execute_subtask・_subtask_worktree_pathはProjectを取得しない<code>_get_subtask_or_404</code>を使う。</td><td>Projectを使わない箇所で不要なDB取得を増やさないため。Issueでも選択肢として挙げられていた。</td></tr>
-<tr><td>4</td><td>補助関数の定義位置は移動しない。</td><td>実行時解決のため動作に影響せず、差分を最小にするため。</td></tr>
+<tr><td>1</td><td>判定文字列照合と再試行ループを<code>core/transient_retry.py</code>に共通化した。<br>判定文字列自体はgh・gitで別定義のまま。</td><td>ループは同一だが、エラー文言はツールごとに異なるため。</td></tr>
+<tr><td>2</td><td>Issue記載の4箇所に加え、has_remote_updatesのfetch・push_head_toも対象にした。</td><td>「通信を伴う操作にだけ適用」の方針に該当するため。</td></tr>
+<tr><td>3</td><td>gitのタイムアウト（60秒）も一時的なエラーとして再試行する。</td><td>ghの扱いに合わせた。</td></tr>
+<tr><td>4</td><td>「unable to access」「Could not read from remote repository」は判定文字列に入れなかった。</td><td>認証エラー（403等）でも出るため、恒久エラーまで再試行してしまう。</td></tr>
+<tr><td>5</td><td>再試行回数・間隔はghと同じ値（3回・3秒）を別定数で定義した。</td><td>gitとghで個別に調整できるようにするため。</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<p><code>./.venv/Scripts/python.exe -m pytest -q</code> → <span class="ok">549 passed</span>（既存544＋追加5）</p>
-<p>ワーカー・サーバーの起動確認は未実施（ガイドラインに従い人間に依頼）。</p>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code>：<span class="ok">566 passed</span></p>
+<p>実際の通信エラーでの動作確認は未実施（再現が困難なため、subprocessを差し替えたテストで確認）。</p>
 
-<h2>6. 残課題・レビュー観点</h2>
+<h2>6. 残課題・リスク・確認ポイント</h2>
 <ul>
-<li>update_subtask_titleは以前と同様、Projectが存在しない場合の判定は行っていない（既存の<code>_get_subtask_and_project</code>の挙動を踏襲）。</li>
-<li>ワーカー再起動後、実装ジョブ・アイデア出しジョブのハートビートが継続して更新されることを確認してほしい。</li>
+<li>create_worktreeはファイルロック（60秒）保持中にfetchするため、タイムアウト再試行時は最長約3分ロックを保持する。<br>同時に作成中の他サブタスクがロック取得タイムアウトになる可能性がある。</li>
+<li>delete_remote_branchは、初回が実は成功していた場合、再試行で「remote ref does not exist」になり失敗扱いになる。</li>
+<li>push後の応答途中で切れた場合も再試行するが、同じブランチへの同じコミットのpushなので二重実行の害はない想定。</li>
+<li>判定文字列（<code>core/git_client.py</code>の<code>GIT_TRANSIENT_ERROR_PATTERNS</code>）の過不足を確認してほしい。</li>
 </ul>
 </body>
 </html>
