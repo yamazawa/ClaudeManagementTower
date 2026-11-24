@@ -148,7 +148,7 @@ def _github_repo(project_id: int) -> str:
 def _create_issue_for(idea: dict) -> tuple[dict, str, str]:
     """提案からIssueを作成する
 
-    作成に失敗した場合は承認前の状態へ戻す。
+    作成に失敗した場合は、例外の種類によらず承認前の状態へ戻す。
     """
     title = compose_issue_title(idea)
     try:
@@ -156,6 +156,9 @@ def _create_issue_for(idea: dict) -> tuple[dict, str, str]:
     except GitHubClientError as exc:
         release_claim(idea["id"])
         raise HTTPException(status_code=500, detail=f"Issue作成に失敗しました: {exc}") from exc
+    except Exception:
+        release_claim(idea["id"])
+        raise
     return record_issue_created(idea["id"], issue["number"]), issue["url"], title
 
 
