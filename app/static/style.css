@@ -346,6 +346,32 @@ Issue名・入力欄・作成ボタンは折り返さず1行に並べる。
   font-size: 12.5px;
 }
 
+/* リポジトリ追加ダイアログ */
+.project-create-dialog {
+  width: min(480px, 95vw);
+}
+
+.project-create-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+  font-size: 13px;
+}
+
+.project-create-field input,
+.project-create-field textarea {
+  font: inherit;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+
+.project-create-status {
+  margin: 0 0 10px;
+  white-space: pre-wrap;
+}
+
 .deploy-dialog-actions {
   display: flex;
   justify-content: flex-end;

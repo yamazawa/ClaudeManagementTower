@@ -1,8 +1,10 @@
+import asyncio
 from types import SimpleNamespace
 
 import pytest
 
 import worker.main as worker_main
+from worker.time_limit import ClaudeTimeoutError
 
 LIMIT_MESSAGE = "You've hit your 5-hour limit · resets 10pm (exit code: 1)"
 ORIGINAL_IS_RATE_LIMITED = worker_main._is_rate_limited
@@ -55,16 +57,28 @@ def test_run_claude_for_job_records_rate_limit_event(monkeypatch):
     assert recorded == [info]
 
 
-def _run_failing_job(monkeypatch, message: str) -> list:
+def test_run_claude_for_job_raises_timeout_when_exceeding_limit(monkeypatch):
+    async def hanging_run_claude(prompt, worktree, resume=None, on_message=None):
+        await asyncio.sleep(10)
+
+    monkeypatch.setattr(worker_main, "run_claude", hanging_run_claude)
+    monkeypatch.setattr(worker_main.settings, "job_max_runtime_seconds", 0.01)
+
+    with pytest.raises(ClaudeTimeoutError):
+        worker_main._run_claude_for_job(1, "wt", "prompt", None)
+
+
+def _run_failing_job(monkeypatch, message: str, error_type: type = RuntimeError, events: list | None = None) -> list:
     finished = []
 
     def failing(*args):
-        raise RuntimeError(message)
+        raise error_type(message)
 
     monkeypatch.setattr(worker_main, "set_worker_state", lambda *a, **k: True)
     subtask = SimpleNamespace(instruction="指示")
     monkeypatch.setattr(worker_main, "_load_subtask_and_project", lambda subtask_id: (subtask, object()))
-    monkeypatch.setattr(worker_main, "record_event", lambda *a, **k: None)
+    recorded = [] if events is None else events
+    monkeypatch.setattr(worker_main, "record_event", lambda job_id, **k: recorded.append(k))
     monkeypatch.setattr(worker_main, "run_with_heartbeat", failing)
     monkeypatch.setattr(
         worker_main,
@@ -81,6 +95,16 @@ def test_process_job_marks_rate_limited_on_limit_error(monkeypatch):
 
 def test_process_job_marks_failed_on_other_error(monkeypatch):
     assert _run_failing_job(monkeypatch, "boom") == [("failed", "boom")]
+
+
+def test_process_job_marks_needs_attention_on_timeout(monkeypatch):
+    events = []
+    message = "Claudeの実行が最大実行時間（7200秒）を超えたため打ち切りました"
+
+    finished = _run_failing_job(monkeypatch, message, ClaudeTimeoutError, events)
+
+    assert finished == [("needs_attention", message)]
+    assert events[-1] == {"event_type": "error", "content": message}
 
 
 class _LookupSession:

@@ -139,6 +139,20 @@ def commit_subtask_instruction(worktree_path: str, title: str, instruction: str)
     _run_git(["commit", "-m", f"[サブタスク] {title} ― 指示を記録"], cwd=worktree_path)
 
 
+def init_local_repo(repo_path: str, branch: str) -> None:
+    """空のフォルダにリポジトリを作成する
+
+    既定ブランチ名はgitの設定に依らず指定した名前にする。
+    """
+    Path(repo_path).mkdir(parents=True, exist_ok=False)
+    _run_git(["init", "-b", branch], cwd=repo_path)
+
+
+def commit_files(cwd: str, paths: list[str], message: str) -> None:
+    _run_git(["add", "--", *paths], cwd=cwd)
+    _run_git(["commit", "-m", message], cwd=cwd)
+
+
 def append_instruction_history(worktree_path: str, instruction: str) -> None:
     subtask_dir = Path(worktree_path) / ".claude-tower"
     subtask_dir.mkdir(parents=True, exist_ok=True)
