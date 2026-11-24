@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>作業レポート: subtasksルートの404判定とワーカーのハートビート処理の重複をまとめるー①</title>
+<title>作業レポート: APIのエラーメッセージを日本語にそろえ、1か所に集約するー①</title>
 <style>
 body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; } h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; margin-top: 1.6em; }
@@ -12,50 +12,61 @@ th { background: #f0f0f0; } code { background: #f4f4f4; padding: 0 3px; }
 </style>
 </head>
 <body>
-<h1>作業レポート: subtasksルートの404判定とワーカーのハートビート処理の重複をまとめるー①</h1>
+<h1>作業レポート: APIのエラーメッセージを日本語にそろえ、1か所に集約するー①</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#240 [IdeaMan] subtasksルートの404判定とワーカーのハートビート処理の重複をまとめる</td></tr>
-<tr><th>サブタスク</th><td>subtasksルートの404判定とワーカーのハートビート処理の重複をまとめるー①</td></tr>
-<tr><th>ブランチ</th><td><code>issue-240-subtask-1</code>（push済み）</td></tr>
-<tr><th>指示</th><td>subtasksルートの404判定とワーカーのハートビート処理の重複をまとめる</td></tr>
+<tr><th>Issue</th><td>#251 [IdeaMan] APIのエラーメッセージを日本語にそろえ、1か所に集約する</td></tr>
+<tr><th>サブタスク</th><td>APIのエラーメッセージを日本語にそろえ、1か所に集約するー①</td></tr>
+<tr><th>ブランチ</th><td><code>issue-251-ef5a98ed-subtask-1</code>（push済み）</td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
 <p class="ok">成功</p>
-<p>Issueに挙げられた重複箇所をすべて共通関数経由に置き換えた。<br>振る舞い（404の詳細文言・ハートビート間隔）は変更していない。</p>
+<p>app/routes配下のHTTPExceptionのdetail文言を、すべて<code>app/routes/error_messages.py</code>の定数参照に置き換えた。<br>
+英語のメッセージ（8種類・20箇所）は日本語にした。</p>
 
 <h2>3. 変更内容</h2>
 <table>
-<tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td><code>worker/heartbeat.py</code>（新規）</td><td><code>run_with_heartbeat(heartbeat, action)</code>を追加。<br>ハートビート関数を引数で受け取る。</td></tr>
-<tr><td>2</td><td><code>worker/main.py</code></td><td><code>_run_with_heartbeat</code>を削除し、<code>run_with_heartbeat(partial(heartbeat_job, ...), ...)</code>に置換。<br>不要になった<code>threading</code>・<code>Callable</code>のimportを削除。</td></tr>
-<tr><td>3</td><td><code>worker/idea_runner.py</code></td><td><code>_with_heartbeat</code>を削除し、<code>run_with_heartbeat(partial(heartbeat_idea_job, ...), ...)</code>に置換。</td></tr>
-<tr><td>4</td><td><code>app/routes/subtasks.py</code></td><td><code>_get_subtask_or_404</code>を追加し、<code>_get_subtask_and_project</code>もこれを使う形にした。<br>create_subtask→<code>_get_project_or_404</code>、update_subtask_title→<code>_get_subtask_and_project</code>、_subtask_worktree_path・execute_subtask→<code>_get_subtask_or_404</code>。</td></tr>
-<tr><td>5</td><td><code>tests/test_worker_heartbeat.py</code>（新規）</td><td>ハートビートが実行中に呼ばれること、例外時に停止することのテスト。</td></tr>
-<tr><td>6</td><td><code>tests/test_worker_main.py</code></td><td>monkeypatch対象名を<code>run_with_heartbeat</code>に変更。</td></tr>
-<tr><td>7</td><td><code>tests/test_subtask_routes.py</code></td><td>create_subtask・update_subtask_title・execute_subtaskの404テストを追加。</td></tr>
+<tr><th>No.</th><th>コミット</th><th>内容</th></tr>
+<tr><td>1</td><td>#251 [エラーメッセージ] 日本語メッセージを定数に集約</td><td>error_messages.pyを追加し、既存の日本語メッセージを定数参照に変更。NOT_SUPERVISED_DETAILをsystem.pyから移動。</td></tr>
+<tr><td>2</td><td>#251 [エラーメッセージ] 英語メッセージを日本語化</td><td>英語メッセージを日本語の定数に置換。_get_project_or_404・_get_subtask_or_404も同じ定数を参照。</td></tr>
+<tr><td>3</td><td>#251 [エラーメッセージ] 定数利用のテストを追加</td><td>detailの直書き検出テストと404文言のテストを追加。</td></tr>
 </table>
-<p>コミット: cb4a9da（ハートビート共通化）、21081e1（404判定共通化）</p>
+<p>主な変更ファイル</p>
+<ul>
+<li><code>app/routes/error_messages.py</code>（新規）</li>
+<li><code>app/routes/cli.py</code>, <code>deploy.py</code>, <code>ideas.py</code>, <code>jobs.py</code>, <code>projects.py</code>, <code>subtasks.py</code>, <code>system.py</code></li>
+<li><code>tests/test_error_messages.py</code>（新規）</li>
+</ul>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>共通関数は新規モジュール<code>worker/heartbeat.py</code>に置く。</td><td><code>worker/main.py</code>が<code>idea_runner</code>をimportしており、どちらかに置くと依存が循環・逆転するため。</td></tr>
-<tr><td>2</td><td>ハートビート関数は引数なしのcallableとし、呼び出し側で<code>functools.partial</code>で束縛する。</td><td>ジョブIDの種類（実装ジョブ／アイデアジョブ）に依存しない汎用的な形にするため。</td></tr>
-<tr><td>3</td><td>execute_subtask・_subtask_worktree_pathはProjectを取得しない<code>_get_subtask_or_404</code>を使う。</td><td>Projectを使わない箇所で不要なDB取得を増やさないため。Issueでも選択肢として挙げられていた。</td></tr>
-<tr><td>4</td><td>補助関数の定義位置は移動しない。</td><td>実行時解決のため動作に影響せず、差分を最小にするため。</td></tr>
+<tr><td>1</td><td>集約先を<code>app/routes/error_messages.py</code>のPython定数とした</td><td>対象がroutes配下のみで、既存にNOT_SUPERVISED_DETAILの定数化前例があるため。JSON等のリソースファイル化は過剰と判断。</td></tr>
+<tr><td>2</td><td>「subtask not found」は「MRが見つかりません」とした</td><td>既存の日本語メッセージ・画面でサブタスクを「MR」と表記しているため。</td></tr>
+<tr><td>3</td><td>「text is empty」は「入力内容が空です」とした</td><td>CLIへの送信テキストの空チェックで、画面上の利用者向け表現として自然なため。</td></tr>
+<tr><td>4</td><td>Issue作成失敗等のf文字列は<code>{reason}</code>付きテンプレート定数とし、<code>.format()</code>で埋め込む</td><td>例外内容を含む文言も1か所で管理するため。</td></tr>
+<tr><td>5</td><td><code>str(exc)</code>をそのまま返す箇所は対象外とした</td><td>文言はcore側の例外が持っており、routes配下の直書き文言ではないため。</td></tr>
+<tr><td>6</td><td>projects.pyとsubtasks.pyに重複する_get_project_or_404の統合は行わない</td><td>本Issueの範囲外。両方が同じ定数を使うことで文言の一貫性は担保した。</td></tr>
+<tr><td>7</td><td>import名は<code>error_messages as messages</code>とした</td><td>呼び出し側で定数の出所が分かり、行長を抑えられるため。</td></tr>
 </table>
 
-<h2>5. テスト</h2>
-<p><code>./.venv/Scripts/python.exe -m pytest -q</code> → <span class="ok">549 passed</span>（既存544＋追加5）</p>
-<p>ワーカー・サーバーの起動確認は未実施（ガイドラインに従い人間に依頼）。</p>
+<h2>5. テスト結果</h2>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code> : <span class="ok">553 passed</span>（既存549件＋新規4件）</p>
+<ul>
+<li>既存テストに英語メッセージを直接比較しているものは無く、修正不要だった。</li>
+<li>新規テストの直書き検出が旧コードの文言を検出できることを手動で確認済み。</li>
+<li>フロントエンド（app/static）に英語メッセージ文字列への依存が無いことをgrepで確認済み。</li>
+<li>アプリ起動による画面表示確認は未実施（ルールによりビルド・テストまで）。</li>
+</ul>
 
 <h2>6. 残課題・レビュー観点</h2>
 <ul>
-<li>update_subtask_titleは以前と同様、Projectが存在しない場合の判定は行っていない（既存の<code>_get_subtask_and_project</code>の挙動を踏襲）。</li>
-<li>ワーカー再起動後、実装ジョブ・アイデア出しジョブのハートビートが継続して更新されることを確認してほしい。</li>
+<li>日本語文言の表現（特に「MRが見つかりません」「入力内容が空です」）が意図に合うか確認してほしい。</li>
+<li>API利用者（外部スクリプト等）が英語のdetailを文字列判定していた場合は影響を受ける。リポジトリ内には該当なし。</li>
+<li>core側の例外メッセージ（<code>str(exc)</code>経由）には英語が残る可能性があるが、本Issueの範囲外とした。</li>
+<li>_get_project_or_404の重複統合は別Issueで検討の余地あり。</li>
 </ul>
 </body>
 </html>
