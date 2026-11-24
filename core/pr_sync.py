@@ -124,7 +124,7 @@ def sync_project_states(session, project: Project, prs: list[dict]) -> list[dict
 
 def _project_ids_by_repo(factory) -> dict[str, list[int]]:
     with factory() as session:
-        projects = session.query(Project).order_by(Project.id).all()
+        projects = session.query(Project).filter_by(removed=False).order_by(Project.id).all()
     repos: dict[str, list[int]] = {}
     for project in projects:
         repos.setdefault(project.github_repo, []).append(project.id)

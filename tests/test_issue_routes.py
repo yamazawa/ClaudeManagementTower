@@ -56,6 +56,22 @@ def test_get_projects_uses_registered_display_name_and_description(session_facto
     assert (project["display_name"], project["description"]) == ("日本語名", "説明")
 
 
+def test_remove_project_hides_project_from_list(session_factory):
+    result = projects.remove_project(1)
+
+    assert result == {"id": 1, "removed": True}
+    assert projects.get_projects() == []
+    with session_factory() as session:
+        assert session.get(Project, 1).removed is True
+
+
+def test_remove_project_returns_404_for_unknown_project(session_factory):
+    with pytest.raises(HTTPException) as exc_info:
+        projects.remove_project(99)
+
+    assert exc_info.value.status_code == 404
+
+
 def test_create_project_passes_normalized_repo(monkeypatch):
     calls = []
     monkeypatch.setattr(projects, "create_repository", lambda repo: calls.append(repo) or {"project_id": 3})

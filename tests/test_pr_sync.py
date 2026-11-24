@@ -173,6 +173,22 @@ def test_sync_fetches_shared_repo_once(session_factory, monkeypatch):
     assert calls == ["owner/repo"]
 
 
+def test_sync_skips_removed_projects(session_factory, monkeypatch):
+    with session_factory() as session:
+        session.add(
+            Project(name="q", github_repo="owner/removed", repo_path="y", default_branch="master", removed=True)
+        )
+        session.commit()
+    calls = []
+    monkeypatch.setattr(
+        pr_sync, "list_pull_request_states", lambda repo: calls.append(repo) or []
+    )
+
+    pr_sync.sync_all_projects(session_factory)
+
+    assert calls == ["owner/repo"]
+
+
 def test_mark_prs_merged(session_factory):
     _add_subtask(session_factory, 10, "resolved", "b10")
     _add_subtask(session_factory, 11, "resolved", "b11")
