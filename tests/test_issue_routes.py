@@ -43,6 +43,18 @@ def test_get_projects_includes_repo_display_info(session_factory):
     )
 
 
+def test_get_projects_uses_registered_display_name_and_description(session_factory):
+    with session_factory() as session:
+        project = session.get(Project, 1)
+        project.display_name = "日本語名"
+        project.description = "説明"
+        session.commit()
+
+    [project] = projects.get_projects()
+
+    assert (project["display_name"], project["description"]) == ("日本語名", "説明")
+
+
 def test_get_issues_passes_state(session_factory, monkeypatch):
     calls = _capture_list_issues(monkeypatch)
 

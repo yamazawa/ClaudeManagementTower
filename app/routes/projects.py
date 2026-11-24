@@ -65,7 +65,8 @@ def get_projects():
                 "name": p.name,
                 "github_repo": p.github_repo,
                 "default_branch": p.default_branch,
-                **describe_repo(p.github_repo, p.name),
+                "description": p.description,
+                **describe_repo(p.github_repo, p.name, p.display_name),
                 "deploy_defined": is_deploy_defined(p.repo_path),
             }
             for p in projects
