@@ -10,7 +10,8 @@ from functools import partial
 
 from claude_agent_sdk import RateLimitEvent
 
-from core.claude_client import IDEA_MAN_POLICY_PROMPT, run_read_only_claude
+from core.claude_client import run_read_only_claude
+from core.claude_prompts import IDEA_MAN_POLICY_PROMPT
 from core.config import settings
 from core.db import SessionLocal
 from core.idea_context import build_idea_prompt

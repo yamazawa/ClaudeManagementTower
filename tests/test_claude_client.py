@@ -3,10 +3,11 @@ from pathlib import Path
 
 from claude_agent_sdk import PermissionResultAllow, PermissionResultDeny
 
-from core import claude_client
+from core import claude_client, claude_permissions
 from core.attachments import MAX_ATTACHMENT_BYTES
 from core.claude_access_rules import AccessRules
-from core.claude_client import MAX_BUFFER_SIZE, restrict_to_worktree
+from core.claude_client import MAX_BUFFER_SIZE
+from core.claude_permissions import restrict_to_worktree
 
 
 def _rules(worktree):
@@ -200,7 +201,7 @@ def test_allows_env_example(tmp_path):
 
 def test_pre_tool_use_hook_denies_blocked_file(tmp_path):
     worktree = _worktree(tmp_path)
-    hooks = claude_client._to_pre_tool_use_hooks(claude_client._worktree_check(_rules(worktree)))
+    hooks = claude_permissions._to_pre_tool_use_hooks(claude_permissions._worktree_check(_rules(worktree)))
     hook = hooks["PreToolUse"][0].hooks[0]
     denied = asyncio.run(hook({"tool_name": "Read", "tool_input": {"file_path": str(worktree / ".env")}}, None, {}))
     allowed = asyncio.run(hook({"tool_name": "Read", "tool_input": {"file_path": str(worktree / "a.py")}}, None, {}))
@@ -222,14 +223,14 @@ def test_run_claude_registers_pre_tool_use_hook(monkeypatch, tmp_path):
 
 
 def _check_dialog(worktree, tool_name, tool_input):
-    can_use_tool = restrict_to_worktree(worktree, _rules(worktree), claude_client.CLI_DIALOG_DENIED_TOOLS)
+    can_use_tool = restrict_to_worktree(worktree, _rules(worktree), claude_permissions.CLI_DIALOG_DENIED_TOOLS)
     return asyncio.run(can_use_tool(tool_name, tool_input, {}))
 
 
 def test_dialog_denies_ask_user_question(tmp_path):
     result = _check_dialog(str(tmp_path), "AskUserQuestion", {"questions": []})
     assert isinstance(result, PermissionResultDeny)
-    assert result.message == claude_client.CLI_DIALOG_DENIED_TOOLS["AskUserQuestion"]
+    assert result.message == claude_permissions.CLI_DIALOG_DENIED_TOOLS["AskUserQuestion"]
 
 
 def test_worker_allows_ask_user_question(tmp_path):
@@ -250,10 +251,10 @@ def test_dialog_keeps_other_tool_decisions(tmp_path):
 
 
 def test_pre_tool_use_hook_denies_dialog_tool(tmp_path):
-    check = claude_client._with_denied_tools(
-        claude_client._worktree_check(_rules(str(tmp_path))), claude_client.CLI_DIALOG_DENIED_TOOLS
+    check = claude_permissions._with_denied_tools(
+        claude_permissions._worktree_check(_rules(str(tmp_path))), claude_permissions.CLI_DIALOG_DENIED_TOOLS
     )
-    hook = claude_client._to_pre_tool_use_hooks(check)["PreToolUse"][0].hooks[0]
+    hook = claude_permissions._to_pre_tool_use_hooks(check)["PreToolUse"][0].hooks[0]
     denied = asyncio.run(hook({"tool_name": "AskUserQuestion", "tool_input": {}}, None, {}))
     assert denied["hookSpecificOutput"]["permissionDecision"] == "deny"
 
@@ -268,7 +269,7 @@ def test_run_claude_applies_denied_tools(monkeypatch, tmp_path):
 
     monkeypatch.setattr(claude_client, "query", fake_query)
     asyncio.run(
-        claude_client.run_claude("prompt", str(tmp_path), denied_tools=claude_client.CLI_DIALOG_DENIED_TOOLS)
+        claude_client.run_claude("prompt", str(tmp_path), denied_tools=claude_permissions.CLI_DIALOG_DENIED_TOOLS)
     )
     result = asyncio.run(captured["options"].can_use_tool("AskUserQuestion", {}, {}))
     assert isinstance(result, PermissionResultDeny)
@@ -292,7 +293,7 @@ def test_run_claude_passes_max_buffer_size(monkeypatch, tmp_path):
 
 
 def _check_read_only(root, tool_name, tool_input):
-    can_use_tool = claude_client.restrict_to_read_only(root)
+    can_use_tool = claude_permissions.restrict_to_read_only(root)
     return asyncio.run(can_use_tool(tool_name, tool_input, {}))
 
 
@@ -393,7 +394,7 @@ def test_run_read_only_claude_limits_tools(monkeypatch, tmp_path):
     asyncio.run(claude_client.run_read_only_claude("prompt", str(tmp_path), "policy"))
 
     options = captured["options"]
-    assert options.tools == claude_client.IDEA_MAN_TOOL_NAMES
+    assert options.tools == claude_permissions.IDEA_MAN_TOOL_NAMES
     assert "PreToolUse" in options.hooks
     assert options.permission_mode == "default"
     assert options.system_prompt["append"] == "policy"

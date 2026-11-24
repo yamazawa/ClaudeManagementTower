@@ -2,61 +2,80 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>作業レポート: 削除済みプロジェクト参照時のAttributeError解消と404判定の共通化ー①</title>
+<title>実行レポート #253 サブタスク1</title>
 <style>
 body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
-h1 { font-size: 1.4em; } h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; margin-top: 1.6em; }
-table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #bbb; padding: 4px 8px; text-align: left; vertical-align: top; }
-th { background: #f0f0f0; } code { background: #f4f4f4; padding: 0 3px; }
-.ok { color: #0a6b0a; font-weight: bold; }
+h1 { font-size: 1.4em; }
+h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; padding-bottom: .2em; margin-top: 1.6em; }
+table { border-collapse: collapse; margin: .5em 0; }
+th, td { border: 1px solid #bbb; padding: .3em .6em; text-align: left; vertical-align: top; }
+th { background: #f0f0f0; }
+code { background: #f4f4f4; padding: 0 .2em; }
+.ok { color: #0a7a2f; font-weight: bold; }
 </style>
 </head>
 <body>
-<h1>作業レポート: 削除済みプロジェクト参照時のAttributeError解消と404判定の共通化ー①</h1>
+<h1>実行レポート：claude_client.pyの責務分割</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#255 [IdeaMan] 削除済みプロジェクトを参照したときのAttributeErrorをなくし、404判定をルート間で共通化する</td></tr>
-<tr><th>サブタスク</th><td>削除済みプロジェクトを参照したときのAttributeErrorをなくし、404判定をルート間で共通化するー①</td></tr>
-<tr><th>ブランチ</th><td><code>issue-255-4b8f2e22-subtask-1</code></td></tr>
+<tr><th>Issue</th><td>#253</td></tr>
+<tr><th>サブタスク</th><td>[IdeaMan] claude_client.pyを、方針プロンプト・ツール許可判定・SDK実行に分割するー①</td></tr>
+<tr><th>ブランチ</th><td><code>issue-253-0022d9f7-subtask-1</code></td></tr>
 </table>
 
-<h2>2. 実装結果</h2>
+<h2>2. 実装結果の要約</h2>
 <p class="ok">成功</p>
-<p>提案の詳細5項目をすべて実装した。<br>全テスト（556件）が成功した。</p>
+<p>方針プロンプトを<code>core/claude_prompts.py</code>に移した。</p>
+<p>拒否判定を<code>core/claude_permissions.py</code>に移した。</p>
+<p><code>core/claude_client.py</code>には、ClaudeAgentOptionsの組み立てと実行だけを残した。</p>
+<p>ロジックの変更はない。</p>
 
-<h2>3. 変更内容</h2>
+<h2>3. 実施した変更</h2>
+<table>
+<tr><th>No.</th><th>コミット</th><th>内容</th></tr>
+<tr><td>1</td><td>#253 [責務分割] 方針プロンプトをclaude_prompts.pyへ移動</td><td>4種類の方針プロンプトを移動し、呼び出し元のimportを修正した。</td></tr>
+<tr><td>2</td><td>#253 [責務分割] 拒否判定をclaude_permissions.pyへ移動</td><td>許可判定・拒否判定・関連定数を移動し、呼び出し元とテストのimportを修正した。</td></tr>
+</table>
 <table>
 <tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td><code>app/routes/lookups.py</code>（新規）</td><td><code>get_project_or_404</code>・<code>get_subtask_or_404</code>・<code>get_subtask_and_project_or_404</code>を追加。</td></tr>
-<tr><td>2</td><td><code>app/routes/projects.py</code></td><td>ローカルの<code>_get_project_or_404</code>とget_issues内のインライン判定を共通関数に置換。</td></tr>
-<tr><td>3</td><td><code>app/routes/deploy.py</code></td><td><code>_get_project</code>内の判定を共通関数に置換。</td></tr>
-<tr><td>4</td><td><code>app/routes/subtasks.py</code></td><td><code>_get_project_or_404</code>・<code>_get_subtask_or_404</code>・<code>_get_subtask_and_project</code>を削除し共通関数に置換。<br>プロジェクトが無いサブタスクも404になる。</td></tr>
-<tr><td>5</td><td><code>app/routes/ideas.py</code></td><td><code>_github_repo</code>を共通関数経由にし404化。<br><code>_create_issue_for</code>でGitHubClientError以外の例外も<code>release_claim</code>して再送出。</td></tr>
-<tr><td>6</td><td><code>worker/idea_runner.py</code></td><td><code>_repo_path</code>でプロジェクトが無い場合に「プロジェクト(id=N)が見つかりません」でRuntimeError。</td></tr>
-<tr><td>7</td><td><code>tests/test_route_lookups.py</code>（新規）ほか</td><td>共通関数・サブタスククローズの404、承認時の404と承認中解除、想定外例外での承認中解除、<code>_repo_path</code>のメッセージのテストを追加。</td></tr>
+<tr><td>1</td><td>core/claude_prompts.py</td><td>新規。AGENT・CONFLICT_RESOLUTION・CLI_DIALOG・IDEA_MANの方針プロンプト。</td></tr>
+<tr><td>2</td><td>core/claude_permissions.py</td><td>新規。シェル判定・パス判定・読み取り専用判定・worktree判定と、can_use_tool・PreToolUseフックへの変換。</td></tr>
+<tr><td>3</td><td>core/claude_client.py</td><td>バッファ上限・run_read_only_claude・_collect_result・run_claudeのみ残した。</td></tr>
+<tr><td>4</td><td>core/cli_session.py</td><td>import先を変更。</td></tr>
+<tr><td>5</td><td>core/pr_merger.py</td><td>import先を変更。</td></tr>
+<tr><td>6</td><td>worker/idea_runner.py</td><td>import先を変更。</td></tr>
+<tr><td>7</td><td>tests/test_claude_client.py</td><td>移動した名前の参照先をclaude_permissionsに変更。</td></tr>
+<tr><td>8</td><td>tests/test_cli_attachments.py</td><td>_worktree_checkのimport先を変更。</td></tr>
 </table>
-<p>コミット: 4d63b4a（共通化）・95853bc（404判定）・a124d2d（アイデア出し）・d61d06a（承認）・テスト追加</p>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>共通関数の置き場所を<code>app/routes/lookups.py</code>とした。</td><td>HTTPExceptionを送出するためルート層に置く。<br>既存の<code>repo_items.py</code>と同じくルート共通モジュールとして並べる。</td></tr>
-<tr><td>2</td><td>関数名は先頭アンダースコアなしの公開名にした。</td><td>複数モジュールから参照するため。</td></tr>
-<tr><td>3</td><td><code>_create_issue_for</code>の想定外例外は<code>except Exception</code>で解除後そのまま再送出した。</td><td>404のHTTPExceptionはそのまま返し、それ以外はFastAPIの500処理に任せる。<br>例外内容を握りつぶさない。</td></tr>
-<tr><td>4</td><td><code>merge_subtask</code>もプロジェクトが無い場合は404になる。</td><td>共通関数への置換の結果。<br>プロジェクトが無いとマージ処理側でも失敗するため、受付時点で拒否する方が妥当と判断。</td></tr>
-<tr><td>5</td><td>route外の<code>core/merge_queue.py:136</code>等の同種の参照は対象外とした。</td><td>提案の範囲外のため。</td></tr>
+<tr><td>1</td><td>CLI_DIALOG_DENIED_TOOLS・IDEA_MAN_TOOL_NAMESはclaude_permissions.pyに置いた。</td><td>プロンプト文面ではなくツール拒否の判定データであるため。</td></tr>
+<tr><td>2</td><td>_to_can_use_tool・_to_pre_tool_use_hooks・restrict_to_*もclaude_permissions.pyに置いた。</td><td>拒否判定をSDKの許可形式に変換する処理で、判定と一体のため。</td></tr>
+<tr><td>3</td><td>MAX_BUFFER_SIZE関連はclaude_client.pyに残した。</td><td>ClaudeAgentOptionsの組み立て値であるため。</td></tr>
+<tr><td>4</td><td>関数名は先頭の「_」を含め変更しなかった。</td><td>Issueの「移動だけにする」に従った。結果としてclaude_client.pyが他モジュールの「_」付き関数をimportしている。</td></tr>
+<tr><td>5</td><td>テストファイルは分割せず、参照先の修正だけにした。</td><td>Issueの「既存テストのimport先を合わせる」に従った。</td></tr>
+<tr><td>6</td><td>旧121-122行目の区切りは、移動先で空行2行に揃えた。</td><td>トップレベル定義間の空行を他と揃えた。</td></tr>
+<tr><td>7</td><td>IMPLEMENTATION_PLAN.md 219行目のclaude_client.py記載は変更しなかった。</td><td>過去PRの対応記録であり、当時の事実を示すため。</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<p><code>./.venv/Scripts/python.exe -m pytest -q</code> → <span class="ok">556 passed</span></p>
-<p>起動しての動作確認は未実施（ガイドラインによりビルド・テストまで）。</p>
+<table>
+<tr><th>No.</th><th>内容</th><th>結果</th></tr>
+<tr><td>1</td><td><code>./.venv/Scripts/python.exe -m pytest -q</code>（各コミット時点）</td><td class="ok">549 passed</td></tr>
+<tr><td>2</td><td>移動前後の方針プロンプト文字列の一致確認</td><td class="ok">4件とも一致</td></tr>
+<tr><td>3</td><td>移動前claude_client.pyと移動後2ファイルのトップレベル定義をASTで比較</td><td class="ok">33件すべて同一（import文を除く）</td></tr>
+</table>
+<p>ruffはvenvに未導入のため実行していない。</p>
 
-<h2>6. 残課題・レビュー観点</h2>
+<h2>6. 残課題・リスク・確認ポイント</h2>
 <ul>
-<li><code>core/merge_queue.py:136</code>・<code>core/idea_context.py:137</code>などcore層にも取得結果を確認しない参照が残る可能性がある。</li>
-<li>アイデア出しジョブでは<code>build_idea_prompt</code>（<code>core/idea_context.py:137-140</code>）が<code>_repo_path</code>より先に呼ばれる。<br>削除済みプロジェクトの場合はそちらでAttributeErrorになり、<code>_repo_path</code>のメッセージは現状の流れでは出ない。<br>core層の修正は提案範囲外のため、別Issueでの対応を推奨する。</li>
-<li><code>merge_subtask</code>の404化（判断No.4）が意図に沿うか確認してほしい。</li>
+<li>claude_client.pyがclaude_permissionsの「_」付き関数（_worktree_check等）をimportしている。公開名へのリネームは別タスクで検討の余地がある。</li>
+<li>tests/test_claude_client.pyが許可判定のテストも含んでいる。test_claude_permissions.pyへの分割は別タスクで検討の余地がある。</li>
+<li>新規ファイルは改行コードLFで作成した。gitのautocrlf設定により作業ツリーではCRLFに変換される。</li>
+<li>CLI対話・PRマージ・アイデアマンの実機動作は未確認。import先の変更のみのため影響は小さい想定。</li>
 </ul>
 </body>
 </html>
