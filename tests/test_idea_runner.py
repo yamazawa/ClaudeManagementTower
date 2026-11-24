@@ -90,6 +90,11 @@ def test_process_idea_job_fails_on_unparsable_result(session_factory):
     assert "提案はありません" in job.error_message
 
 
+def test_repo_path_of_deleted_project_raises_clear_error(session_factory):
+    with pytest.raises(RuntimeError, match=r"プロジェクト\(id=99\)が見つかりません"):
+        idea_runner._repo_path(99)
+
+
 def test_process_idea_job_records_exception(session_factory):
     async def failing_runner(prompt, repo_path):
         raise RuntimeError("claude down")
