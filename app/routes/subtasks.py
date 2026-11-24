@@ -226,7 +226,7 @@ def create_pending_subtask(payload: CreatePendingSubtaskRequest):
     """
     issue_title = payload.issue_title.strip()
     if not issue_title:
-        raise HTTPException(status_code=400, detail="issue_title is empty")
+        raise HTTPException(status_code=400, detail=messages.ISSUE_TITLE_EMPTY)
     with SessionLocal() as session:
         project = _get_project_or_404(session, payload.project_id)
     title = compose_mr_title(issue_title, next_default_suffix(issue_title, []))
@@ -255,7 +255,7 @@ def _unique_branch_name(head: str) -> str:
 def _get_project_or_404(session, project_id: int) -> Project:
     project = session.get(Project, project_id)
     if project is None:
-        raise HTTPException(status_code=404, detail="project not found")
+        raise HTTPException(status_code=404, detail=messages.PROJECT_NOT_FOUND)
     return project
 
 
@@ -336,7 +336,7 @@ def update_subtask_title(subtask_id: int, payload: UpdateSubtaskTitleRequest):
     """
     suffix = payload.title.strip()
     if not suffix:
-        raise HTTPException(status_code=400, detail="title is empty")
+        raise HTTPException(status_code=400, detail=messages.TITLE_EMPTY)
     with SessionLocal() as session:
         subtask, project = _get_subtask_and_project(session, subtask_id)
 
@@ -356,7 +356,7 @@ def update_subtask_title(subtask_id: int, payload: UpdateSubtaskTitleRequest):
 def _get_subtask_or_404(session, subtask_id: int) -> Subtask:
     subtask = session.get(Subtask, subtask_id)
     if subtask is None:
-        raise HTTPException(status_code=404, detail="subtask not found")
+        raise HTTPException(status_code=404, detail=messages.SUBTASK_NOT_FOUND)
     return subtask
 
 
@@ -474,7 +474,7 @@ def get_attachment_file(subtask_id: int, attachment_id: str):
     """
     path = find_attachment_file(_subtask_worktree_path(subtask_id), attachment_id)
     if path is None:
-        raise HTTPException(status_code=404, detail="attachment not found")
+        raise HTTPException(status_code=404, detail=messages.ATTACHMENT_NOT_FOUND)
     return FileResponse(path)
 
 
@@ -500,7 +500,7 @@ def remove_attachment(subtask_id: int, attachment_id: str):
     残りの添付のIDは振り直さない。
     """
     if not delete_attachment(_subtask_worktree_path(subtask_id), attachment_id):
-        raise HTTPException(status_code=404, detail="attachment not found")
+        raise HTTPException(status_code=404, detail=messages.ATTACHMENT_NOT_FOUND)
     return {"id": attachment_id}
 
 

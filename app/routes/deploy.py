@@ -25,7 +25,7 @@ def _get_project(project_id: int) -> tuple[str, str]:
     with SessionLocal() as session:
         project = session.get(Project, project_id)
         if project is None:
-            raise HTTPException(status_code=404, detail="project not found")
+            raise HTTPException(status_code=404, detail=messages.PROJECT_NOT_FOUND)
         return project.repo_path, project.default_branch
 
 

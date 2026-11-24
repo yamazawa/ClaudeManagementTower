@@ -83,7 +83,7 @@ def get_issues(project_id: int, state: Literal["open", "closed_today", "closed"]
     with SessionLocal() as session:
         project = session.get(Project, project_id)
         if project is None:
-            raise HTTPException(status_code=404, detail="project not found")
+            raise HTTPException(status_code=404, detail=messages.PROJECT_NOT_FOUND)
         issues = _list_issues_by_state(project.github_repo, state)
         counts = _mr_counts_by_issue(session, project.id)
         return [{**i, "mr_counts": counts.get(i["number"], EMPTY_MR_COUNTS)} for i in issues]
@@ -148,7 +148,7 @@ def create_project_issue(project_id: int, payload: CreateIssueRequest):
     """
     title = payload.title.strip()
     if not title:
-        raise HTTPException(status_code=400, detail="title is empty")
+        raise HTTPException(status_code=400, detail=messages.TITLE_EMPTY)
     with SessionLocal() as session:
         project = _get_project_or_404(session, project_id)
         try:
@@ -171,7 +171,7 @@ def update_issue_title(project_id: int, number: int, payload: UpdateTitleRequest
     """
     title = payload.title.strip()
     if not title:
-        raise HTTPException(status_code=400, detail="title is empty")
+        raise HTTPException(status_code=400, detail=messages.TITLE_EMPTY)
     with SessionLocal() as session:
         project = _get_project_or_404(session, project_id)
         try:
@@ -237,7 +237,7 @@ def _subtask_summaries(session, project: Project, number: int) -> list[dict]:
 def _get_project_or_404(session, project_id: int) -> Project:
     project = session.get(Project, project_id)
     if project is None:
-        raise HTTPException(status_code=404, detail="project not found")
+        raise HTTPException(status_code=404, detail=messages.PROJECT_NOT_FOUND)
     return project
 
 
