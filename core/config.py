@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     worker_poll_interval_seconds: int = 3
     job_heartbeat_interval_seconds: int = 5
     job_stale_timeout_seconds: int = 60
+    # Claudeが応答しなくなった場合にワーカーを解放するための上限
+    job_max_runtime_seconds: int = 7200
+    idea_job_max_runtime_seconds: int = 1800
     worker_offline_timeout_seconds: int = 30
     worker_respawn_delay_seconds: float = 5.0
     database_path: str = "claude_tower.db"
