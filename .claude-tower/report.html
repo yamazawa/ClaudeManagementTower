@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>作業レポート: subtasksルートの404判定とワーカーのハートビート処理の重複をまとめるー①</title>
+<title>作業レポート: 実装ジョブ・アイデア出しジョブに最大実行時間を設け、超えたら要確認にするー①</title>
 <style>
 body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; } h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; margin-top: 1.6em; }
@@ -12,50 +12,51 @@ th { background: #f0f0f0; } code { background: #f4f4f4; padding: 0 3px; }
 </style>
 </head>
 <body>
-<h1>作業レポート: subtasksルートの404判定とワーカーのハートビート処理の重複をまとめるー①</h1>
+<h1>作業レポート: 実装ジョブ・アイデア出しジョブに最大実行時間を設け、超えたら要確認にするー①</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#240 [IdeaMan] subtasksルートの404判定とワーカーのハートビート処理の重複をまとめる</td></tr>
-<tr><th>サブタスク</th><td>subtasksルートの404判定とワーカーのハートビート処理の重複をまとめるー①</td></tr>
-<tr><th>ブランチ</th><td><code>issue-240-subtask-1</code>（push済み）</td></tr>
-<tr><th>指示</th><td>subtasksルートの404判定とワーカーのハートビート処理の重複をまとめる</td></tr>
+<tr><th>Issue</th><td>#259 [IdeaMan] 実装ジョブ・アイデア出しジョブに最大実行時間を設け、超えたら要確認にする</td></tr>
+<tr><th>サブタスク</th><td>実装ジョブ・アイデア出しジョブに最大実行時間を設け、超えたら要確認にするー①</td></tr>
+<tr><th>ブランチ</th><td><code>issue-259-de002832-subtask-1</code></td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
 <p class="ok">成功</p>
-<p>Issueに挙げられた重複箇所をすべて共通関数経由に置き換えた。<br>振る舞い（404の詳細文言・ハートビート間隔）は変更していない。</p>
+<p>Claude実行を最大実行時間付きで実行するようにした。<br>
+上限超過時、実装ジョブはneeds_attention、アイデア出しジョブはfailedで終了し、ワーカーは解放される。</p>
 
 <h2>3. 変更内容</h2>
 <table>
 <tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td><code>worker/heartbeat.py</code>（新規）</td><td><code>run_with_heartbeat(heartbeat, action)</code>を追加。<br>ハートビート関数を引数で受け取る。</td></tr>
-<tr><td>2</td><td><code>worker/main.py</code></td><td><code>_run_with_heartbeat</code>を削除し、<code>run_with_heartbeat(partial(heartbeat_job, ...), ...)</code>に置換。<br>不要になった<code>threading</code>・<code>Callable</code>のimportを削除。</td></tr>
-<tr><td>3</td><td><code>worker/idea_runner.py</code></td><td><code>_with_heartbeat</code>を削除し、<code>run_with_heartbeat(partial(heartbeat_idea_job, ...), ...)</code>に置換。</td></tr>
-<tr><td>4</td><td><code>app/routes/subtasks.py</code></td><td><code>_get_subtask_or_404</code>を追加し、<code>_get_subtask_and_project</code>もこれを使う形にした。<br>create_subtask→<code>_get_project_or_404</code>、update_subtask_title→<code>_get_subtask_and_project</code>、_subtask_worktree_path・execute_subtask→<code>_get_subtask_or_404</code>。</td></tr>
-<tr><td>5</td><td><code>tests/test_worker_heartbeat.py</code>（新規）</td><td>ハートビートが実行中に呼ばれること、例外時に停止することのテスト。</td></tr>
-<tr><td>6</td><td><code>tests/test_worker_main.py</code></td><td>monkeypatch対象名を<code>run_with_heartbeat</code>に変更。</td></tr>
-<tr><td>7</td><td><code>tests/test_subtask_routes.py</code></td><td>create_subtask・update_subtask_title・execute_subtaskの404テストを追加。</td></tr>
+<tr><td>1</td><td><code>core/config.py</code></td><td><code>job_max_runtime_seconds</code>（7200）、<code>idea_job_max_runtime_seconds</code>（1800）を追加。</td></tr>
+<tr><td>2</td><td><code>worker/time_limit.py</code>（新規）</td><td><code>run_with_time_limit</code>：<code>asyncio.run(asyncio.wait_for(...))</code>で実行し、超過時は<code>ClaudeTimeoutError</code>を送出。</td></tr>
+<tr><td>3</td><td><code>worker/main.py</code></td><td><code>_run_claude_for_job</code>を<code>run_with_time_limit</code>経由に変更。<br><code>process_job</code>で<code>ClaudeTimeoutError</code>を捕捉し、errorイベント記録＋needs_attentionで終了。</td></tr>
+<tr><td>4</td><td><code>worker/idea_runner.py</code></td><td><code>_execute</code>を<code>run_with_time_limit</code>経由に変更。<br>超過時は既存の例外処理でfailed＋エラーメッセージを記録。</td></tr>
+<tr><td>5</td><td><code>tests/test_worker_time_limit.py</code>（新規）ほか</td><td>打ち切り・キャンセル、実装ジョブのneeds_attention遷移、アイデア出しジョブのfailed遷移、設定既定値のテストを追加。</td></tr>
 </table>
-<p>コミット: cb4a9da（ハートビート共通化）、21081e1（404判定共通化）</p>
+<p>コミット: b465129（設定と共通関数）、2e5414e（実装ジョブ）、e61c38a（アイデア出しジョブ）</p>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>共通関数は新規モジュール<code>worker/heartbeat.py</code>に置く。</td><td><code>worker/main.py</code>が<code>idea_runner</code>をimportしており、どちらかに置くと依存が循環・逆転するため。</td></tr>
-<tr><td>2</td><td>ハートビート関数は引数なしのcallableとし、呼び出し側で<code>functools.partial</code>で束縛する。</td><td>ジョブIDの種類（実装ジョブ／アイデアジョブ）に依存しない汎用的な形にするため。</td></tr>
-<tr><td>3</td><td>execute_subtask・_subtask_worktree_pathはProjectを取得しない<code>_get_subtask_or_404</code>を使う。</td><td>Projectを使わない箇所で不要なDB取得を増やさないため。Issueでも選択肢として挙げられていた。</td></tr>
-<tr><td>4</td><td>補助関数の定義位置は移動しない。</td><td>実行時解決のため動作に影響せず、差分を最小にするため。</td></tr>
+<tr><td>1</td><td>既定値は実装ジョブ2時間、アイデア出し30分。</td><td>実装ジョブは大きなタスクで長時間かかり得るため、誤打ち切りを避ける余裕を持たせた。<br>アイデア出しは読み取り専用の調査のみのため短めにした。<br>いずれも<code>.env</code>で変更可能。</td></tr>
+<tr><td>2</td><td>打ち切り処理を<code>worker/time_limit.py</code>に共通化した。</td><td>実装ジョブとアイデア出しジョブで同じ処理になるため。<br><code>worker/main.py</code>が<code>idea_runner</code>をimportしており、どちらかに置くと依存が逆転するため。</td></tr>
+<tr><td>3</td><td>専用例外<code>ClaudeTimeoutError</code>を設けた。</td><td>他の失敗（failed）・利用上限（rate_limited）と区別して状態を決めるため。</td></tr>
+<tr><td>4</td><td>実装ジョブのイベント種別は<code>error</code>とした。</td><td>既存のエラー表示や<code>core/idea_context.py</code>のエラー集計にそのまま乗せるため。</td></tr>
+<tr><td>5</td><td>アイデア出しジョブはイベント記録を行わず、エラーメッセージとログのみ残す。</td><td>アイデア出しジョブには実行イベントの仕組みが無いため。</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<p><code>./.venv/Scripts/python.exe -m pytest -q</code> → <span class="ok">549 passed</span>（既存544＋追加5）</p>
-<p>ワーカー・サーバーの起動確認は未実施（ガイドラインに従い人間に依頼）。</p>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code> → <span class="ok">554 passed</span></p>
+<p>ワーカー起動・実Claudeでの打ち切り確認は未実施（ガイドラインに従い人間に依頼）。</p>
 
-<h2>6. 残課題・レビュー観点</h2>
+<h2>6. 残課題・リスク・レビュー観点</h2>
 <ul>
-<li>update_subtask_titleは以前と同様、Projectが存在しない場合の判定は行っていない（既存の<code>_get_subtask_and_project</code>の挙動を踏襲）。</li>
-<li>ワーカー再起動後、実装ジョブ・アイデア出しジョブのハートビートが継続して更新されることを確認してほしい。</li>
+<li>打ち切り時、Claude Agent SDKの非同期ジェネレータはキャンセルされるが、Claude CLIの子プロセスが確実に終了するかは実機未確認。</li>
+<li>打ち切った実装ジョブはセッションIDを保存しないため、再実行時は前回より古いセッションから再開される。</li>
+<li>上限超過のneeds_attentionはworktreeに途中の変更が残る前提。再実行前にworktreeの状態を確認してほしい。</li>
+<li>既定値（2時間・30分）が運用に合っているか確認してほしい。</li>
 </ul>
 </body>
 </html>
