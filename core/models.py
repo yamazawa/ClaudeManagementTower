@@ -17,6 +17,8 @@ class Project(Base):
 
     display_nameは画面の表示名（日本語名）、descriptionは何をするPJかの説明。
     いずれも空の場合は、表示名をcore/repo_catalog.pyの辞書または登録名で補う。
+    removedは一覧から削除済みかを表す。
+    履歴（MR・CLI・Idea等）を残すため、行は消さずに一覧・同期の対象から外す。
     """
 
     __tablename__ = "projects"
@@ -28,6 +30,7 @@ class Project(Base):
     default_branch: Mapped[str]
     display_name: Mapped[str] = mapped_column(default="")
     description: Mapped[str] = mapped_column(default="")
+    removed: Mapped[bool] = mapped_column(default=False)
     created_at: Mapped[datetime] = mapped_column(default=_now)
 
 
