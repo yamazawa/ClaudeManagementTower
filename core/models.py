@@ -13,6 +13,12 @@ def _now() -> datetime:
 
 
 class Project(Base):
+    """リポジトリ一覧の項目
+
+    display_nameは画面の表示名（日本語名）、descriptionは何をするPJかの説明。
+    いずれも空の場合は、表示名をcore/repo_catalog.pyの辞書または登録名で補う。
+    """
+
     __tablename__ = "projects"
 
     id: Mapped[int] = mapped_column(primary_key=True)
@@ -20,6 +26,8 @@ class Project(Base):
     github_repo: Mapped[str]
     repo_path: Mapped[str]
     default_branch: Mapped[str]
+    display_name: Mapped[str] = mapped_column(default="")
+    description: Mapped[str] = mapped_column(default="")
     created_at: Mapped[datetime] = mapped_column(default=_now)
 
 

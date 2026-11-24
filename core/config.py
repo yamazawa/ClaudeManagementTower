@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     rate_limit_retry_delay_seconds: int = 600
     issue_list_cache_ttl_seconds: float = 45.0
     log_level: str = "INFO"
+    # リポジトリ一覧から追加するリポジトリの作成先フォルダ・GitHubの所有者・公開範囲
+    # 所有者が空の場合はself_repoの所有者とする
+    new_repo_base_dir: str = "C:/git"
+    new_repo_owner: str = ""
+    new_repo_visibility: str = "private"
 
 
 settings = Settings()
