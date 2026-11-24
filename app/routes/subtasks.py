@@ -6,6 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from app.routes import error_messages as messages
 from core.attachments import (
     AttachmentError,
     delete_attachment,
@@ -274,7 +275,7 @@ def link_pending_subtask(payload: LinkPendingSubtaskRequest, background_tasks: B
     PR本文へのIssue番号の記載は、応答を待たせないよう応答後に行う。
     """
     if not payload.branch_name.startswith(f"{PENDING_BRANCH_PREFIX}-"):
-        raise HTTPException(status_code=400, detail="Issue未紐付けのMRではありません")
+        raise HTTPException(status_code=400, detail=messages.NOT_UNLINKED_MR)
     with SessionLocal() as session:
         project = _get_project_or_404(session, payload.project_id)
         subtask = _find_or_add_subtask(
@@ -373,7 +374,7 @@ def close_subtask(subtask_id: int):
     with SessionLocal() as session:
         subtask, project = _get_subtask_and_project(session, subtask_id)
         if subtask.lifecycle_state not in LifecycleState.OPEN_STATES:
-            raise HTTPException(status_code=409, detail="未解決のMRではありません")
+            raise HTTPException(status_code=409, detail=messages.NOT_UNRESOLVED_MR)
         try:
             if subtask.github_pr_number is not None:
                 close_pr(project.github_repo, subtask.github_pr_number)
@@ -400,7 +401,7 @@ def reopen_subtask(subtask_id: int):
     with SessionLocal() as session:
         subtask, project = _get_subtask_and_project(session, subtask_id)
         if subtask.lifecycle_state != LifecycleState.CANCELED:
-            raise HTTPException(status_code=409, detail="クローズ済のMRではありません")
+            raise HTTPException(status_code=409, detail=messages.NOT_CLOSED_MR)
         try:
             new_state = _reopen_pr_and_get_state(project, subtask.github_pr_number)
         except GitHubClientError as exc:
@@ -426,11 +427,11 @@ def _has_active_job(session, subtask_id: int) -> bool:
 
 def _ensure_mergeable(session, subtask: Subtask) -> None:
     if subtask.lifecycle_state != LifecycleState.RESOLVED:
-        raise HTTPException(status_code=409, detail="ResolvedのMRではありません")
+        raise HTTPException(status_code=409, detail=messages.NOT_RESOLVED_MR)
     if subtask.github_pr_number is None:
-        raise HTTPException(status_code=409, detail="PRが作成されていません")
+        raise HTTPException(status_code=409, detail=messages.PR_NOT_CREATED)
     if _has_active_job(session, subtask.id):
-        raise HTTPException(status_code=409, detail="実装の実行中はマージできません")
+        raise HTTPException(status_code=409, detail=messages.MERGE_BLOCKED_BY_ACTIVE_JOB)
 
 
 @router.post("/{subtask_id}/merge")
@@ -445,7 +446,7 @@ def merge_subtask(subtask_id: int):
         subtask, _ = _get_subtask_and_project(session, subtask_id)
         _ensure_mergeable(session, subtask)
         if find_active_merge(session, subtask.id) is not None:
-            raise HTTPException(status_code=409, detail="マージ待ちに登録済です")
+            raise HTTPException(status_code=409, detail=messages.ALREADY_IN_MERGE_QUEUE)
         job = enqueue_merge(session, subtask.id)
         return {
             "id": subtask.id,
@@ -485,7 +486,7 @@ async def upload_attachment(subtask_id: int, file: UploadFile):
     """
     worktree_path = _subtask_worktree_path(subtask_id)
     if not Path(worktree_path).is_dir():
-        raise HTTPException(status_code=409, detail="worktreeがありません")
+        raise HTTPException(status_code=409, detail=messages.WORKTREE_MISSING)
     try:
         return save_attachment(worktree_path, file.filename or "", await file.read())
     except AttachmentError as exc:
@@ -517,7 +518,7 @@ def _ensure_no_active_job(session, subtask_id: int) -> None:
         return
     raise HTTPException(
         status_code=409,
-        detail={"message": "実装の実行中・実行待ちです", "job_id": job.id, "status": job.status},
+        detail={"message": messages.JOB_ACTIVE, "job_id": job.id, "status": job.status},
     )
 
 
@@ -531,7 +532,7 @@ def execute_subtask(subtask_id: int, payload: ExecuteSubtaskRequest | None = Non
         subtask = _get_subtask_or_404(session, subtask_id)
 
         if find_active_merge(session, subtask_id) is not None:
-            raise HTTPException(status_code=409, detail="マージ待ちのMRは実装できません")
+            raise HTTPException(status_code=409, detail=messages.EXECUTE_BLOCKED_BY_MERGE_QUEUE)
         _ensure_no_active_job(session, subtask_id)
 
         if payload is not None and payload.instruction:

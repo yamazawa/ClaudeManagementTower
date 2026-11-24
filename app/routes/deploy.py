@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
 
-from app.routes.system import NOT_SUPERVISED_DETAIL
+from app.routes import error_messages as messages
 from core.db import SessionLocal
 from core.deploy import (
     DeployAlreadyRunning,
@@ -52,7 +52,7 @@ def deploy_project(project_id: int) -> dict:
     steps = _load_steps_or_error(repo_path)
     restarts = restart_commands(steps)
     if restarts and not is_supervised():
-        raise HTTPException(status_code=409, detail=NOT_SUPERVISED_DETAIL)
+        raise HTTPException(status_code=409, detail=messages.NOT_SUPERVISED)
     try:
         start_deploy(project_id, repo_path, branch, steps)
     except DeployAlreadyRunning as exc:
@@ -84,5 +84,5 @@ def get_deploy_pending(project_id: int) -> dict:
 def get_deploy_result(project_id: int) -> dict:
     result = read_result(project_id)
     if result is None:
-        raise HTTPException(status_code=404, detail="デプロイの実行結果がありません")
+        raise HTTPException(status_code=404, detail=messages.DEPLOY_RESULT_NOT_FOUND)
     return result

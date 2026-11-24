@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import case, func
 
+from app.routes import error_messages as messages
 from core.db import SessionLocal
 from core.deploy import is_deploy_defined, is_deploy_running
 from core.github_client import (
@@ -264,7 +265,7 @@ def close_project_issue(project_id: int, number: int):
             .count()
         )
         if unresolved:
-            raise HTTPException(status_code=409, detail="未解決のMRが残っています")
+            raise HTTPException(status_code=409, detail=messages.UNRESOLVED_MR_REMAINS)
         try:
             close_issue(project.github_repo, number)
         except GitHubClientError as exc:
