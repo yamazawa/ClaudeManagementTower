@@ -23,6 +23,12 @@ from core.merge_queue import latest_merge_summary
 from core.models import ExecutionJob, Project, Report, Subtask
 from core.mr_naming import compose_mr_title, split_mr_title
 from core.repo_catalog import describe_repo
+from core.repo_setup import (
+    RepoSetupError,
+    RepoValidationError,
+    create_repository,
+    normalize_new_repo,
+)
 
 router = APIRouter(prefix="/api/projects")
 
@@ -71,6 +77,32 @@ def get_projects():
             }
             for p in projects
         ]
+
+
+class CreateProjectRequest(BaseModel):
+    # 英語名（フォルダ名・GitHubのリポジトリ名）
+    name: str
+    # 日本語名（画面の表示名）
+    display_name: str
+    # 何をするPJか
+    description: str
+
+
+@router.post("")
+def create_project(payload: CreateProjectRequest):
+    """リポジトリを作成してリポジトリ一覧に追加する
+
+    初期設定のIssue・MRのマージとIssueのクローズまで行う。
+    登録後に初期設定で失敗した場合も、登録したリポジトリIDを返して画面で選択できるようにする。
+    """
+    try:
+        repo = normalize_new_repo(payload.name, payload.display_name, payload.description)
+        return create_repository(repo)
+    except RepoValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except RepoSetupError as exc:
+        detail = {"message": str(exc), "project_id": exc.project_id}
+        raise HTTPException(status_code=500, detail=detail) from exc
 
 
 @router.get("/{project_id}/issues")

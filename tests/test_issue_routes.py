@@ -7,6 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from app.routes import projects
 from core.db import init_db, make_engine
 from core.models import Project, Subtask
+from core.repo_setup import NewRepo, RepoSetupError
 
 
 @pytest.fixture
@@ -53,6 +54,36 @@ def test_get_projects_uses_registered_display_name_and_description(session_facto
     [project] = projects.get_projects()
 
     assert (project["display_name"], project["description"]) == ("日本語名", "説明")
+
+
+def test_create_project_passes_normalized_repo(monkeypatch):
+    calls = []
+    monkeypatch.setattr(projects, "create_repository", lambda repo: calls.append(repo) or {"project_id": 3})
+
+    result = projects.create_project(projects.CreateProjectRequest(name=" a ", display_name="名", description="説明"))
+
+    assert result == {"project_id": 3}
+    assert calls == [NewRepo("a", "名", "説明")]
+
+
+def test_create_project_rejects_invalid_name_with_400():
+    with pytest.raises(HTTPException) as exc_info:
+        projects.create_project(projects.CreateProjectRequest(name="日本語", display_name="名", description="説明"))
+
+    assert exc_info.value.status_code == 400
+
+
+def test_create_project_returns_registered_id_on_setup_failure(monkeypatch):
+    def fail(repo):
+        raise RepoSetupError("初期設定に失敗", project_id=5)
+
+    monkeypatch.setattr(projects, "create_repository", fail)
+
+    with pytest.raises(HTTPException) as exc_info:
+        projects.create_project(projects.CreateProjectRequest(name="a", display_name="名", description="説明"))
+
+    assert exc_info.value.status_code == 500
+    assert exc_info.value.detail == {"message": "初期設定に失敗", "project_id": 5}
 
 
 def test_get_issues_passes_state(session_factory, monkeypatch):
