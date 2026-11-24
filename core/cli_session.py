@@ -25,7 +25,8 @@ from claude_agent_sdk import (
 )
 from sqlalchemy.orm import sessionmaker
 
-from core.claude_client import CLI_DIALOG_DENIED_TOOLS, CLI_DIALOG_POLICY_PROMPT, run_claude
+from core.claude_client import CLI_DIALOG_DENIED_TOOLS, run_claude
+from core.claude_prompts import CLI_DIALOG_POLICY_PROMPT
 from core.cli_attachments import build_cli_prompt, resolve_cli_attachments
 from core.db import SessionLocal
 from core.models import CliMessage, CliSession, Project

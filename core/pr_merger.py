@@ -8,7 +8,8 @@ import asyncio
 import time
 from pathlib import Path
 
-from core.claude_client import CONFLICT_RESOLUTION_POLICY_PROMPT, run_claude
+from core.claude_client import run_claude
+from core.claude_prompts import CONFLICT_RESOLUTION_POLICY_PROMPT
 from core.git_client import (
     commit_merge,
     is_merge_in_progress,
