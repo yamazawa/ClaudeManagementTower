@@ -28,7 +28,8 @@ DANGEROUS_COMMAND_PATTERNS = [
 ]
 
 DIRECTORY_TRAVERSAL_PATTERN = re.compile(r"(?:^|[\s\"'])\.\.(?:[\\/]|$|[\s\"'])")
-WINDOWS_ABS_PATH_PATTERN = re.compile(r"[A-Za-z]:[\\/]")
+# 英数字に続く場合（URLのスキーム等）はドライブ指定とみなさない
+WINDOWS_ABS_PATH_PATTERN = re.compile(r"(?<![A-Za-z0-9])[A-Za-z]:[\\/]")
 
 # パスを受け取るツール入力のキー
 PATH_INPUT_KEYS = ["file_path", "path", "notebook_path"]
