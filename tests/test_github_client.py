@@ -298,9 +298,44 @@ def test_run_gh_does_not_retry_permanent_error(monkeypatch, sleeps):
 )
 def test_non_idempotent_operations_are_not_retried(monkeypatch, sleeps, action):
     calls = []
-    monkeypatch.setattr(github_client.subprocess, "run", _fake_run(calls, 1, TLS_ERROR))
+    monkeypatch.setattr(github_client.subprocess, "run", _fake_run(calls, 1, "HTTP 502: Bad Gateway"))
 
-    with pytest.raises(GitHubClientError, match="TLS handshake timeout"):
+    with pytest.raises(GitHubClientError, match="HTTP 502"):
         action()
     assert len(calls) == 1
     assert sleeps == []
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        lambda: github_client.create_issue("owner/repo", "t", "b"),
+        lambda: github_client.create_draft_pr("owner/repo", "master", "head", "t", "b"),
+        lambda: github_client.merge_pull_request("owner/repo", 7),
+    ],
+)
+def test_non_idempotent_operations_retry_unsent_error(monkeypatch, sleeps, action):
+    calls = []
+    url = "https://github.com/owner/repo/pull/7"
+    results = [(1, TLS_ERROR), (0, "")]
+
+    def run(args, **kwargs):
+        calls.append(args)
+        returncode, stderr = results[len(calls) - 1]
+        return subprocess.CompletedProcess(args, returncode, stdout=url, stderr=stderr)
+
+    monkeypatch.setattr(github_client.subprocess, "run", run)
+
+    action()
+    assert len(calls) == 2
+    assert sleeps == [github_client.GH_RETRY_INTERVAL_SECONDS]
+
+
+def test_non_idempotent_operation_gives_up_unsent_error(monkeypatch, sleeps):
+    calls = []
+    results = [(1, TLS_ERROR)] * github_client.GH_MAX_ATTEMPTS
+    monkeypatch.setattr(github_client.subprocess, "run", _sequence_run(calls, results))
+
+    with pytest.raises(GitHubClientError, match="TLS handshake timeout"):
+        github_client.merge_pull_request("owner/repo", 7)
+    assert len(calls) == github_client.GH_MAX_ATTEMPTS

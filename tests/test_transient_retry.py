@@ -56,6 +56,19 @@ def test_call_with_retry_does_not_retry_other_errors(sleeps):
     assert sleeps == []
 
 
+class _NarrowError(TransientError):
+    pass
+
+
+def test_call_with_retry_retries_only_retry_on_errors(sleeps):
+    operation, calls = _operation([_NarrowError("narrow"), TransientError("wide"), "ok"])
+
+    with pytest.raises(TransientError, match="wide"):
+        call_with_retry(operation, 3, 2, retry_on=_NarrowError)
+    assert len(calls) == 2
+    assert sleeps == [2]
+
+
 def test_call_with_retry_single_attempt_does_not_retry(sleeps):
     operation, calls = _operation([TransientError("e"), "ok"])
 
