@@ -4,9 +4,10 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from core import github_client
+from core import github_client, transient_retry
 from core.github_client import (
     GitHubClientError,
+    create_repo_from_local,
     edit_issue_title,
     edit_pr_body,
     edit_pr_title,
@@ -34,6 +35,22 @@ def test_edit_issue_title_runs_gh_issue_edit(monkeypatch):
 
     assert calls == [
         ["gh", "issue", "edit", "12", "--repo", "owner/repo", "--title", "新しいタイトル"]
+    ]
+
+
+def test_create_repo_from_local_runs_gh_repo_create_without_retry(monkeypatch):
+    calls = []
+    monkeypatch.setattr(github_client.subprocess, "run", _fake_run(calls, 1, "HTTP 502"))
+
+    with pytest.raises(GitHubClientError):
+        create_repo_from_local("owner/new", "C:/git/new", "説明", "private")
+
+    assert calls == [
+        [
+            "gh", "repo", "create", "owner/new", "--private",
+            "--source", "C:/git/new", "--remote", "origin", "--push",
+            "--description", "説明",
+        ]
     ]
 
 
@@ -217,7 +234,7 @@ def _sequence_run(calls: list, results: list[tuple[int, str]]):
 @pytest.fixture
 def sleeps(monkeypatch):
     recorded = []
-    monkeypatch.setattr(github_client.time, "sleep", recorded.append)
+    monkeypatch.setattr(transient_retry.time, "sleep", recorded.append)
     return recorded
 
 

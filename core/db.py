@@ -34,6 +34,8 @@ ADDED_COLUMNS = [
     ("cli_sessions", "title", "VARCHAR NOT NULL DEFAULT ''"),
     ("cli_sessions", "state", "VARCHAR NOT NULL DEFAULT 'open'"),
     ("cli_messages", "attachments", "VARCHAR NOT NULL DEFAULT '[]'"),
+    ("projects", "display_name", "VARCHAR NOT NULL DEFAULT ''"),
+    ("projects", "description", "VARCHAR NOT NULL DEFAULT ''"),
 ]
 
 

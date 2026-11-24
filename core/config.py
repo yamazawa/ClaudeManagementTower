@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     worker_poll_interval_seconds: int = 3
     job_heartbeat_interval_seconds: int = 5
     job_stale_timeout_seconds: int = 60
+    # Claudeが応答しなくなった場合にワーカーを解放するための上限
+    job_max_runtime_seconds: int = 7200
+    idea_job_max_runtime_seconds: int = 1800
     worker_offline_timeout_seconds: int = 30
     worker_respawn_delay_seconds: float = 5.0
     database_path: str = "claude_tower.db"
@@ -30,6 +33,11 @@ class Settings(BaseSettings):
     rate_limit_retry_delay_seconds: int = 600
     issue_list_cache_ttl_seconds: float = 45.0
     log_level: str = "INFO"
+    # リポジトリ一覧から追加するリポジトリの作成先フォルダ・GitHubの所有者・公開範囲
+    # 所有者が空の場合はself_repoの所有者とする
+    new_repo_base_dir: str = "C:/git"
+    new_repo_owner: str = ""
+    new_repo_visibility: str = "private"
 
 
 settings = Settings()

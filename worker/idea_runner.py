@@ -4,7 +4,6 @@
 GitHubへの書き込み・コミット・pushは行わない。
 """
 
-import asyncio
 import logging
 from collections.abc import Callable
 from functools import partial
@@ -21,6 +20,7 @@ from core.job_queue import WorkerState, set_worker_state
 from core.models import Project
 from core.rate_limits import is_rate_limit_error, record_rate_limit
 from worker.heartbeat import run_with_heartbeat
+from worker.time_limit import run_with_time_limit
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +51,9 @@ def _repo_path(project_id: int) -> str:
 
 def _execute(idea_job_id: int, project_id: int, focus: str, claude_runner: Callable) -> None:
     prompt = build_idea_prompt(project_id, settings.idea_max_proposals, settings.idea_history_limit, focus)
-    session_id, result_text = asyncio.run(claude_runner(prompt, _repo_path(project_id)))
+    session_id, result_text = run_with_time_limit(
+        claude_runner(prompt, _repo_path(project_id)), settings.idea_job_max_runtime_seconds
+    )
     try:
         proposals = parse_proposals(result_text or "", settings.idea_max_proposals)
     except IdeaParseError as exc:
@@ -68,6 +70,7 @@ def process_idea_job(job: dict, worker_id: int, claude_runner: Callable = _run_c
 
     実行中はワーカーを占有する。
     失敗はジョブのエラーとして残し、ワーカーは次のジョブに進む。
+    最大実行時間を超えた場合も、打ち切った理由を残してfailedにする。
     """
     idea_job_id = job["idea_job_id"]
     logger.info("idea job %s (project %s) を実行開始", idea_job_id, job["project_id"])

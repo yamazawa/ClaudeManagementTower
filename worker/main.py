@@ -1,4 +1,3 @@
-import asyncio
 import logging
 import os
 import time
@@ -35,6 +34,7 @@ from core.rate_limits import blocked_until, is_rate_limit_error, record_rate_lim
 from core.reports import save_report
 from worker.heartbeat import run_with_heartbeat
 from worker.idea_runner import process_idea_job
+from worker.time_limit import ClaudeTimeoutError, run_with_time_limit
 
 # python -m worker.main で起動すると__name__が__main__になるため、名前を固定する
 logger = logging.getLogger("worker.main")
@@ -66,7 +66,10 @@ def _run_claude_for_job(
         if isinstance(message, RateLimitEvent):
             record_rate_limit(message.rate_limit_info)
 
-    return asyncio.run(run_claude(instruction, worktree_path, resume=resume, on_message=on_message))
+    return run_with_time_limit(
+        run_claude(instruction, worktree_path, resume=resume, on_message=on_message),
+        settings.job_max_runtime_seconds,
+    )
 
 
 def _finalize_success(
@@ -141,11 +144,16 @@ def process_job(job: dict, worker_id: int) -> None:
 
     前処理を含む失敗は、実際のエラー内容をジョブに記録する。
     Claudeの利用上限による失敗は、failedと区別してrate_limitedにする。
+    最大実行時間を超えた場合は、作業途中の結果が残るためneeds_attentionにする。
     """
     job_id = job["job_id"]
     logger.info("job %s (subtask %s) を実行開始", job_id, job["subtask_id"])
     try:
         _start_job(job_id, job["subtask_id"], worker_id)
+    except ClaudeTimeoutError as exc:
+        record_event(job_id, event_type="error", content=str(exc))
+        finish_job(job_id, status=ExecutionJobStatus.NEEDS_ATTENTION, exit_code=1, error_message=str(exc))
+        logger.warning("job %s 要確認（最大実行時間超過）: %s", job_id, exc)
     except Exception as exc:  # noqa: BLE001
         record_event(job_id, event_type="error", content=str(exc))
         status = (

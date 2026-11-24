@@ -28,6 +28,7 @@
   <section id="project-list" aria-label="リポジトリ一覧">
     <div class="section-title-row">
       <h2>リポジトリ一覧</h2>
+      <button type="button" id="project-create-button" class="subtask-action-button" title="リポジトリを作成して一覧に追加します">Add</button>
     </div>
     <ul id="project-list-items"></ul>
   </section>
@@ -174,6 +175,26 @@
   </div>
 </dialog>
 
+<dialog id="project-create-dialog" class="deploy-dialog project-create-dialog" aria-label="リポジトリの追加">
+  <form id="project-create-form" method="dialog">
+    <p class="deploy-dialog-message">リポジトリを作成して一覧に追加します。<br />初期設定のIssue・MRのマージまで自動で行います。</p>
+    <label class="project-create-field">英語名（フォルダ名・GitHubのリポジトリ名）
+      <input type="text" name="name" pattern="[A-Za-z0-9][A-Za-z0-9._\-]*" maxlength="100" required />
+    </label>
+    <label class="project-create-field">日本語名
+      <input type="text" name="display_name" maxlength="100" required />
+    </label>
+    <label class="project-create-field">何をするPJか
+      <textarea name="description" rows="3" required></textarea>
+    </label>
+    <p id="project-create-status" class="project-create-status empty" role="status"></p>
+    <div class="deploy-dialog-actions">
+      <button type="button" id="project-create-cancel" class="subtask-action-button">キャンセル</button>
+      <button type="submit" id="project-create-confirm" class="subtask-action-button primary">Create</button>
+    </div>
+  </form>
+</dialog>
+
 <script src="/static/image_editor.js"></script>
 <script src="/static/markdown_view.js"></script>
 <script src="/static/common.js"></script>
@@ -186,6 +207,7 @@
 <script src="/static/cli_view.js"></script>
 <script src="/static/idea_view.js"></script>
 <script src="/static/repo_items.js"></script>
+<script src="/static/project_create.js"></script>
 <script src="/static/app.js"></script>
 </body>
 </html>
