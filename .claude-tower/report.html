@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>作業レポート: subtasksルートの404判定とワーカーのハートビート処理の重複をまとめるー①</title>
+<title>作業レポート: 削除済みプロジェクト参照時のAttributeError解消と404判定の共通化ー①</title>
 <style>
 body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; } h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; margin-top: 1.6em; }
@@ -12,50 +12,51 @@ th { background: #f0f0f0; } code { background: #f4f4f4; padding: 0 3px; }
 </style>
 </head>
 <body>
-<h1>作業レポート: subtasksルートの404判定とワーカーのハートビート処理の重複をまとめるー①</h1>
+<h1>作業レポート: 削除済みプロジェクト参照時のAttributeError解消と404判定の共通化ー①</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#240 [IdeaMan] subtasksルートの404判定とワーカーのハートビート処理の重複をまとめる</td></tr>
-<tr><th>サブタスク</th><td>subtasksルートの404判定とワーカーのハートビート処理の重複をまとめるー①</td></tr>
-<tr><th>ブランチ</th><td><code>issue-240-subtask-1</code>（push済み）</td></tr>
-<tr><th>指示</th><td>subtasksルートの404判定とワーカーのハートビート処理の重複をまとめる</td></tr>
+<tr><th>Issue</th><td>#255 [IdeaMan] 削除済みプロジェクトを参照したときのAttributeErrorをなくし、404判定をルート間で共通化する</td></tr>
+<tr><th>サブタスク</th><td>削除済みプロジェクトを参照したときのAttributeErrorをなくし、404判定をルート間で共通化するー①</td></tr>
+<tr><th>ブランチ</th><td><code>issue-255-4b8f2e22-subtask-1</code></td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
 <p class="ok">成功</p>
-<p>Issueに挙げられた重複箇所をすべて共通関数経由に置き換えた。<br>振る舞い（404の詳細文言・ハートビート間隔）は変更していない。</p>
+<p>提案の詳細5項目をすべて実装した。<br>全テスト（556件）が成功した。</p>
 
 <h2>3. 変更内容</h2>
 <table>
 <tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td><code>worker/heartbeat.py</code>（新規）</td><td><code>run_with_heartbeat(heartbeat, action)</code>を追加。<br>ハートビート関数を引数で受け取る。</td></tr>
-<tr><td>2</td><td><code>worker/main.py</code></td><td><code>_run_with_heartbeat</code>を削除し、<code>run_with_heartbeat(partial(heartbeat_job, ...), ...)</code>に置換。<br>不要になった<code>threading</code>・<code>Callable</code>のimportを削除。</td></tr>
-<tr><td>3</td><td><code>worker/idea_runner.py</code></td><td><code>_with_heartbeat</code>を削除し、<code>run_with_heartbeat(partial(heartbeat_idea_job, ...), ...)</code>に置換。</td></tr>
-<tr><td>4</td><td><code>app/routes/subtasks.py</code></td><td><code>_get_subtask_or_404</code>を追加し、<code>_get_subtask_and_project</code>もこれを使う形にした。<br>create_subtask→<code>_get_project_or_404</code>、update_subtask_title→<code>_get_subtask_and_project</code>、_subtask_worktree_path・execute_subtask→<code>_get_subtask_or_404</code>。</td></tr>
-<tr><td>5</td><td><code>tests/test_worker_heartbeat.py</code>（新規）</td><td>ハートビートが実行中に呼ばれること、例外時に停止することのテスト。</td></tr>
-<tr><td>6</td><td><code>tests/test_worker_main.py</code></td><td>monkeypatch対象名を<code>run_with_heartbeat</code>に変更。</td></tr>
-<tr><td>7</td><td><code>tests/test_subtask_routes.py</code></td><td>create_subtask・update_subtask_title・execute_subtaskの404テストを追加。</td></tr>
+<tr><td>1</td><td><code>app/routes/lookups.py</code>（新規）</td><td><code>get_project_or_404</code>・<code>get_subtask_or_404</code>・<code>get_subtask_and_project_or_404</code>を追加。</td></tr>
+<tr><td>2</td><td><code>app/routes/projects.py</code></td><td>ローカルの<code>_get_project_or_404</code>とget_issues内のインライン判定を共通関数に置換。</td></tr>
+<tr><td>3</td><td><code>app/routes/deploy.py</code></td><td><code>_get_project</code>内の判定を共通関数に置換。</td></tr>
+<tr><td>4</td><td><code>app/routes/subtasks.py</code></td><td><code>_get_project_or_404</code>・<code>_get_subtask_or_404</code>・<code>_get_subtask_and_project</code>を削除し共通関数に置換。<br>プロジェクトが無いサブタスクも404になる。</td></tr>
+<tr><td>5</td><td><code>app/routes/ideas.py</code></td><td><code>_github_repo</code>を共通関数経由にし404化。<br><code>_create_issue_for</code>でGitHubClientError以外の例外も<code>release_claim</code>して再送出。</td></tr>
+<tr><td>6</td><td><code>worker/idea_runner.py</code></td><td><code>_repo_path</code>でプロジェクトが無い場合に「プロジェクト(id=N)が見つかりません」でRuntimeError。</td></tr>
+<tr><td>7</td><td><code>tests/test_route_lookups.py</code>（新規）ほか</td><td>共通関数・サブタスククローズの404、承認時の404と承認中解除、想定外例外での承認中解除、<code>_repo_path</code>のメッセージのテストを追加。</td></tr>
 </table>
-<p>コミット: cb4a9da（ハートビート共通化）、21081e1（404判定共通化）</p>
+<p>コミット: 4d63b4a（共通化）・95853bc（404判定）・a124d2d（アイデア出し）・d61d06a（承認）・テスト追加</p>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>共通関数は新規モジュール<code>worker/heartbeat.py</code>に置く。</td><td><code>worker/main.py</code>が<code>idea_runner</code>をimportしており、どちらかに置くと依存が循環・逆転するため。</td></tr>
-<tr><td>2</td><td>ハートビート関数は引数なしのcallableとし、呼び出し側で<code>functools.partial</code>で束縛する。</td><td>ジョブIDの種類（実装ジョブ／アイデアジョブ）に依存しない汎用的な形にするため。</td></tr>
-<tr><td>3</td><td>execute_subtask・_subtask_worktree_pathはProjectを取得しない<code>_get_subtask_or_404</code>を使う。</td><td>Projectを使わない箇所で不要なDB取得を増やさないため。Issueでも選択肢として挙げられていた。</td></tr>
-<tr><td>4</td><td>補助関数の定義位置は移動しない。</td><td>実行時解決のため動作に影響せず、差分を最小にするため。</td></tr>
+<tr><td>1</td><td>共通関数の置き場所を<code>app/routes/lookups.py</code>とした。</td><td>HTTPExceptionを送出するためルート層に置く。<br>既存の<code>repo_items.py</code>と同じくルート共通モジュールとして並べる。</td></tr>
+<tr><td>2</td><td>関数名は先頭アンダースコアなしの公開名にした。</td><td>複数モジュールから参照するため。</td></tr>
+<tr><td>3</td><td><code>_create_issue_for</code>の想定外例外は<code>except Exception</code>で解除後そのまま再送出した。</td><td>404のHTTPExceptionはそのまま返し、それ以外はFastAPIの500処理に任せる。<br>例外内容を握りつぶさない。</td></tr>
+<tr><td>4</td><td><code>merge_subtask</code>もプロジェクトが無い場合は404になる。</td><td>共通関数への置換の結果。<br>プロジェクトが無いとマージ処理側でも失敗するため、受付時点で拒否する方が妥当と判断。</td></tr>
+<tr><td>5</td><td>route外の<code>core/merge_queue.py:136</code>等の同種の参照は対象外とした。</td><td>提案の範囲外のため。</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<p><code>./.venv/Scripts/python.exe -m pytest -q</code> → <span class="ok">549 passed</span>（既存544＋追加5）</p>
-<p>ワーカー・サーバーの起動確認は未実施（ガイドラインに従い人間に依頼）。</p>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code> → <span class="ok">556 passed</span></p>
+<p>起動しての動作確認は未実施（ガイドラインによりビルド・テストまで）。</p>
 
 <h2>6. 残課題・レビュー観点</h2>
 <ul>
-<li>update_subtask_titleは以前と同様、Projectが存在しない場合の判定は行っていない（既存の<code>_get_subtask_and_project</code>の挙動を踏襲）。</li>
-<li>ワーカー再起動後、実装ジョブ・アイデア出しジョブのハートビートが継続して更新されることを確認してほしい。</li>
+<li><code>core/merge_queue.py:136</code>・<code>core/idea_context.py:137</code>などcore層にも取得結果を確認しない参照が残る可能性がある。</li>
+<li>アイデア出しジョブでは<code>build_idea_prompt</code>（<code>core/idea_context.py:137-140</code>）が<code>_repo_path</code>より先に呼ばれる。<br>削除済みプロジェクトの場合はそちらでAttributeErrorになり、<code>_repo_path</code>のメッセージは現状の流れでは出ない。<br>core層の修正は提案範囲外のため、別Issueでの対応を推奨する。</li>
+<li><code>merge_subtask</code>の404化（判断No.4）が意図に沿うか確認してほしい。</li>
 </ul>
 </body>
 </html>
