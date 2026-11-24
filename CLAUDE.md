@@ -40,8 +40,8 @@ Read・Glob・Grepツールによるworktree外の参照は許可されている
 秘密鍵・`.env`・認証情報ファイル等は、場所を問わず参照・書き込みが拒否される。\
 ルールの詳細は`core/claude_access_rules.py`を参照する。
 
-Claude管理塔の自律実行機能（サブタスク実行経由のGitHub自動操作）について、\
-新規実装・未検証の変更は引き続き `yamazawa/claude-tower-test-repo` で検証する。
+検証用リポジトリ（`yamazawa/claude-tower-test-repo`）は削除した（2026-11-25）。\
+代替の検証用リポジトリを用意するまで、検証用リポジトリでの動作確認は実施しない。
 
 本プロジェクト自身のリポジトリ（`yamazawa/ClaudeManagementTower`）への\
 自律実行は、以下の安全対策が完了したため解禁する（2026-11-17判断）。
