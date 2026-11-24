@@ -6,7 +6,6 @@ Claude管理塔の画面で使うリポジトリ表示名を定義する。
 
 REPO_DISPLAY_NAMES: dict[str, str] = {
     "yamazawa/ClaudeManagementTower": "Claude監視塔",
-    "yamazawa/claude-tower-test-repo": "検証用リポジトリ",
 }
 
 
