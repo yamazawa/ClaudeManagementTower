@@ -65,7 +65,7 @@ def _run_failing_job(monkeypatch, message: str) -> list:
     subtask = SimpleNamespace(instruction="指示")
     monkeypatch.setattr(worker_main, "_load_subtask_and_project", lambda subtask_id: (subtask, object()))
     monkeypatch.setattr(worker_main, "record_event", lambda *a, **k: None)
-    monkeypatch.setattr(worker_main, "_run_with_heartbeat", failing)
+    monkeypatch.setattr(worker_main, "run_with_heartbeat", failing)
     monkeypatch.setattr(
         worker_main,
         "finish_job",
@@ -107,7 +107,7 @@ def _run_job_with_rows(monkeypatch, rows: dict) -> list:
     monkeypatch.setattr(worker_main, "set_worker_state", lambda *a, **k: True)
     monkeypatch.setattr(worker_main, "SessionLocal", lambda: _LookupSession(rows))
     monkeypatch.setattr(worker_main, "record_event", lambda *a, **k: None)
-    monkeypatch.setattr(worker_main, "_run_with_heartbeat", lambda *a: pytest.fail("not expected"))
+    monkeypatch.setattr(worker_main, "run_with_heartbeat", lambda *a: pytest.fail("not expected"))
     monkeypatch.setattr(
         worker_main,
         "finish_job",

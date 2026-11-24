@@ -1,10 +1,9 @@
 import asyncio
 import logging
 import os
-import threading
 import time
-from collections.abc import Callable
 from datetime import datetime
+from functools import partial
 
 from claude_agent_sdk import RateLimitEvent
 
@@ -34,6 +33,7 @@ from core.job_queue import (
 from core.models import ExecutionJob, Project, Subtask
 from core.rate_limits import blocked_until, is_rate_limit_error, record_rate_limit
 from core.reports import save_report
+from worker.heartbeat import run_with_heartbeat
 from worker.idea_runner import process_idea_job
 
 # python -m worker.main で起動すると__name__が__main__になるため、名前を固定する
@@ -67,22 +67,6 @@ def _run_claude_for_job(
             record_rate_limit(message.rate_limit_info)
 
     return asyncio.run(run_claude(instruction, worktree_path, resume=resume, on_message=on_message))
-
-
-def _run_with_heartbeat(job_id: int, worker_id: int, action: Callable[[], None]) -> None:
-    stop_event = threading.Event()
-
-    def heartbeat_loop() -> None:
-        while not stop_event.wait(settings.job_heartbeat_interval_seconds):
-            heartbeat_job(job_id, worker_id)
-
-    thread = threading.Thread(target=heartbeat_loop, daemon=True)
-    thread.start()
-    try:
-        action()
-    finally:
-        stop_event.set()
-        thread.join()
 
 
 def _finalize_success(
@@ -149,7 +133,7 @@ def _start_job(job_id: int, subtask_id: int, worker_id: int) -> None:
     set_worker_state(worker_id, state=WorkerState.BUSY, current_job_id=job_id)
     subtask, project = _load_subtask_and_project(subtask_id)
     record_event(job_id, event_type="instruction", content=subtask.instruction)
-    _run_with_heartbeat(job_id, worker_id, lambda: _execute_job(job_id, subtask, project))
+    run_with_heartbeat(partial(heartbeat_job, job_id, worker_id), lambda: _execute_job(job_id, subtask, project))
 
 
 def process_job(job: dict, worker_id: int) -> None:
