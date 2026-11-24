@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import HTMLResponse
 
+from app.routes import error_messages as messages
 from core.db import SessionLocal
 from core.models import ExecutionEvent, ExecutionJob, Report
 
@@ -16,7 +17,7 @@ def get_job(job_id: int):
     with SessionLocal() as session:
         job = session.get(ExecutionJob, job_id)
         if job is None:
-            raise HTTPException(status_code=404, detail="job not found")
+            raise HTTPException(status_code=404, detail=messages.JOB_NOT_FOUND)
         return {
             "id": job.id,
             "subtask_id": job.subtask_id,
@@ -56,6 +57,6 @@ def get_job_report(job_id: int):
     with SessionLocal() as session:
         report = session.query(Report).filter_by(job_id=job_id).first()
         if report is None:
-            raise HTTPException(status_code=404, detail="report not found")
+            raise HTTPException(status_code=404, detail=messages.REPORT_NOT_FOUND)
         html = Path(report.html_path).read_text(encoding="utf-8")
         return HTMLResponse(content=html, headers={"Content-Security-Policy": REPORT_CSP})

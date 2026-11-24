@@ -1,61 +1,61 @@
-# サブタスク: [IdeaMan] claude_client.pyを、方針プロンプト・ツール許可判定・SDK実行に分割するー①
+# サブタスク: [IdeaMan] APIのエラーメッセージを日本語にそろえ、1か所に集約するー①
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-claude_client.pyを、方針プロンプト・ツール許可判定・SDK実行に分割する
+APIのエラーメッセージを日本語にそろえ、1か所に集約する
 
 ## 概要
 
-claude_client.pyに、ツール許可判定・4種類の方針プロンプト・SDK実行処理が同居しています。責務ごとにファイルを分けて読みやすくします。
+HTTPExceptionのメッセージで英語と日本語が混在しています。画面に表示される文言を日本語にそろえ、1か所にまとめます。
 
 ## 詳細
 
-- AGENT・CONFLICT_RESOLUTION・CLI_DIALOG・IDEA_MANの方針プロンプトを、core/claude_prompts.pyに移す。
-- 拒否判定（_shell_denial、_worktree_check、_read_only_checkなど）を、core/claude_permissions.pyに移す。
-- claude_client.pyには、ClaudeAgentOptionsの組み立てと実行だけを残す。
-- ロジックは変えず移動だけにする。既存テストのimport先を合わせる。
-- 121-122行目にある、空行1行だけの区切りも整える。
+- app/routes配下のエラーメッセージを、1つのモジュールに定数としてまとめる。
+- 英語のメッセージ（project not foundやtitle is emptyなど）を日本語にする。
+- 提案3の共通404関数と同じ定数を使う。
+- メッセージの文字列を直接比較しているテストがあれば合わせる。
 
 ## 根拠
 
-core/claude_client.pyでは、1-120行目がツール許可判定、122-188行目が4種類の方針プロンプト、191-344行目がSDK実行の処理になっている。方針プロンプトを直すだけでも、セキュリティ判定のコードを読み進める必要がある。CommonGuideLineの1クラス1責務の方針にも合わない。
+app/routes配下には英語のメッセージが20件、日本語のメッセージが8件ある。subtasks.py:228と338は英語、277と429は日本語で、同じファイルの中でも混在している。CommonGuideLineの「画面に表示する文言はリソースファイルに集約する」に沿っていない。
 
 ## 関連ファイル
 
-- core/claude_client.py:34
-- core/claude_client.py:122
-- core/claude_client.py:246
-- core/claude_client.py:322
-## 実行指示（2026-11-24 10:08:16 UTC）
+- app/routes/subtasks.py:228
+- app/routes/subtasks.py:277
+- app/routes/projects.py:150
+- app/routes/cli.py:68
+- app/routes/jobs.py:19
+## 実行指示（2026-11-24 10:07:52 UTC）
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-claude_client.pyを、方針プロンプト・ツール許可判定・SDK実行に分割する
+APIのエラーメッセージを日本語にそろえ、1か所に集約する
 
 ## 概要
 
-claude_client.pyに、ツール許可判定・4種類の方針プロンプト・SDK実行処理が同居しています。責務ごとにファイルを分けて読みやすくします。
+HTTPExceptionのメッセージで英語と日本語が混在しています。画面に表示される文言を日本語にそろえ、1か所にまとめます。
 
 ## 詳細
 
-- AGENT・CONFLICT_RESOLUTION・CLI_DIALOG・IDEA_MANの方針プロンプトを、core/claude_prompts.pyに移す。
-- 拒否判定（_shell_denial、_worktree_check、_read_only_checkなど）を、core/claude_permissions.pyに移す。
-- claude_client.pyには、ClaudeAgentOptionsの組み立てと実行だけを残す。
-- ロジックは変えず移動だけにする。既存テストのimport先を合わせる。
-- 121-122行目にある、空行1行だけの区切りも整える。
+- app/routes配下のエラーメッセージを、1つのモジュールに定数としてまとめる。
+- 英語のメッセージ（project not foundやtitle is emptyなど）を日本語にする。
+- 提案3の共通404関数と同じ定数を使う。
+- メッセージの文字列を直接比較しているテストがあれば合わせる。
 
 ## 根拠
 
-core/claude_client.pyでは、1-120行目がツール許可判定、122-188行目が4種類の方針プロンプト、191-344行目がSDK実行の処理になっている。方針プロンプトを直すだけでも、セキュリティ判定のコードを読み進める必要がある。CommonGuideLineの1クラス1責務の方針にも合わない。
+app/routes配下には英語のメッセージが20件、日本語のメッセージが8件ある。subtasks.py:228と338は英語、277と429は日本語で、同じファイルの中でも混在している。CommonGuideLineの「画面に表示する文言はリソースファイルに集約する」に沿っていない。
 
 ## 関連ファイル
 
-- core/claude_client.py:34
-- core/claude_client.py:122
-- core/claude_client.py:246
-- core/claude_client.py:322
+- app/routes/subtasks.py:228
+- app/routes/subtasks.py:277
+- app/routes/projects.py:150
+- app/routes/cli.py:68
+- app/routes/jobs.py:19
 

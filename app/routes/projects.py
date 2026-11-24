@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import case, func
 
+from app.routes import error_messages as messages
 from app.routes.lookups import get_project_or_404
 from core.db import SessionLocal
 from core.deploy import is_deploy_defined, is_deploy_running
@@ -179,7 +180,7 @@ def create_project_issue(project_id: int, payload: CreateIssueRequest):
     """
     title = payload.title.strip()
     if not title:
-        raise HTTPException(status_code=400, detail="title is empty")
+        raise HTTPException(status_code=400, detail=messages.TITLE_EMPTY)
     with SessionLocal() as session:
         project = get_project_or_404(session, project_id)
         try:
@@ -202,7 +203,7 @@ def update_issue_title(project_id: int, number: int, payload: UpdateTitleRequest
     """
     title = payload.title.strip()
     if not title:
-        raise HTTPException(status_code=400, detail="title is empty")
+        raise HTTPException(status_code=400, detail=messages.TITLE_EMPTY)
     with SessionLocal() as session:
         project = get_project_or_404(session, project_id)
         try:
@@ -289,7 +290,7 @@ def close_project_issue(project_id: int, number: int):
             .count()
         )
         if unresolved:
-            raise HTTPException(status_code=409, detail="未解決のMRが残っています")
+            raise HTTPException(status_code=409, detail=messages.UNRESOLVED_MR_REMAINS)
         try:
             close_issue(project.github_repo, number)
         except GitHubClientError as exc:

@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from app.routes import error_messages as messages
 from app.routes.repo_items import RepoItemPatch, item_errors
 from core.attachments import AttachmentError
 from core.cli_attachments import delete_cli_attachment, find_cli_attachment_file, save_cli_attachment
@@ -65,7 +66,7 @@ def post_cli_message(cli_session_id: int, payload: SendCliMessageRequest):
     """
     text = payload.text.strip()
     if not text:
-        raise HTTPException(status_code=400, detail="text is empty")
+        raise HTTPException(status_code=400, detail=messages.TEXT_EMPTY)
     with item_errors():
         try:
             send_message(cli_session_id, text, payload.attachment_ids)
@@ -119,7 +120,7 @@ def get_cli_attachment_file(cli_session_id: int, attachment_id: str):
     """
     path = find_cli_attachment_file(cli_session_id, attachment_id)
     if path is None:
-        raise HTTPException(status_code=404, detail="attachment not found")
+        raise HTTPException(status_code=404, detail=messages.ATTACHMENT_NOT_FOUND)
     return FileResponse(path)
 
 
@@ -130,5 +131,5 @@ def remove_cli_attachment(cli_session_id: int, attachment_id: str):
     残りの添付のIDは振り直さない。
     """
     if not delete_cli_attachment(cli_session_id, attachment_id):
-        raise HTTPException(status_code=404, detail="attachment not found")
+        raise HTTPException(status_code=404, detail=messages.ATTACHMENT_NOT_FOUND)
     return {"id": attachment_id}

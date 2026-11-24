@@ -2,6 +2,7 @@ import os
 
 from fastapi import APIRouter, HTTPException
 
+from app.routes import error_messages as messages
 from core.config import settings
 from core.job_queue import cleanup_stale_workers, recover_stale_jobs
 from core.claude_usage import refresh_usage_if_older
@@ -16,12 +17,10 @@ from core.supervisor_control import (
 
 router = APIRouter(prefix="/api/system")
 
-NOT_SUPERVISED_DETAIL = "run_all.py経由で起動していないため実行できません"
-
 
 def _request_to_supervisor(command: str) -> dict:
     if not is_supervised():
-        raise HTTPException(status_code=409, detail=NOT_SUPERVISED_DETAIL)
+        raise HTTPException(status_code=409, detail=messages.NOT_SUPERVISED)
     request_command(command)
     return {"accepted": True}
 
@@ -39,7 +38,7 @@ def start_workers() -> dict:
 @router.post("/sync-self", status_code=202)
 def sync_self() -> dict:
     if not is_supervised():
-        raise HTTPException(status_code=409, detail=NOT_SUPERVISED_DETAIL)
+        raise HTTPException(status_code=409, detail=messages.NOT_SUPERVISED)
     try:
         start_self_sync(os.getcwd())
     except SelfSyncAlreadyRunning as exc:
@@ -51,7 +50,7 @@ def sync_self() -> dict:
 def get_sync_self_result() -> dict:
     result = read_result()
     if result is None:
-        raise HTTPException(status_code=404, detail="マージして最新化の実行結果がありません")
+        raise HTTPException(status_code=404, detail=messages.SELF_SYNC_RESULT_NOT_FOUND)
     return result
 
 

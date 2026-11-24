@@ -6,6 +6,7 @@ from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from app.routes import error_messages as messages
 from app.routes.lookups import get_project_or_404, get_subtask_and_project_or_404, get_subtask_or_404
 from core.attachments import (
     AttachmentError,
@@ -226,7 +227,7 @@ def create_pending_subtask(payload: CreatePendingSubtaskRequest):
     """
     issue_title = payload.issue_title.strip()
     if not issue_title:
-        raise HTTPException(status_code=400, detail="issue_title is empty")
+        raise HTTPException(status_code=400, detail=messages.ISSUE_TITLE_EMPTY)
     with SessionLocal() as session:
         project = get_project_or_404(session, payload.project_id)
     title = compose_mr_title(issue_title, next_default_suffix(issue_title, []))
@@ -268,7 +269,7 @@ def link_pending_subtask(payload: LinkPendingSubtaskRequest, background_tasks: B
     PR本文へのIssue番号の記載は、応答を待たせないよう応答後に行う。
     """
     if not payload.branch_name.startswith(f"{PENDING_BRANCH_PREFIX}-"):
-        raise HTTPException(status_code=400, detail="Issue未紐付けのMRではありません")
+        raise HTTPException(status_code=400, detail=messages.NOT_UNLINKED_MR)
     with SessionLocal() as session:
         project = get_project_or_404(session, payload.project_id)
         subtask = _find_or_add_subtask(
@@ -329,7 +330,7 @@ def update_subtask_title(subtask_id: int, payload: UpdateSubtaskTitleRequest):
     """
     suffix = payload.title.strip()
     if not suffix:
-        raise HTTPException(status_code=400, detail="title is empty")
+        raise HTTPException(status_code=400, detail=messages.TITLE_EMPTY)
     with SessionLocal() as session:
         subtask, project = get_subtask_and_project_or_404(session, subtask_id)
 
@@ -355,7 +356,7 @@ def close_subtask(subtask_id: int):
     with SessionLocal() as session:
         subtask, project = get_subtask_and_project_or_404(session, subtask_id)
         if subtask.lifecycle_state not in LifecycleState.OPEN_STATES:
-            raise HTTPException(status_code=409, detail="未解決のMRではありません")
+            raise HTTPException(status_code=409, detail=messages.NOT_UNRESOLVED_MR)
         try:
             if subtask.github_pr_number is not None:
                 close_pr(project.github_repo, subtask.github_pr_number)
@@ -382,7 +383,7 @@ def reopen_subtask(subtask_id: int):
     with SessionLocal() as session:
         subtask, project = get_subtask_and_project_or_404(session, subtask_id)
         if subtask.lifecycle_state != LifecycleState.CANCELED:
-            raise HTTPException(status_code=409, detail="クローズ済のMRではありません")
+            raise HTTPException(status_code=409, detail=messages.NOT_CLOSED_MR)
         try:
             new_state = _reopen_pr_and_get_state(project, subtask.github_pr_number)
         except GitHubClientError as exc:
@@ -408,11 +409,11 @@ def _has_active_job(session, subtask_id: int) -> bool:
 
 def _ensure_mergeable(session, subtask: Subtask) -> None:
     if subtask.lifecycle_state != LifecycleState.RESOLVED:
-        raise HTTPException(status_code=409, detail="ResolvedのMRではありません")
+        raise HTTPException(status_code=409, detail=messages.NOT_RESOLVED_MR)
     if subtask.github_pr_number is None:
-        raise HTTPException(status_code=409, detail="PRが作成されていません")
+        raise HTTPException(status_code=409, detail=messages.PR_NOT_CREATED)
     if _has_active_job(session, subtask.id):
-        raise HTTPException(status_code=409, detail="実装の実行中はマージできません")
+        raise HTTPException(status_code=409, detail=messages.MERGE_BLOCKED_BY_ACTIVE_JOB)
 
 
 @router.post("/{subtask_id}/merge")
@@ -427,7 +428,7 @@ def merge_subtask(subtask_id: int):
         subtask, _ = get_subtask_and_project_or_404(session, subtask_id)
         _ensure_mergeable(session, subtask)
         if find_active_merge(session, subtask.id) is not None:
-            raise HTTPException(status_code=409, detail="マージ待ちに登録済です")
+            raise HTTPException(status_code=409, detail=messages.ALREADY_IN_MERGE_QUEUE)
         job = enqueue_merge(session, subtask.id)
         return {
             "id": subtask.id,
@@ -455,7 +456,7 @@ def get_attachment_file(subtask_id: int, attachment_id: str):
     """
     path = find_attachment_file(_subtask_worktree_path(subtask_id), attachment_id)
     if path is None:
-        raise HTTPException(status_code=404, detail="attachment not found")
+        raise HTTPException(status_code=404, detail=messages.ATTACHMENT_NOT_FOUND)
     return FileResponse(path)
 
 
@@ -467,7 +468,7 @@ async def upload_attachment(subtask_id: int, file: UploadFile):
     """
     worktree_path = _subtask_worktree_path(subtask_id)
     if not Path(worktree_path).is_dir():
-        raise HTTPException(status_code=409, detail="worktreeがありません")
+        raise HTTPException(status_code=409, detail=messages.WORKTREE_MISSING)
     try:
         return save_attachment(worktree_path, file.filename or "", await file.read())
     except AttachmentError as exc:
@@ -481,7 +482,7 @@ def remove_attachment(subtask_id: int, attachment_id: str):
     残りの添付のIDは振り直さない。
     """
     if not delete_attachment(_subtask_worktree_path(subtask_id), attachment_id):
-        raise HTTPException(status_code=404, detail="attachment not found")
+        raise HTTPException(status_code=404, detail=messages.ATTACHMENT_NOT_FOUND)
     return {"id": attachment_id}
 
 
@@ -499,7 +500,7 @@ def _ensure_no_active_job(session, subtask_id: int) -> None:
         return
     raise HTTPException(
         status_code=409,
-        detail={"message": "実装の実行中・実行待ちです", "job_id": job.id, "status": job.status},
+        detail={"message": messages.JOB_ACTIVE, "job_id": job.id, "status": job.status},
     )
 
 
@@ -513,7 +514,7 @@ def execute_subtask(subtask_id: int, payload: ExecuteSubtaskRequest | None = Non
         subtask = get_subtask_or_404(session, subtask_id)
 
         if find_active_merge(session, subtask_id) is not None:
-            raise HTTPException(status_code=409, detail="マージ待ちのMRは実装できません")
+            raise HTTPException(status_code=409, detail=messages.EXECUTE_BLOCKED_BY_MERGE_QUEUE)
         _ensure_no_active_job(session, subtask_id)
 
         if payload is not None and payload.instruction:

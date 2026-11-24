@@ -10,6 +10,7 @@ from typing import Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from app.routes import error_messages as messages
 from app.routes.lookups import get_project_or_404
 from app.routes.repo_items import RepoItemPatch, item_errors
 from app.routes.subtasks import CreateSubtaskRequest, create_subtask, execute_subtask
@@ -155,7 +156,7 @@ def _create_issue_for(idea: dict) -> tuple[dict, str, str]:
         issue = create_issue(_github_repo(idea["project_id"]), title, compose_issue_body(idea))
     except GitHubClientError as exc:
         release_claim(idea["id"])
-        raise HTTPException(status_code=500, detail=f"Issue作成に失敗しました: {exc}") from exc
+        raise HTTPException(status_code=500, detail=messages.ISSUE_CREATE_FAILED.format(reason=exc)) from exc
     except Exception:
         release_claim(idea["id"])
         raise
@@ -178,7 +179,7 @@ def _create_subtask_for(idea: dict, issue_title: str, execute: bool) -> tuple[di
         subtask = create_subtask(payload)
     except HTTPException as exc:
         release_claim(idea["id"])
-        raise HTTPException(status_code=exc.status_code, detail=f"サブタスク作成に失敗しました: {exc.detail}") from exc
+        raise HTTPException(status_code=exc.status_code, detail=messages.SUBTASK_CREATE_FAILED.format(reason=exc.detail)) from exc
     idea = record_subtask_created(idea["id"], subtask["id"])
     return idea, {**subtask, "job": execute_subtask(subtask["id"]) if execute else None}
 
