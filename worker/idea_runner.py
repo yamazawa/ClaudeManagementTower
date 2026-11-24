@@ -6,8 +6,8 @@ GitHubへの書き込み・コミット・pushは行わない。
 
 import asyncio
 import logging
-import threading
 from collections.abc import Callable
+from functools import partial
 
 from claude_agent_sdk import RateLimitEvent
 
@@ -20,6 +20,7 @@ from core.ideas import IdeaParseError, parse_proposals, save_proposals
 from core.job_queue import WorkerState, set_worker_state
 from core.models import Project
 from core.rate_limits import is_rate_limit_error, record_rate_limit
+from worker.heartbeat import run_with_heartbeat
 
 logger = logging.getLogger(__name__)
 
@@ -39,22 +40,6 @@ async def _run_claude(prompt: str, repo_path: str) -> tuple[str | None, str | No
 def _repo_path(project_id: int) -> str:
     with SessionLocal() as session:
         return session.get(Project, project_id).repo_path
-
-
-def _with_heartbeat(idea_job_id: int, worker_id: int, action: Callable[[], None]) -> None:
-    stop_event = threading.Event()
-
-    def heartbeat_loop() -> None:
-        while not stop_event.wait(settings.job_heartbeat_interval_seconds):
-            heartbeat_idea_job(idea_job_id, worker_id)
-
-    thread = threading.Thread(target=heartbeat_loop, daemon=True)
-    thread.start()
-    try:
-        action()
-    finally:
-        stop_event.set()
-        thread.join()
 
 
 def _execute(idea_job_id: int, project_id: int, focus: str, claude_runner: Callable) -> None:
@@ -82,7 +67,10 @@ def process_idea_job(job: dict, worker_id: int, claude_runner: Callable = _run_c
     set_worker_state(worker_id, state=WorkerState.BUSY, current_job_id=None)
     focus = job.get("focus", "")
     try:
-        _with_heartbeat(idea_job_id, worker_id, lambda: _execute(idea_job_id, job["project_id"], focus, claude_runner))
+        run_with_heartbeat(
+            partial(heartbeat_idea_job, idea_job_id, worker_id),
+            lambda: _execute(idea_job_id, job["project_id"], focus, claude_runner),
+        )
     except Exception as exc:  # noqa: BLE001
         status = IdeaJobStatus.RATE_LIMITED if is_rate_limit_error(str(exc)) else IdeaJobStatus.FAILED
         finish_idea_job(idea_job_id, status, error_message=str(exc))

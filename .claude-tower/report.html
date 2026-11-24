@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>作業レポート: Issue/CLI/Ideaの表示ー②</title>
+<title>作業レポート: subtasksルートの404判定とワーカーのハートビート処理の重複をまとめるー①</title>
 <style>
 body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; } h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; margin-top: 1.6em; }
@@ -12,50 +12,50 @@ th { background: #f0f0f0; } code { background: #f4f4f4; padding: 0 3px; }
 </style>
 </head>
 <body>
-<h1>作業レポート: Issue/CLI/Ideaの表示ー②</h1>
+<h1>作業レポート: subtasksルートの404判定とワーカーのハートビート処理の重複をまとめるー①</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#225 Issue/CLI/Ideaの表示</td></tr>
-<tr><th>サブタスク</th><td>Issue/CLI/Ideaの表示ー②（PR #247）</td></tr>
-<tr><th>ブランチ</th><td><code>issue-225-subtask-2</code>（push済み）</td></tr>
-<tr><th>指示</th><td>Issue/CLI/Ideaの切替はヘッダーで出来るようにする。<br>リポジトリ表示ではタブを表示せず、一覧を表示する。</td></tr>
+<tr><th>Issue</th><td>#240 [IdeaMan] subtasksルートの404判定とワーカーのハートビート処理の重複をまとめる</td></tr>
+<tr><th>サブタスク</th><td>subtasksルートの404判定とワーカーのハートビート処理の重複をまとめるー①</td></tr>
+<tr><th>ブランチ</th><td><code>issue-240-subtask-1</code>（push済み）</td></tr>
+<tr><th>指示</th><td>subtasksルートの404判定とワーカーのハートビート処理の重複をまとめる</td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
 <p class="ok">成功</p>
-<p>リポジトリ表示内のタブを削除し、ヘッダーに切替ボタンを追加した。<br>リポジトリ表示には、選択中の種類（Issue・CLI・Idea）の作成欄と一覧のみ表示される。</p>
+<p>Issueに挙げられた重複箇所をすべて共通関数経由に置き換えた。<br>振る舞い（404の詳細文言・ハートビート間隔）は変更していない。</p>
 
 <h2>3. 変更内容</h2>
 <table>
 <tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td><code>app/static/index.html</code></td><td>ヘッダー下段の先頭にIssue・CLI・Ideaの切替ボタン群（<code>#repo-item-switch</code>）を追加。<br>リポジトリ表示のタブ（<code>#repo-item-tabs</code>）と、tab/tabpanelのrole属性を削除。</td></tr>
-<tr><td>2</td><td><code>app/static/repo_items.js</code></td><td>切替ボタンのクラス名変更に追従し、選択状態を<code>aria-pressed</code>で表すよう変更。<br>切替の処理（<code>selectRepoItemTab</code>）自体は変更なし。</td></tr>
-<tr><td>3</td><td><code>app/static/style.css</code></td><td>旧タブのスタイルを削除し、ヘッダー用の切替ボタンのスタイルを追加。</td></tr>
-<tr><td>4</td><td><code>IMPLEMENTATION_PLAN.md</code></td><td>リポジトリ表示の方針に、切替をヘッダーで行う旨を追記。</td></tr>
+<tr><td>1</td><td><code>worker/heartbeat.py</code>（新規）</td><td><code>run_with_heartbeat(heartbeat, action)</code>を追加。<br>ハートビート関数を引数で受け取る。</td></tr>
+<tr><td>2</td><td><code>worker/main.py</code></td><td><code>_run_with_heartbeat</code>を削除し、<code>run_with_heartbeat(partial(heartbeat_job, ...), ...)</code>に置換。<br>不要になった<code>threading</code>・<code>Callable</code>のimportを削除。</td></tr>
+<tr><td>3</td><td><code>worker/idea_runner.py</code></td><td><code>_with_heartbeat</code>を削除し、<code>run_with_heartbeat(partial(heartbeat_idea_job, ...), ...)</code>に置換。</td></tr>
+<tr><td>4</td><td><code>app/routes/subtasks.py</code></td><td><code>_get_subtask_or_404</code>を追加し、<code>_get_subtask_and_project</code>もこれを使う形にした。<br>create_subtask→<code>_get_project_or_404</code>、update_subtask_title→<code>_get_subtask_and_project</code>、_subtask_worktree_path・execute_subtask→<code>_get_subtask_or_404</code>。</td></tr>
+<tr><td>5</td><td><code>tests/test_worker_heartbeat.py</code>（新規）</td><td>ハートビートが実行中に呼ばれること、例外時に停止することのテスト。</td></tr>
+<tr><td>6</td><td><code>tests/test_worker_main.py</code></td><td>monkeypatch対象名を<code>run_with_heartbeat</code>に変更。</td></tr>
+<tr><td>7</td><td><code>tests/test_subtask_routes.py</code></td><td>create_subtask・update_subtask_title・execute_subtaskの404テストを追加。</td></tr>
 </table>
-<p>コミット: bd891a9（UI）、a329c8b（ドキュメント）</p>
+<p>コミット: cb4a9da（ハートビート共通化）、21081e1（404判定共通化）</p>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>切替ボタンはヘッダー下段の先頭（MRステータスフィルタの左）に置く。</td><td>表示対象を決める操作のため、絞り込み・デプロイより前に置くのが自然と判断。</td></tr>
-<tr><td>2</td><td>見た目は角丸のセグメントボタンとし、選択中をアクセント色にする。</td><td>ヘッダーの既存部品（MRステータスフィルタ・Deployボタン）と統一するため。</td></tr>
-<tr><td>3</td><td>role=tablist/tabをやめ、role=group＋aria-pressedにする。</td><td>タブとパネルが離れた位置になるため。MRステータスフィルタと同じ方式に揃えた。</td></tr>
-<tr><td>4</td><td>リポジトリ未選択時も切替ボタンは表示・操作可能とする。</td><td>既存の<code>selectRepoItemTab</code>がリポジトリ未選択時の一覧取得を抑止しており、選択後に切替状態が反映されるため。</td></tr>
-<tr><td>5</td><td>JS内の関数名・変数名（Tab）はそのまま残す。</td><td>差分を最小にするため。概念としての「タブ」は維持し、表示位置のみ変更した。</td></tr>
+<tr><td>1</td><td>共通関数は新規モジュール<code>worker/heartbeat.py</code>に置く。</td><td><code>worker/main.py</code>が<code>idea_runner</code>をimportしており、どちらかに置くと依存が循環・逆転するため。</td></tr>
+<tr><td>2</td><td>ハートビート関数は引数なしのcallableとし、呼び出し側で<code>functools.partial</code>で束縛する。</td><td>ジョブIDの種類（実装ジョブ／アイデアジョブ）に依存しない汎用的な形にするため。</td></tr>
+<tr><td>3</td><td>execute_subtask・_subtask_worktree_pathはProjectを取得しない<code>_get_subtask_or_404</code>を使う。</td><td>Projectを使わない箇所で不要なDB取得を増やさないため。Issueでも選択肢として挙げられていた。</td></tr>
+<tr><td>4</td><td>補助関数の定義位置は移動しない。</td><td>実行時解決のため動作に影響せず、差分を最小にするため。</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<p><code>./.venv/Scripts/python.exe -m pytest -q</code> → <span class="ok">544 passed</span></p>
-<p><code>node --check app/static/repo_items.js</code> → 構文エラーなし</p>
-<p>ブラウザでの表示確認は未実施（ガイドラインに従い人間に依頼）。</p>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code> → <span class="ok">549 passed</span>（既存544＋追加5）</p>
+<p>ワーカー・サーバーの起動確認は未実施（ガイドラインに従い人間に依頼）。</p>
 
 <h2>6. 残課題・レビュー観点</h2>
 <ul>
-<li>ヘッダーでの切替ボタンの見た目・配置（狭い画面での折り返し含む）を実機で確認してほしい。</li>
-<li>Issue作成の見出しは<code>section-heading-top</code>のまま。タブ削除後にリポジトリ見出しとの余白が適切か確認ポイント。</li>
-<li>MRステータスフィルタ選択時にIssueへ自動で切り替わる既存挙動は維持（ヘッダーの切替ボタンにも反映される）。</li>
+<li>update_subtask_titleは以前と同様、Projectが存在しない場合の判定は行っていない（既存の<code>_get_subtask_and_project</code>の挙動を踏襲）。</li>
+<li>ワーカー再起動後、実装ジョブ・アイデア出しジョブのハートビートが継続して更新されることを確認してほしい。</li>
 </ul>
 </body>
 </html>

@@ -271,6 +271,28 @@ def test_get_attachments_unknown_subtask_is_not_found(session_factory):
     assert exc.value.status_code == 404
 
 
+def test_create_subtask_unknown_project_is_not_found(session_factory, created):
+    with pytest.raises(HTTPException) as exc:
+        subtasks.create_subtask(subtasks.CreateSubtaskRequest(project_id=999, github_issue_number=5))
+
+    assert exc.value.status_code == 404
+    assert created == []
+
+
+def test_update_subtask_title_unknown_subtask_is_not_found(session_factory):
+    with pytest.raises(HTTPException) as exc:
+        subtasks.update_subtask_title(999, subtasks.UpdateSubtaskTitleRequest(title="x"))
+
+    assert exc.value.status_code == 404
+
+
+def test_execute_subtask_unknown_subtask_is_not_found(session_factory):
+    with pytest.raises(HTTPException) as exc:
+        subtasks.execute_subtask(999)
+
+    assert exc.value.status_code == 404
+
+
 def test_get_attachment_file_returns_saved_file(session_factory, tmp_path, monkeypatch):
     monkeypatch.setattr(subtasks.settings, "worktree_base_dir", str(tmp_path))
     (tmp_path / "issue-5-x").mkdir()
