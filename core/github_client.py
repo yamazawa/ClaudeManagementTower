@@ -32,6 +32,11 @@ GH_TRANSIENT_ERROR_PATTERNS = (
     "503 service unavailable",
     "504 gateway timeout",
 )
+# 一時的な通信エラーのうち、要求がGitHubに届く前の失敗（作成・マージ系でも再試行する）
+GH_UNSENT_ERROR_PATTERNS = (
+    "tls handshake timeout",
+    "connection refused",
+)
 # closed_sinceのキャッシュキーの接頭辞（後ろに起点日時を付ける）
 CLOSED_SINCE_CACHE_KIND = "closed_since:"
 
@@ -46,8 +51,16 @@ class _TransientGhError(GitHubClientError, TransientError):
     pass
 
 
+class _UnsentGhError(_TransientGhError):
+    pass
+
+
 def is_transient_gh_error(stderr: str) -> bool:
     return contains_any_pattern(stderr, GH_TRANSIENT_ERROR_PATTERNS)
+
+
+def is_unsent_gh_error(stderr: str) -> bool:
+    return contains_any_pattern(stderr, GH_UNSENT_ERROR_PATTERNS)
 
 
 def _run_gh_once(args: list[str]) -> str:
@@ -64,6 +77,8 @@ def _run_gh_once(args: list[str]) -> str:
     if result.returncode == 0:
         return result.stdout
     stderr = result.stderr.strip()
+    if is_unsent_gh_error(stderr):
+        raise _UnsentGhError(stderr)
     if is_transient_gh_error(stderr):
         raise _TransientGhError(stderr)
     raise GitHubClientError(stderr)
@@ -74,10 +89,13 @@ def _run_gh(args: list[str], retryable: bool = True) -> str:
 
     retryableの場合、一時的な通信エラーは間隔を空けて再試行する。
     二重実行で結果が変わる操作（作成・マージ）はretryable=Falseで呼ぶ。
+    retryable=Falseでも、要求が届く前の通信エラーは再試行する。
     """
-    attempts = GH_MAX_ATTEMPTS if retryable else 1
+    retry_on = _TransientGhError if retryable else _UnsentGhError
     try:
-        return call_with_retry(lambda: _run_gh_once(args), attempts, GH_RETRY_INTERVAL_SECONDS)
+        return call_with_retry(
+            lambda: _run_gh_once(args), GH_MAX_ATTEMPTS, GH_RETRY_INTERVAL_SECONDS, retry_on
+        )
     except _TransientGhError as exc:
         raise GitHubClientError(str(exc)) from exc
 
