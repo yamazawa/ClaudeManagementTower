@@ -47,6 +47,22 @@ def test_init_db_adds_display_name_and_description_to_existing_projects(tmp_path
     assert tuple(row) == ("", "")
 
 
+def test_init_db_adds_removed_to_existing_projects(tmp_path):
+    engine = make_engine(str(tmp_path / "test.db"))
+    with engine.begin() as conn:
+        conn.exec_driver_sql(
+            "CREATE TABLE projects (id INTEGER PRIMARY KEY, name VARCHAR, github_repo VARCHAR,"
+            " repo_path VARCHAR, default_branch VARCHAR, created_at DATETIME)"
+        )
+        conn.exec_driver_sql("INSERT INTO projects (id, name) VALUES (1, 'p')")
+
+    init_db(bind=engine)
+
+    with engine.connect() as conn:
+        row = conn.exec_driver_sql("SELECT removed FROM projects WHERE id = 1").one()
+    assert tuple(row) == (0,)
+
+
 def test_write_and_read_project(tmp_path):
     engine = make_engine(str(tmp_path / "test.db"))
     init_db(bind=engine)

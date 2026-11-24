@@ -36,6 +36,7 @@ ADDED_COLUMNS = [
     ("cli_messages", "attachments", "VARCHAR NOT NULL DEFAULT '[]'"),
     ("projects", "display_name", "VARCHAR NOT NULL DEFAULT ''"),
     ("projects", "description", "VARCHAR NOT NULL DEFAULT ''"),
+    ("projects", "removed", "BOOLEAN NOT NULL DEFAULT 0"),
 ]
 
 

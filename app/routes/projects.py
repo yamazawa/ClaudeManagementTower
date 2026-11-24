@@ -66,7 +66,7 @@ class CreateIssueRequest(BaseModel):
 @router.get("")
 def get_projects():
     with SessionLocal() as session:
-        projects = session.query(Project).all()
+        projects = session.query(Project).filter_by(removed=False).all()
         return [
             {
                 "id": p.id,
@@ -105,6 +105,19 @@ def create_project(payload: CreateProjectRequest):
     except RepoSetupError as exc:
         detail = {"message": str(exc), "project_id": exc.project_id}
         raise HTTPException(status_code=500, detail=detail) from exc
+
+
+@router.delete("/{project_id}")
+def remove_project(project_id: int):
+    """リポジトリを一覧から削除する
+
+    GitHub・ローカルのリポジトリと、MR等の履歴は削除しない。
+    """
+    with SessionLocal() as session:
+        project = get_project_or_404(session, project_id)
+        project.removed = True
+        session.commit()
+        return {"id": project_id, "removed": True}
 
 
 @router.get("/{project_id}/issues")
