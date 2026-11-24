@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 
+from app.routes.lookups import get_project_or_404
 from app.routes.system import NOT_SUPERVISED_DETAIL
 from core.db import SessionLocal
 from core.deploy import (
@@ -15,7 +16,6 @@ from core.deploy import (
     start_deploy,
 )
 from core.git_client import GitClientError, has_remote_updates
-from core.models import Project
 from core.supervisor_control import is_supervised
 
 router = APIRouter(prefix="/api/projects")
@@ -23,9 +23,7 @@ router = APIRouter(prefix="/api/projects")
 
 def _get_project(project_id: int) -> tuple[str, str]:
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
-        if project is None:
-            raise HTTPException(status_code=404, detail="project not found")
+        project = get_project_or_404(session, project_id)
         return project.repo_path, project.default_branch
 
 

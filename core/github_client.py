@@ -1,11 +1,11 @@
 import json
 import logging
 import subprocess
-import time
 from datetime import datetime
 
 from core.config import settings
 from core.issue_list_cache import IssueListCache
+from core.transient_retry import TransientError, call_with_retry, contains_any_pattern
 
 logger = logging.getLogger(__name__)
 
@@ -42,13 +42,12 @@ class GitHubClientError(RuntimeError):
     pass
 
 
-class _TransientGhError(GitHubClientError):
+class _TransientGhError(GitHubClientError, TransientError):
     pass
 
 
 def is_transient_gh_error(stderr: str) -> bool:
-    lowered = stderr.lower()
-    return any(pattern in lowered for pattern in GH_TRANSIENT_ERROR_PATTERNS)
+    return contains_any_pattern(stderr, GH_TRANSIENT_ERROR_PATTERNS)
 
 
 def _run_gh_once(args: list[str]) -> str:
@@ -77,14 +76,10 @@ def _run_gh(args: list[str], retryable: bool = True) -> str:
     二重実行で結果が変わる操作（作成・マージ）はretryable=Falseで呼ぶ。
     """
     attempts = GH_MAX_ATTEMPTS if retryable else 1
-    for attempt in range(1, attempts + 1):
-        try:
-            return _run_gh_once(args)
-        except _TransientGhError as exc:
-            if attempt == attempts:
-                raise GitHubClientError(str(exc)) from exc
-            time.sleep(GH_RETRY_INTERVAL_SECONDS * attempt)
-    raise AssertionError("unreachable")
+    try:
+        return call_with_retry(lambda: _run_gh_once(args), attempts, GH_RETRY_INTERVAL_SECONDS)
+    except _TransientGhError as exc:
+        raise GitHubClientError(str(exc)) from exc
 
 
 def invalidate_issue_list_cache(repo: str) -> None:
@@ -157,6 +152,24 @@ def create_issue(repo: str, title: str, body: str) -> dict:
     number = int(url.rsplit("/", 1)[-1])
     invalidate_issue_list_cache(repo)
     return {"number": number, "url": url}
+
+
+def create_repo_from_local(repo: str, source_path: str, description: str, visibility: str) -> None:
+    """ローカルリポジトリを元にGitHubリポジトリを作成し、originとしてpushする
+
+    visibilityはprivate・public・internalのいずれか。
+    """
+    _run_gh(
+        [
+            "repo", "create", repo,
+            f"--{visibility}",
+            "--source", source_path,
+            "--remote", "origin",
+            "--push",
+            "--description", description,
+        ],
+        retryable=False,
+    )
 
 
 def edit_issue_title(repo: str, number: int, title: str) -> None:
