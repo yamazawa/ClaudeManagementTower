@@ -223,6 +223,29 @@ def test_issue_creation_failure_returns_to_proposed(approval_db, github, monkeyp
     assert list_ideas(1, session_factory=approval_db)[0]["status"] == IdeaStatus.PROPOSED
 
 
+def test_approve_for_deleted_project_returns_404_and_releases_claim(approval_db, github):
+    idea_id = _save_idea(approval_db)
+    with approval_db() as session:
+        session.delete(session.get(Project, 1))
+        session.commit()
+
+    with pytest.raises(HTTPException) as error:
+        _approve(idea_id, "issue_only")
+
+    assert error.value.status_code == 404
+    assert list_ideas(1, session_factory=approval_db)[0]["status"] == IdeaStatus.PROPOSED
+
+
+def test_unexpected_issue_creation_error_releases_claim(approval_db, github, monkeypatch):
+    monkeypatch.setattr(ideas, "create_issue", _raiser(RuntimeError("boom")))
+    idea_id = _save_idea(approval_db)
+
+    with pytest.raises(RuntimeError):
+        _approve(idea_id, "issue_only")
+
+    assert list_ideas(1, session_factory=approval_db)[0]["status"] == IdeaStatus.PROPOSED
+
+
 def test_subtask_failure_keeps_issue_and_allows_retry(approval_db, github, monkeypatch):
     monkeypatch.setattr(ideas, "create_subtask", _raiser(HTTPException(status_code=500, detail="git error")))
     idea_id = _save_idea(approval_db)

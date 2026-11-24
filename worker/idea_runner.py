@@ -38,8 +38,15 @@ async def _run_claude(prompt: str, repo_path: str) -> tuple[str | None, str | No
 
 
 def _repo_path(project_id: int) -> str:
+    """対象プロジェクトのリポジトリパス
+
+    削除済みの場合は、原因が分かるメッセージでRuntimeErrorを送出する。
+    """
     with SessionLocal() as session:
-        return session.get(Project, project_id).repo_path
+        project = session.get(Project, project_id)
+        if project is None:
+            raise RuntimeError(f"プロジェクト(id={project_id})が見つかりません")
+        return project.repo_path
 
 
 def _execute(idea_job_id: int, project_id: int, focus: str, claude_runner: Callable) -> None:

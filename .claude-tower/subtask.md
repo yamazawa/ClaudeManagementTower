@@ -1,63 +1,65 @@
-# サブタスク: [IdeaMan] gitのfetch・push・pullに、一時的な通信エラー時の再試行を入れるー①
+# サブタスク: [IdeaMan] 削除済みプロジェクトを参照したときのAttributeErrorをなくし、404判定をルート間で共通化するー①
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-gitのfetch・push・pullに、一時的な通信エラー時の再試行を入れる
+削除済みプロジェクトを参照したときのAttributeErrorをなくし、404判定をルート間で共通化する
 
 ## 概要
 
-ghには一時的な通信エラーの再試行がありますが、gitの通信処理にはありません。1回の通信エラーで実装ジョブやサブタスク作成が失敗します。
+プロジェクトの取得結果を確認せずに属性を参照している箇所が3つあります。承認処理では、承認中の状態が解除されないまま残ります。
 
 ## 詳細
 
-- github_client.pyと同じ形で、一時的な通信エラーの判定文字列と再試行の回数・間隔をgit_client.pyに追加する。
-- 判定文字列の例は、Could not resolve host、Connection timed out、RPC failed、early EOFなど。
-- 通信を伴う操作（fetch・push・pull・リモートブランチ削除）にだけ再試行を適用する。
-- 判定処理をgithub_client.pyと共通化できるか検討する。
-- 再試行のテストを追加する。
+- app/routes配下に、プロジェクト・サブタスクの取得と404判定を行う共通関数を置く。
+- projects.py・subtasks.py・deploy.pyにある重複した判定を、共通関数に置き換える。
+- ideas.pyの_github_repoとsubtasks.pyの_get_subtask_and_projectでも、プロジェクトが無い場合は404にする。
+- idea_runner._repo_pathでは、worker/main.pyの_load_subtask_and_projectと同じく、原因が分かるメッセージで例外を出す。
+- _create_issue_forで、GitHubClientError以外の例外でも承認中の状態を解除する。
 
 ## 根拠
 
-core/github_client.py:17-34,73-87では、TLS handshake timeoutなどを最大3回まで再試行している。core/git_client.py:19-33の_run_gitは1回失敗するとそのまま例外を投げる。対象はpush_branch(105)、create_worktreeのfetch(52)、prepare_detached_worktreeのfetch(194)、pull_latest(162)。worker/main.py:102はClaudeの実行前にpushするため、1回の通信エラーでジョブ全体がfailedになる。最近の失敗にもTLS handshake timeoutがある（#153⑤）。
+app/routes/ideas.py:145はsession.get(Project, ...)の結果を確認せずに.github_repoを参照している。同じ参照はworker/idea_runner.py:42とapp/routes/subtasks.py:364にもある。ideas.py:154-158はGitHubClientErrorしか捕捉しないため、AttributeErrorではrelease_claimが呼ばれない。404判定はprojects.py:83-85,236-239、subtasks.py:254-257、deploy.py:26-28に重複している。#240ではsubtasksルート内だけをまとめており、ルートをまたいだ重複は残っている。
 
 ## 関連ファイル
 
-- core/git_client.py:19
-- core/git_client.py:105
-- core/git_client.py:52
-- core/github_client.py:73
-- worker/main.py:102
-## 実行指示（2026-11-24 10:11:38 UTC）
+- app/routes/ideas.py:143
+- worker/idea_runner.py:40
+- app/routes/subtasks.py:362
+- app/routes/projects.py:236
+- app/routes/subtasks.py:254
+- app/routes/deploy.py:24
+## 実行指示（2026-11-24 10:11:13 UTC）
 
 アイデアマンの提案を実装する。
 
 ## 提案タイトル
 
-gitのfetch・push・pullに、一時的な通信エラー時の再試行を入れる
+削除済みプロジェクトを参照したときのAttributeErrorをなくし、404判定をルート間で共通化する
 
 ## 概要
 
-ghには一時的な通信エラーの再試行がありますが、gitの通信処理にはありません。1回の通信エラーで実装ジョブやサブタスク作成が失敗します。
+プロジェクトの取得結果を確認せずに属性を参照している箇所が3つあります。承認処理では、承認中の状態が解除されないまま残ります。
 
 ## 詳細
 
-- github_client.pyと同じ形で、一時的な通信エラーの判定文字列と再試行の回数・間隔をgit_client.pyに追加する。
-- 判定文字列の例は、Could not resolve host、Connection timed out、RPC failed、early EOFなど。
-- 通信を伴う操作（fetch・push・pull・リモートブランチ削除）にだけ再試行を適用する。
-- 判定処理をgithub_client.pyと共通化できるか検討する。
-- 再試行のテストを追加する。
+- app/routes配下に、プロジェクト・サブタスクの取得と404判定を行う共通関数を置く。
+- projects.py・subtasks.py・deploy.pyにある重複した判定を、共通関数に置き換える。
+- ideas.pyの_github_repoとsubtasks.pyの_get_subtask_and_projectでも、プロジェクトが無い場合は404にする。
+- idea_runner._repo_pathでは、worker/main.pyの_load_subtask_and_projectと同じく、原因が分かるメッセージで例外を出す。
+- _create_issue_forで、GitHubClientError以外の例外でも承認中の状態を解除する。
 
 ## 根拠
 
-core/github_client.py:17-34,73-87では、TLS handshake timeoutなどを最大3回まで再試行している。core/git_client.py:19-33の_run_gitは1回失敗するとそのまま例外を投げる。対象はpush_branch(105)、create_worktreeのfetch(52)、prepare_detached_worktreeのfetch(194)、pull_latest(162)。worker/main.py:102はClaudeの実行前にpushするため、1回の通信エラーでジョブ全体がfailedになる。最近の失敗にもTLS handshake timeoutがある（#153⑤）。
+app/routes/ideas.py:145はsession.get(Project, ...)の結果を確認せずに.github_repoを参照している。同じ参照はworker/idea_runner.py:42とapp/routes/subtasks.py:364にもある。ideas.py:154-158はGitHubClientErrorしか捕捉しないため、AttributeErrorではrelease_claimが呼ばれない。404判定はprojects.py:83-85,236-239、subtasks.py:254-257、deploy.py:26-28に重複している。#240ではsubtasksルート内だけをまとめており、ルートをまたいだ重複は残っている。
 
 ## 関連ファイル
 
-- core/git_client.py:19
-- core/git_client.py:105
-- core/git_client.py:52
-- core/github_client.py:73
-- worker/main.py:102
+- app/routes/ideas.py:143
+- worker/idea_runner.py:40
+- app/routes/subtasks.py:362
+- app/routes/projects.py:236
+- app/routes/subtasks.py:254
+- app/routes/deploy.py:24
 

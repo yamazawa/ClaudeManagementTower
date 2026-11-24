@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import case, func
 
+from app.routes.lookups import get_project_or_404
 from core.db import SessionLocal
 from core.deploy import is_deploy_defined, is_deploy_running
 from core.github_client import (
@@ -113,9 +114,7 @@ def get_issues(project_id: int, state: Literal["open", "closed_today", "closed"]
     closed_todayは本日（サーバーのローカル時刻）クローズされたIssueのみを返す。
     """
     with SessionLocal() as session:
-        project = session.get(Project, project_id)
-        if project is None:
-            raise HTTPException(status_code=404, detail="project not found")
+        project = get_project_or_404(session, project_id)
         issues = _list_issues_by_state(project.github_repo, state)
         counts = _mr_counts_by_issue(session, project.id)
         return [{**i, "mr_counts": counts.get(i["number"], EMPTY_MR_COUNTS)} for i in issues]
@@ -140,7 +139,7 @@ def get_mr_counts(project_id: int):
     MRが無いIssueは含めない。
     """
     with SessionLocal() as session:
-        project = _get_project_or_404(session, project_id)
+        project = get_project_or_404(session, project_id)
         return _mr_counts_by_issue(session, project.id)
 
 
@@ -182,7 +181,7 @@ def create_project_issue(project_id: int, payload: CreateIssueRequest):
     if not title:
         raise HTTPException(status_code=400, detail="title is empty")
     with SessionLocal() as session:
-        project = _get_project_or_404(session, project_id)
+        project = get_project_or_404(session, project_id)
         try:
             issue = create_issue(project.github_repo, title, payload.body)
         except GitHubClientError as exc:
@@ -205,7 +204,7 @@ def update_issue_title(project_id: int, number: int, payload: UpdateTitleRequest
     if not title:
         raise HTTPException(status_code=400, detail="title is empty")
     with SessionLocal() as session:
-        project = _get_project_or_404(session, project_id)
+        project = get_project_or_404(session, project_id)
         try:
             old_title = get_issue(project.github_repo, number)["title"]
             edit_issue_title(project.github_repo, number, title)
@@ -266,17 +265,10 @@ def _subtask_summaries(session, project: Project, number: int) -> list[dict]:
     ]
 
 
-def _get_project_or_404(session, project_id: int) -> Project:
-    project = session.get(Project, project_id)
-    if project is None:
-        raise HTTPException(status_code=404, detail="project not found")
-    return project
-
-
 @router.get("/{project_id}/issues/{number}")
 def get_issue_detail(project_id: int, number: int):
     with SessionLocal() as session:
-        project = _get_project_or_404(session, project_id)
+        project = get_project_or_404(session, project_id)
         issue = get_issue(project.github_repo, number)
         issue["subtasks"] = _subtask_summaries(session, project, number)
         return issue
@@ -289,7 +281,7 @@ def close_project_issue(project_id: int, number: int):
     未解決（Draft・Resolved）のMRが残っている場合は拒否する。
     """
     with SessionLocal() as session:
-        project = _get_project_or_404(session, project_id)
+        project = get_project_or_404(session, project_id)
         unresolved = (
             session.query(Subtask)
             .filter_by(project_id=project.id, github_issue_number=number)
@@ -308,7 +300,7 @@ def close_project_issue(project_id: int, number: int):
 @router.post("/{project_id}/issues/{number}/reopen")
 def reopen_project_issue(project_id: int, number: int):
     with SessionLocal() as session:
-        project = _get_project_or_404(session, project_id)
+        project = get_project_or_404(session, project_id)
         try:
             reopen_issue(project.github_repo, number)
         except GitHubClientError as exc:
@@ -320,5 +312,5 @@ def reopen_project_issue(project_id: int, number: int):
 def get_issue_subtasks(project_id: int, number: int):
     """画面の自動更新用にDB上のサブタスク一覧を返す（GitHubへは問い合わせない）"""
     with SessionLocal() as session:
-        project = _get_project_or_404(session, project_id)
+        project = get_project_or_404(session, project_id)
         return _subtask_summaries(session, project, number)

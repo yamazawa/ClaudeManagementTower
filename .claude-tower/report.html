@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>作業レポート: gitのfetch・push・pullに、一時的な通信エラー時の再試行を入れるー①</title>
+<title>作業レポート: 削除済みプロジェクト参照時のAttributeError解消と404判定の共通化ー①</title>
 <style>
 body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; } h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; margin-top: 1.6em; }
@@ -12,51 +12,51 @@ th { background: #f0f0f0; } code { background: #f4f4f4; padding: 0 3px; }
 </style>
 </head>
 <body>
-<h1>作業レポート: gitのfetch・push・pullに、一時的な通信エラー時の再試行を入れるー①</h1>
+<h1>作業レポート: 削除済みプロジェクト参照時のAttributeError解消と404判定の共通化ー①</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#257 [IdeaMan] gitのfetch・push・pullに、一時的な通信エラー時の再試行を入れる</td></tr>
-<tr><th>サブタスク</th><td>gitのfetch・push・pullに、一時的な通信エラー時の再試行を入れるー①</td></tr>
-<tr><th>ブランチ</th><td><code>issue-257-47deb79c-subtask-1</code>（push済み）</td></tr>
+<tr><th>Issue</th><td>#255 [IdeaMan] 削除済みプロジェクトを参照したときのAttributeErrorをなくし、404判定をルート間で共通化する</td></tr>
+<tr><th>サブタスク</th><td>削除済みプロジェクトを参照したときのAttributeErrorをなくし、404判定をルート間で共通化するー①</td></tr>
+<tr><th>ブランチ</th><td><code>issue-255-4b8f2e22-subtask-1</code></td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
 <p class="ok">成功</p>
-<p>通信を伴うgit操作に、ghと同じ方式（最大3回・待ち時間3秒ずつ延長）の再試行を入れた。<br>判定・再試行ループはgithub_clientと共通化した。</p>
+<p>提案の詳細5項目をすべて実装した。<br>全テスト（556件）が成功した。</p>
 
 <h2>3. 変更内容</h2>
 <table>
 <tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td><code>core/transient_retry.py</code>（新規）</td><td><code>TransientError</code>・<code>contains_any_pattern</code>・<code>call_with_retry</code>を追加。</td></tr>
-<tr><td>2</td><td><code>core/github_client.py</code></td><td><code>is_transient_gh_error</code>と<code>_run_gh</code>を共通処理で置き換え。<br>振る舞いは変更なし。</td></tr>
-<tr><td>3</td><td><code>core/git_client.py</code></td><td><code>GIT_MAX_ATTEMPTS</code>・<code>GIT_RETRY_INTERVAL_SECONDS</code>・<code>GIT_TRANSIENT_ERROR_PATTERNS</code>を追加。<br><code>_run_git</code>に<code>retryable</code>引数（既定False）を追加。<br>fetch（create_worktree・has_remote_updates・prepare_detached_worktree）、push（push_branch・push_head_to）、pull_latest、delete_remote_branchをretryable=Trueにした。</td></tr>
-<tr><td>4</td><td><code>tests/test_transient_retry.py</code>（新規）</td><td>共通処理のテスト。</td></tr>
-<tr><td>5</td><td><code>tests/test_git_client_retry.py</code>（新規）</td><td>git再試行のテスト（成功・上限到達・タイムアウト・恒久エラー・ローカル操作・判定文字列）。</td></tr>
-<tr><td>6</td><td><code>tests/test_github_client.py</code></td><td>sleepのmonkeypatch先を<code>transient_retry.time</code>に変更。</td></tr>
+<tr><td>1</td><td><code>app/routes/lookups.py</code>（新規）</td><td><code>get_project_or_404</code>・<code>get_subtask_or_404</code>・<code>get_subtask_and_project_or_404</code>を追加。</td></tr>
+<tr><td>2</td><td><code>app/routes/projects.py</code></td><td>ローカルの<code>_get_project_or_404</code>とget_issues内のインライン判定を共通関数に置換。</td></tr>
+<tr><td>3</td><td><code>app/routes/deploy.py</code></td><td><code>_get_project</code>内の判定を共通関数に置換。</td></tr>
+<tr><td>4</td><td><code>app/routes/subtasks.py</code></td><td><code>_get_project_or_404</code>・<code>_get_subtask_or_404</code>・<code>_get_subtask_and_project</code>を削除し共通関数に置換。<br>プロジェクトが無いサブタスクも404になる。</td></tr>
+<tr><td>5</td><td><code>app/routes/ideas.py</code></td><td><code>_github_repo</code>を共通関数経由にし404化。<br><code>_create_issue_for</code>でGitHubClientError以外の例外も<code>release_claim</code>して再送出。</td></tr>
+<tr><td>6</td><td><code>worker/idea_runner.py</code></td><td><code>_repo_path</code>でプロジェクトが無い場合に「プロジェクト(id=N)が見つかりません」でRuntimeError。</td></tr>
+<tr><td>7</td><td><code>tests/test_route_lookups.py</code>（新規）ほか</td><td>共通関数・サブタスククローズの404、承認時の404と承認中解除、想定外例外での承認中解除、<code>_repo_path</code>のメッセージのテストを追加。</td></tr>
 </table>
-<p>コミット: 595dc32（共通化）、108f0a7（git再試行）、83ec7ea（テスト）</p>
+<p>コミット: 4d63b4a（共通化）・95853bc（404判定）・a124d2d（アイデア出し）・d61d06a（承認）・テスト追加</p>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>判定文字列照合と再試行ループを<code>core/transient_retry.py</code>に共通化した。<br>判定文字列自体はgh・gitで別定義のまま。</td><td>ループは同一だが、エラー文言はツールごとに異なるため。</td></tr>
-<tr><td>2</td><td>Issue記載の4箇所に加え、has_remote_updatesのfetch・push_head_toも対象にした。</td><td>「通信を伴う操作にだけ適用」の方針に該当するため。</td></tr>
-<tr><td>3</td><td>gitのタイムアウト（60秒）も一時的なエラーとして再試行する。</td><td>ghの扱いに合わせた。</td></tr>
-<tr><td>4</td><td>「unable to access」「Could not read from remote repository」は判定文字列に入れなかった。</td><td>認証エラー（403等）でも出るため、恒久エラーまで再試行してしまう。</td></tr>
-<tr><td>5</td><td>再試行回数・間隔はghと同じ値（3回・3秒）を別定数で定義した。</td><td>gitとghで個別に調整できるようにするため。</td></tr>
+<tr><td>1</td><td>共通関数の置き場所を<code>app/routes/lookups.py</code>とした。</td><td>HTTPExceptionを送出するためルート層に置く。<br>既存の<code>repo_items.py</code>と同じくルート共通モジュールとして並べる。</td></tr>
+<tr><td>2</td><td>関数名は先頭アンダースコアなしの公開名にした。</td><td>複数モジュールから参照するため。</td></tr>
+<tr><td>3</td><td><code>_create_issue_for</code>の想定外例外は<code>except Exception</code>で解除後そのまま再送出した。</td><td>404のHTTPExceptionはそのまま返し、それ以外はFastAPIの500処理に任せる。<br>例外内容を握りつぶさない。</td></tr>
+<tr><td>4</td><td><code>merge_subtask</code>もプロジェクトが無い場合は404になる。</td><td>共通関数への置換の結果。<br>プロジェクトが無いとマージ処理側でも失敗するため、受付時点で拒否する方が妥当と判断。</td></tr>
+<tr><td>5</td><td>route外の<code>core/merge_queue.py:136</code>等の同種の参照は対象外とした。</td><td>提案の範囲外のため。</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<p><code>./.venv/Scripts/python.exe -m pytest -q</code>：<span class="ok">566 passed</span></p>
-<p>実際の通信エラーでの動作確認は未実施（再現が困難なため、subprocessを差し替えたテストで確認）。</p>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code> → <span class="ok">556 passed</span></p>
+<p>起動しての動作確認は未実施（ガイドラインによりビルド・テストまで）。</p>
 
-<h2>6. 残課題・リスク・確認ポイント</h2>
+<h2>6. 残課題・レビュー観点</h2>
 <ul>
-<li>create_worktreeはファイルロック（60秒）保持中にfetchするため、タイムアウト再試行時は最長約3分ロックを保持する。<br>同時に作成中の他サブタスクがロック取得タイムアウトになる可能性がある。</li>
-<li>delete_remote_branchは、初回が実は成功していた場合、再試行で「remote ref does not exist」になり失敗扱いになる。</li>
-<li>push後の応答途中で切れた場合も再試行するが、同じブランチへの同じコミットのpushなので二重実行の害はない想定。</li>
-<li>判定文字列（<code>core/git_client.py</code>の<code>GIT_TRANSIENT_ERROR_PATTERNS</code>）の過不足を確認してほしい。</li>
+<li><code>core/merge_queue.py:136</code>・<code>core/idea_context.py:137</code>などcore層にも取得結果を確認しない参照が残る可能性がある。</li>
+<li>アイデア出しジョブでは<code>build_idea_prompt</code>（<code>core/idea_context.py:137-140</code>）が<code>_repo_path</code>より先に呼ばれる。<br>削除済みプロジェクトの場合はそちらでAttributeErrorになり、<code>_repo_path</code>のメッセージは現状の流れでは出ない。<br>core層の修正は提案範囲外のため、別Issueでの対応を推奨する。</li>
+<li><code>merge_subtask</code>の404化（判断No.4）が意図に沿うか確認してほしい。</li>
 </ul>
 </body>
 </html>
