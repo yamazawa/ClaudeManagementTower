@@ -72,6 +72,18 @@ def test_denies_absolute_path_outside_worktree(tmp_path):
     assert isinstance(result, PermissionResultDeny)
 
 
+def test_allows_url_in_command(tmp_path):
+    command = 'gh pr create --body "see https://example.com/a and http://example.com/b"'
+    result = _check(str(tmp_path), "PowerShell", {"command": command})
+    assert isinstance(result, PermissionResultAllow)
+
+
+def test_denies_absolute_path_outside_worktree_after_url(tmp_path):
+    command = 'echo https://example.com/a; Remove-Item "C:/git/ClaudeManagementTower"'
+    result = _check(str(tmp_path), "PowerShell", {"command": command})
+    assert isinstance(result, PermissionResultDeny)
+
+
 def test_allows_absolute_path_inside_worktree(tmp_path):
     inner = tmp_path / "report.html"
     result = _check(str(tmp_path), "Bash", {"command": f"cat {inner}"})
