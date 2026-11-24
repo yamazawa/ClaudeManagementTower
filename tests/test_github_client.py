@@ -7,6 +7,7 @@ import pytest
 from core import github_client
 from core.github_client import (
     GitHubClientError,
+    create_repo_from_local,
     edit_issue_title,
     edit_pr_body,
     edit_pr_title,
@@ -34,6 +35,22 @@ def test_edit_issue_title_runs_gh_issue_edit(monkeypatch):
 
     assert calls == [
         ["gh", "issue", "edit", "12", "--repo", "owner/repo", "--title", "新しいタイトル"]
+    ]
+
+
+def test_create_repo_from_local_runs_gh_repo_create_without_retry(monkeypatch):
+    calls = []
+    monkeypatch.setattr(github_client.subprocess, "run", _fake_run(calls, 1, "HTTP 502"))
+
+    with pytest.raises(GitHubClientError):
+        create_repo_from_local("owner/new", "C:/git/new", "説明", "private")
+
+    assert calls == [
+        [
+            "gh", "repo", "create", "owner/new", "--private",
+            "--source", "C:/git/new", "--remote", "origin", "--push",
+            "--description", "説明",
+        ]
     ]
 
 
