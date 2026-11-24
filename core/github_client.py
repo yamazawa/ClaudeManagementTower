@@ -159,6 +159,24 @@ def create_issue(repo: str, title: str, body: str) -> dict:
     return {"number": number, "url": url}
 
 
+def create_repo_from_local(repo: str, source_path: str, description: str, visibility: str) -> None:
+    """ローカルリポジトリを元にGitHubリポジトリを作成し、originとしてpushする
+
+    visibilityはprivate・public・internalのいずれか。
+    """
+    _run_gh(
+        [
+            "repo", "create", repo,
+            f"--{visibility}",
+            "--source", source_path,
+            "--remote", "origin",
+            "--push",
+            "--description", description,
+        ],
+        retryable=False,
+    )
+
+
 def edit_issue_title(repo: str, number: int, title: str) -> None:
     _run_gh(["issue", "edit", str(number), "--repo", repo, "--title", title])
     invalidate_issue_list_cache(repo)
