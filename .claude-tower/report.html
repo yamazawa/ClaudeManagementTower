@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>作業レポート: リポジトリ追加機能ー①</title>
+<title>作業レポート: 実装ジョブ・アイデア出しジョブに最大実行時間を設け、超えたら要確認にするー①</title>
 <style>
 body { font-family: sans-serif; margin: 2em; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; } h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; margin-top: 1.6em; }
@@ -12,68 +12,51 @@ th { background: #f0f0f0; } code { background: #f4f4f4; padding: 0 3px; }
 </style>
 </head>
 <body>
-<h1>作業レポート: リポジトリ追加機能ー①</h1>
+<h1>作業レポート: 実装ジョブ・アイデア出しジョブに最大実行時間を設け、超えたら要確認にするー①</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#249（PR #250）</td></tr>
-<tr><th>サブタスク</th><td>リポジトリ追加機能ー①</td></tr>
-<tr><th>ブランチ</th><td><code>issue-new-5572fc0b-subtask-1</code>（push済み）</td></tr>
-<tr><th>指示</th><td>リポジトリ一覧にリポジトリ追加機能を追加する。<br>英語名・日本語名・何をするPJかをDLGで入力する。<br>C:\gitに英語名で作成し、GitHubにも登録する。<br>管理に必要な初期コミットをIssue＋MRで行い、マージしてIssueをCloseするまで行う。</td></tr>
+<tr><th>Issue</th><td>#259 [IdeaMan] 実装ジョブ・アイデア出しジョブに最大実行時間を設け、超えたら要確認にする</td></tr>
+<tr><th>サブタスク</th><td>実装ジョブ・アイデア出しジョブに最大実行時間を設け、超えたら要確認にするー①</td></tr>
+<tr><th>ブランチ</th><td><code>issue-259-de002832-subtask-1</code></td></tr>
 </table>
 
 <h2>2. 実装結果</h2>
-<p class="ok">成功（実機での動作確認は未実施）</p>
-<p>リポジトリ一覧の見出しに「Add」ボタンを追加し、DLGからリポジトリ作成〜初期設定MRのマージ・IssueのCloseまでを一括で行えるようにした。<br>
-実際のGitHubリポジトリ作成は外部への公開を伴うため、本作業内では実行していない。<br>
-処理はローカルのbareリポジトリをGitHubに見立てた自動テストで、worktree作成からマージ・後始末まで通しで確認した。</p>
+<p class="ok">成功</p>
+<p>Claude実行を最大実行時間付きで実行するようにした。<br>
+上限超過時、実装ジョブはneeds_attention、アイデア出しジョブはfailedで終了し、ワーカーは解放される。</p>
 
 <h2>3. 変更内容</h2>
 <table>
 <tr><th>No.</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td><code>core/models.py</code>・<code>core/db.py</code></td><td><code>projects</code>に<code>display_name</code>・<code>description</code>列を追加（後付け列）。</td></tr>
-<tr><td>2</td><td><code>core/repo_catalog.py</code>・<code>app/routes/projects.py</code></td><td>登録した日本語名を表示名に優先。一覧APIで説明も返す。</td></tr>
-<tr><td>3</td><td><code>core/git_client.py</code>・<code>core/github_client.py</code>・<code>core/config.py</code></td><td><code>init_local_repo</code>・<code>commit_files</code>・<code>create_repo_from_local</code>（gh repo create）を追加。<br>設定<code>new_repo_base_dir</code>・<code>new_repo_owner</code>・<code>new_repo_visibility</code>を追加。</td></tr>
-<tr><td>4</td><td><code>core/repo_setup.py</code>（新規）</td><td>入力確認、ローカル作成＋README初期コミット、GitHub登録・push、管理塔への登録。</td></tr>
-<tr><td>5</td><td><code>core/repo_initial_setup.py</code>（新規）</td><td>初期設定Issue作成→worktreeでCLAUDE.md・.gitignoreをコミット→PR作成・MR登録→Ready→マージ→IssueClose→worktree・ローカルブランチの後始末→Deployed反映。</td></tr>
-<tr><td>6</td><td><code>app/routes/projects.py</code></td><td><code>POST /api/projects</code>を追加。入力不備は400、作成途中の失敗は500（登録済みならproject_idも返す）。</td></tr>
-<tr><td>7</td><td><code>app/static/index.html</code>・<code>project_create.js</code>（新規）・<code>app.js</code>・<code>style.css</code></td><td>Addボタンと入力DLGを追加。作成後は一覧を再取得し、追加したリポジトリを選択。<br>一覧取得を<code>loadProjects</code>に切り出し。</td></tr>
-<tr><td>8</td><td><code>.env.example</code>・<code>IMPLEMENTATION_PLAN.md</code></td><td>設定例と、10章（採用方式）を追記。</td></tr>
-<tr><td>9</td><td><code>tests/</code></td><td><code>test_repo_setup.py</code>・<code>test_git_client_new_repo.py</code>を新規追加。<br>DB列追加・表示名・API・gh呼び出しのテストを追加。</td></tr>
+<tr><td>1</td><td><code>core/config.py</code></td><td><code>job_max_runtime_seconds</code>（7200）、<code>idea_job_max_runtime_seconds</code>（1800）を追加。</td></tr>
+<tr><td>2</td><td><code>worker/time_limit.py</code>（新規）</td><td><code>run_with_time_limit</code>：<code>asyncio.run(asyncio.wait_for(...))</code>で実行し、超過時は<code>ClaudeTimeoutError</code>を送出。</td></tr>
+<tr><td>3</td><td><code>worker/main.py</code></td><td><code>_run_claude_for_job</code>を<code>run_with_time_limit</code>経由に変更。<br><code>process_job</code>で<code>ClaudeTimeoutError</code>を捕捉し、errorイベント記録＋needs_attentionで終了。</td></tr>
+<tr><td>4</td><td><code>worker/idea_runner.py</code></td><td><code>_execute</code>を<code>run_with_time_limit</code>経由に変更。<br>超過時は既存の例外処理でfailed＋エラーメッセージを記録。</td></tr>
+<tr><td>5</td><td><code>tests/test_worker_time_limit.py</code>（新規）ほか</td><td>打ち切り・キャンセル、実装ジョブのneeds_attention遷移、アイデア出しジョブのfailed遷移、設定既定値のテストを追加。</td></tr>
 </table>
-<p>コミット: 111a9cd, 6192c85, 1210f2f, 4f151d0, 190fe0f, e64de6f, 078cb7f（＋本レポート）</p>
+<p>コミット: b465129（設定と共通関数）、2e5414e（実装ジョブ）、e61c38a（アイデア出しジョブ）</p>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>GitHubリポジトリは既定でprivateとし、所有者は<code>self_repo</code>の所有者とする（設定で変更可）。</td><td>公開範囲の指定が無く、安全側に倒した。</td></tr>
-<tr><td>2</td><td>既定ブランチ（master）にはREADME.mdのみ直接コミットする。</td><td>MRのベースブランチ（origin/master）が無いとworktree・PRを作れないため。</td></tr>
-<tr><td>3</td><td>初期設定MRで追加するのはCLAUDE.md（日本語名・説明・管理方法）と.gitignore（.venv/・.env）。</td><td>管理塔が対象リポジトリに必須とするファイルは無いため、Claude実行時の指示となるCLAUDE.mdを中心にした。</td></tr>
-<tr><td>4</td><td>Issue名は<code>[SP0]タスク1 - Claude監視塔の管理用初期設定</code>、MR名は既存規則どおり末尾に「ー①」。</td><td>ガイドラインのIssue命名形式に合わせた。</td></tr>
-<tr><td>5</td><td>初期設定MRは自動マージ・Issueは自動Closeする。</td><td>指示で明示されており、人間のAdd操作が起点のため。IMPLEMENTATION_PLAN.md 10章No.5に記録。</td></tr>
-<tr><td>6</td><td>PR本文は<code>Related to #番号</code>とし、IssueはAPIで明示的にCloseする。</td><td>既存のMR作成方式に合わせた。</td></tr>
-<tr><td>7</td><td>途中で失敗しても作成済みのフォルダ・GitHubリポジトリ・Issue・MRは削除しない。</td><td>破壊的操作を自動で行わないため。登録後の失敗時は一覧に表示し選択する。</td></tr>
-<tr><td>8</td><td>マージ後にローカルのmasterをpullし、MRをDeployedに反映する。</td><td>ローカルのソースに初期設定が含まれ、Mergedのまま残らないようにするため。</td></tr>
-<tr><td>9</td><td>初期設定用worktreeは<code>{worktree_base_dir}/{英語名}-{ブランチ名}</code>に作り、完了後に削除する。</td><td>複数リポジトリで同じブランチ名になっても衝突しないようにするため。</td></tr>
+<tr><td>1</td><td>既定値は実装ジョブ2時間、アイデア出し30分。</td><td>実装ジョブは大きなタスクで長時間かかり得るため、誤打ち切りを避ける余裕を持たせた。<br>アイデア出しは読み取り専用の調査のみのため短めにした。<br>いずれも<code>.env</code>で変更可能。</td></tr>
+<tr><td>2</td><td>打ち切り処理を<code>worker/time_limit.py</code>に共通化した。</td><td>実装ジョブとアイデア出しジョブで同じ処理になるため。<br><code>worker/main.py</code>が<code>idea_runner</code>をimportしており、どちらかに置くと依存が逆転するため。</td></tr>
+<tr><td>3</td><td>専用例外<code>ClaudeTimeoutError</code>を設けた。</td><td>他の失敗（failed）・利用上限（rate_limited）と区別して状態を決めるため。</td></tr>
+<tr><td>4</td><td>実装ジョブのイベント種別は<code>error</code>とした。</td><td>既存のエラー表示や<code>core/idea_context.py</code>のエラー集計にそのまま乗せるため。</td></tr>
+<tr><td>5</td><td>アイデア出しジョブはイベント記録を行わず、エラーメッセージとログのみ残す。</td><td>アイデア出しジョブには実行イベントの仕組みが無いため。</td></tr>
 </table>
 
 <h2>5. テスト</h2>
-<p><code>./.venv/Scripts/python.exe -m pytest -q</code> → <span class="ok">576 passed</span></p>
-<ul>
-<li>リポジトリ作成〜初期設定の通しテストは、実gitとローカルbareリポジトリで実施（gh呼び出しは差し替え）。</li>
-<li>JSは<code>node --check</code>で構文確認、入力欄のpattern属性の正規表現をvフラグで確認。</li>
-<li>TestClientで<code>/</code>にDLGが含まれ、<code>project_create.js</code>が配信されることを確認。</li>
-<li>サーバー起動・実GitHubでの作成は未実施（ガイドラインにより起動確認は人間に依頼。GitHubへの作成は外部公開を伴うため）。</li>
-</ul>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code> → <span class="ok">554 passed</span></p>
+<p>ワーカー起動・実Claudeでの打ち切り確認は未実施（ガイドラインに従い人間に依頼）。</p>
 
-<h2>6. 残課題・レビュー観点</h2>
+<h2>6. 残課題・リスク・レビュー観点</h2>
 <ul>
-<li>実機確認をお願いしたい：Addボタン→DLG入力→作成で、C:\git\英語名の作成、GitHub登録、初期設定Issue・MRのマージとIssueのClose、一覧への追加と選択。</li>
-<li>処理は同期APIで数十秒かかる。DLGは作成中に閉じられないようにしているが、Cloudflare経由のタイムアウトに注意。</li>
-<li>途中失敗時のworktree・GitHubリポジトリは自動で消さないため、手動で後始末が必要。</li>
-<li>PR作成直後に自動同期が同じPRを取り込むと、まれに一意制約違反で500になる可能性がある（取り込み済みの行は再利用するが、同時挿入は未対策）。</li>
-<li>.gitignore・CLAUDE.mdの内容は汎用の最小構成。言語別の除外設定は追加後のIssueで対応する想定。</li>
-<li>既存リポジトリ（管理塔・検証用）の表示名は従来どおり辞書から表示される。</li>
+<li>打ち切り時、Claude Agent SDKの非同期ジェネレータはキャンセルされるが、Claude CLIの子プロセスが確実に終了するかは実機未確認。</li>
+<li>打ち切った実装ジョブはセッションIDを保存しないため、再実行時は前回より古いセッションから再開される。</li>
+<li>上限超過のneeds_attentionはworktreeに途中の変更が残る前提。再実行前にworktreeの状態を確認してほしい。</li>
+<li>既定値（2時間・30分）が運用に合っているか確認してほしい。</li>
 </ul>
 </body>
 </html>
