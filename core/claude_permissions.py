@@ -1,6 +1,6 @@
 import os
 import re
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 from claude_agent_sdk import HookMatcher, PermissionResultAllow, PermissionResultDeny
 
@@ -53,13 +53,11 @@ def _command_escapes_writable(command: str, rules: AccessRules) -> bool:
     return any(not rules.is_writable(token.rstrip("\\/")) for token in tokens)
 
 
-def _shell_denial(command: str, rules: AccessRules) -> str | None:
+def _shell_scope_reason(command: str, rules: AccessRules) -> str | None:
     if any(pattern.search(command) for pattern in DANGEROUS_COMMAND_PATTERNS):
-        return f"危険な操作のため拒否: {command}"
-    if command_touches_blocked(command):
-        return f"参照禁止のファイルを含むため拒否: {command}"
+        return f"危険な操作: {command}"
     if _command_escapes_writable(command, rules):
-        return f"書き込み許可範囲外を操作する可能性があるため拒否: {command}"
+        return f"書き込み許可範囲外を操作する可能性: {command}"
     return None
 
 
@@ -126,23 +124,30 @@ def _to_can_use_tool(check: DenialCheck) -> Callable:
     return can_use_tool
 
 
-def _to_pre_tool_use_hooks(check: DenialCheck) -> dict:
-    """許可確認を経ずに実行されるツールにも、同じ拒否判定を適用するフック
+def _hook_decision(decision: str, reason: str) -> dict:
+    return {
+        "hookSpecificOutput": {
+            "hookEventName": "PreToolUse",
+            "permissionDecision": decision,
+            "permissionDecisionReason": reason,
+        }
+    }
+
+
+def _to_pre_tool_use_hooks(check: DenialCheck, ask_check: DenialCheck | None = None) -> dict:
+    """許可確認を経ずに実行されるツールにも、同じ判定を適用するフック
 
     acceptEdits等では作業フォルダ内の操作がcan_use_toolを経ずに許可されるため。
+    ask_checkに該当する操作は、拒否せず許可確認（can_use_tool）に回す。
     """
 
     async def hook(input_data, tool_use_id, context):
-        reason = check(input_data.get("tool_name", ""), input_data.get("tool_input") or {})
-        if reason is None:
-            return {}
-        return {
-            "hookSpecificOutput": {
-                "hookEventName": "PreToolUse",
-                "permissionDecision": "deny",
-                "permissionDecisionReason": reason,
-            }
-        }
+        tool_name, tool_input = input_data.get("tool_name", ""), input_data.get("tool_input") or {}
+        reason = check(tool_name, tool_input)
+        if reason is not None:
+            return _hook_decision("deny", reason)
+        ask_reason = ask_check(tool_name, tool_input) if ask_check else None
+        return _hook_decision("ask", ask_reason) if ask_reason else {}
 
     return {"PreToolUse": [HookMatcher(matcher=None, hooks=[hook])]}
 
@@ -171,17 +176,39 @@ def restrict_to_read_only(root: str) -> Callable:
     return _to_can_use_tool(_read_only_check(root))
 
 
-def _worktree_check(rules: AccessRules) -> DenialCheck:
+def _blocked_check(tool_name: str, tool_input: dict) -> str | None:
+    """参照禁止のファイルに触れる操作を拒否する"""
+    if tool_name in SHELL_TOOL_NAMES:
+        command = tool_input.get("command", "")
+        return f"参照禁止のファイルを含むため拒否: {command}" if command_touches_blocked(command) else None
+    return _blocked_input_denial(tool_name, tool_input)
+
+
+def _scope_check(rules: AccessRules) -> DenialCheck:
+    """危険な操作・書き込み許可範囲外の操作について、その旨を返す
+
+    読み取り系ツールは場所を問わず対象外とする。
+    """
+
     def check(tool_name: str, tool_input: dict) -> str | None:
         if tool_name in SHELL_TOOL_NAMES:
-            return _shell_denial(tool_input.get("command", ""), rules)
-        blocked = _blocked_input_denial(tool_name, tool_input)
-        if blocked is not None or tool_name in READ_ONLY_TOOL_NAMES:
-            return blocked
+            return _shell_scope_reason(tool_input.get("command", ""), rules)
+        if tool_name in READ_ONLY_TOOL_NAMES:
+            return None
         path = tool_input.get("file_path") or tool_input.get("path") or tool_input.get("notebook_path")
         if path and not rules.is_writable(path):
-            return f"書き込み許可範囲外への操作を拒否: {path}"
+            return f"書き込み許可範囲外への操作: {path}"
         return None
+
+    return check
+
+
+def _worktree_check(rules: AccessRules) -> DenialCheck:
+    scope_check = _scope_check(rules)
+
+    def check(tool_name: str, tool_input: dict) -> str | None:
+        reason = scope_check(tool_name, tool_input)
+        return _blocked_check(tool_name, tool_input) or (f"拒否 - {reason}" if reason else None)
 
     return check
 
@@ -209,3 +236,35 @@ def restrict_to_worktree(
     """
     check = _worktree_check(rules or default_access_rules(worktree))
     return _to_can_use_tool(_with_denied_tools(check, denied_tools))
+
+
+# 利用者への許可確認（許可ならNone、拒否なら理由を返す）
+AskUser = Callable[[str, dict, str], Awaitable[str | None]]
+
+
+def _to_asking_can_use_tool(check: DenialCheck, ask_check: DenialCheck, ask_user: AskUser) -> Callable:
+    async def can_use_tool(tool_name, tool_input, context):
+        reason = check(tool_name, tool_input)
+        if reason is not None:
+            return PermissionResultDeny(message=reason)
+        ask_reason = ask_check(tool_name, tool_input)
+        if ask_reason is not None:
+            denial = await ask_user(tool_name, tool_input, ask_reason)
+            if denial is not None:
+                return PermissionResultDeny(message=denial)
+        return PermissionResultAllow(updated_input=tool_input)
+
+    return can_use_tool
+
+
+def ask_outside_worktree(
+    rules: AccessRules, ask_user: AskUser, denied_tools: dict[str, str] | None = None
+) -> tuple[Callable, dict]:
+    """危険な操作・書き込み許可範囲外の操作を、拒否せず利用者に確認する
+
+    許可確認のcan_use_toolと、PreToolUseフックの組を返す。
+    参照禁止のファイル・denied_toolsに指定したツールは、確認せずに拒否する。
+    """
+    check = _with_denied_tools(_blocked_check, denied_tools)
+    ask_check = _scope_check(rules)
+    return _to_asking_can_use_tool(check, ask_check, ask_user), _to_pre_tool_use_hooks(check, ask_check)
