@@ -6,10 +6,12 @@ from core.attachments import MAX_ATTACHMENT_BYTES
 from core.claude_access_rules import default_access_rules
 from core.claude_permissions import (
     IDEA_MAN_TOOL_NAMES,
+    AskUser,
     _read_only_check,
     _to_pre_tool_use_hooks,
     _with_denied_tools,
     _worktree_check,
+    ask_outside_worktree,
     restrict_to_read_only,
     restrict_to_worktree,
 )
@@ -59,6 +61,16 @@ async def _collect_result(messages, on_message) -> tuple[str | None, str | None]
     return session_id, result_text
 
 
+def _worktree_permissions(
+    worktree: str, denied_tools: dict[str, str] | None, ask_user: AskUser | None
+) -> tuple[Callable, dict]:
+    rules = default_access_rules(worktree)
+    if ask_user is not None:
+        return ask_outside_worktree(rules, ask_user, denied_tools)
+    hooks = _to_pre_tool_use_hooks(_with_denied_tools(_worktree_check(rules), denied_tools))
+    return restrict_to_worktree(worktree, rules, denied_tools), hooks
+
+
 async def run_claude(
     prompt: str,
     worktree: str,
@@ -66,17 +78,19 @@ async def run_claude(
     on_message: Callable[[object], None] | None = None,
     policy_prompt: str = AGENT_POLICY_PROMPT,
     denied_tools: dict[str, str] | None = None,
+    ask_user: AskUser | None = None,
     mcp_servers: dict | None = None,
 ) -> tuple[str | None, str | None]:
-    """Claudeを実行する
+    """対象worktreeでClaudeを実行する
 
+    ask_userを指定した場合、危険な操作・書き込み許可範囲外の操作を拒否せず利用者に確認する。
     mcp_serversには、管理塔ツールなどプロセス内のMCPサーバーを指定する。
     """
-    rules = default_access_rules(worktree)
+    can_use_tool, hooks = _worktree_permissions(worktree, denied_tools, ask_user)
     options = ClaudeAgentOptions(
         cwd=worktree,
-        can_use_tool=restrict_to_worktree(worktree, rules, denied_tools),
-        hooks=_to_pre_tool_use_hooks(_with_denied_tools(_worktree_check(rules), denied_tools)),
+        can_use_tool=can_use_tool,
+        hooks=hooks,
         permission_mode="acceptEdits",
         resume=resume,
         mcp_servers=mcp_servers or {},

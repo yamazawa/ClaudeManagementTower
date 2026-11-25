@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from app.routes import cli
 from core import cli_attachments
 from core.attachments import AttachmentError
+from core.cli_permission_requests import PermissionRequestNotFound
 from core.cli_session import CliSessionBusy, CliSessionNotRunning
 from core.repo_items import RepoItemClosed, RepoItemInvalid, RepoItemNotFound
 
@@ -66,6 +67,26 @@ def test_post_interrupt_maps_errors(monkeypatch, exc, status):
     with pytest.raises(HTTPException) as error:
         cli.post_cli_interrupt(3)
     assert error.value.status_code == status
+
+
+def test_post_permission_passes_answer(monkeypatch):
+    answers = []
+    monkeypatch.setattr(cli, "answer_permission", lambda *args: answers.append(args))
+
+    payload = cli.AnswerCliPermissionRequest(allow=False, reason="不要")
+    assert cli.post_cli_permission(3, 7, payload) == {"accepted": True}
+    assert answers == [(3, 7, False, "不要")]
+
+
+def test_post_permission_404_when_already_answered(monkeypatch):
+    def fail(*args):
+        raise PermissionRequestNotFound("x")
+
+    monkeypatch.setattr(cli, "answer_permission", fail)
+
+    with pytest.raises(HTTPException) as error:
+        cli.post_cli_permission(3, 7, cli.AnswerCliPermissionRequest(allow=True))
+    assert error.value.status_code == 404
 
 
 def test_get_session_404_when_missing(monkeypatch):

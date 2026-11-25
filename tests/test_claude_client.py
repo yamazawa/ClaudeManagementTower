@@ -287,6 +287,83 @@ def test_run_claude_applies_denied_tools(monkeypatch, tmp_path):
     assert isinstance(result, PermissionResultDeny)
 
 
+def _asking(worktree, answer=None):
+    asked = []
+
+    async def ask_user(tool_name, tool_input, reason):
+        asked.append((tool_name, reason))
+        return answer
+
+    can_use_tool, hooks = claude_permissions.ask_outside_worktree(
+        _rules(worktree), ask_user, claude_permissions.CLI_DIALOG_DENIED_TOOLS
+    )
+    return can_use_tool, hooks["PreToolUse"][0].hooks[0], asked
+
+
+def test_asking_allows_scope_operation_when_user_allows(tmp_path):
+    worktree = _worktree(tmp_path)
+    can_use_tool, _, asked = _asking(str(worktree))
+    result = asyncio.run(can_use_tool("Bash", {"command": "git push --force origin main"}, {}))
+    assert isinstance(result, PermissionResultAllow)
+    assert asked and asked[0][0] == "Bash"
+
+
+def test_asking_denies_with_user_reason(tmp_path):
+    worktree = _worktree(tmp_path)
+    can_use_tool, _, _ = _asking(str(worktree), answer="不要です")
+    result = asyncio.run(can_use_tool("Write", {"file_path": str(tmp_path / "outside.txt")}, {}))
+    assert isinstance(result, PermissionResultDeny)
+    assert result.message == "不要です"
+
+
+def test_asking_denies_blocked_and_dialog_tools_without_asking(tmp_path):
+    worktree = _worktree(tmp_path)
+    can_use_tool, _, asked = _asking(str(worktree))
+    for name, args in [("Read", {"file_path": str(worktree / ".env")}), ("AskUserQuestion", {})]:
+        assert isinstance(asyncio.run(can_use_tool(name, args, {})), PermissionResultDeny), name
+    assert asked == []
+
+
+def test_asking_allows_inside_operation_without_asking(tmp_path):
+    worktree = _worktree(tmp_path)
+    can_use_tool, _, asked = _asking(str(worktree))
+    result = asyncio.run(can_use_tool("Edit", {"file_path": str(worktree / "a.py")}, {}))
+    assert isinstance(result, PermissionResultAllow)
+    assert asked == []
+
+
+def test_asking_hook_returns_ask_for_scope_and_deny_for_blocked(tmp_path):
+    worktree = _worktree(tmp_path)
+    _, hook, _ = _asking(str(worktree))
+
+    def decide(name, args):
+        output = asyncio.run(hook({"tool_name": name, "tool_input": args}, None, {}))
+        return output.get("hookSpecificOutput", {}).get("permissionDecision")
+
+    assert decide("Bash", {"command": "git reset --hard"}) == "ask"
+    assert decide("Write", {"file_path": str(tmp_path / "outside.txt")}) == "ask"
+    assert decide("Bash", {"command": "cat .env"}) == "deny"
+    assert decide("Edit", {"file_path": str(worktree / "a.py")}) is None
+
+
+def test_run_claude_asks_user_when_given(monkeypatch, tmp_path):
+    captured = {}
+
+    async def fake_query(prompt, options):
+        captured["options"] = options
+        return
+        yield
+
+    async def ask_user(tool_name, tool_input, reason):
+        return "拒否"
+
+    monkeypatch.setattr(claude_client, "query", fake_query)
+    asyncio.run(claude_client.run_claude("prompt", str(tmp_path), ask_user=ask_user))
+    result = asyncio.run(captured["options"].can_use_tool("Bash", {"command": "git reset --hard"}, {}))
+    assert isinstance(result, PermissionResultDeny)
+    assert result.message == "拒否"
+
+
 def test_max_buffer_size_covers_multiple_attachments():
     assert MAX_BUFFER_SIZE >= MAX_ATTACHMENT_BYTES * 10 * 4 // 3
 

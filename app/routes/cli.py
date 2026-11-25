@@ -1,6 +1,7 @@
 """CLIタブのAPI
 
 CLIの項目（対話）の一覧・作成・変更と、発言の送信・取得・応答の中断を扱う。
+応答中の許可の問い合わせへの回答も扱う。
 発言に付ける添付ファイルの保存・取得・削除も扱う。
 """
 
@@ -14,9 +15,11 @@ from app.routes import error_messages as messages
 from app.routes.repo_items import RepoItemPatch, item_errors
 from core.attachments import AttachmentError
 from core.cli_attachments import delete_cli_attachment, find_cli_attachment_file, save_cli_attachment
+from core.cli_permission_requests import PermissionRequestNotFound
 from core.cli_session import (
     CliSessionBusy,
     CliSessionNotRunning,
+    answer_permission,
     create_session,
     ensure_session_open,
     get_session,
@@ -38,6 +41,11 @@ class CreateCliSessionRequest(BaseModel):
 class SendCliMessageRequest(BaseModel):
     text: str
     attachment_ids: list[str] = []
+
+
+class AnswerCliPermissionRequest(BaseModel):
+    allow: bool
+    reason: str = ""
 
 
 @router.get("/projects/{project_id}/cli-sessions")
@@ -88,6 +96,19 @@ def post_cli_interrupt(cli_session_id: int):
             interrupt_turn(cli_session_id)
         except CliSessionNotRunning as exc:
             raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"accepted": True}
+
+
+@router.post("/cli-sessions/{cli_session_id}/permissions/{request_id}")
+def post_cli_permission(cli_session_id: int, request_id: int, payload: AnswerCliPermissionRequest):
+    """許可の問い合わせに回答する
+
+    回答済み・中断済みの問い合わせは404とする。
+    """
+    try:
+        answer_permission(cli_session_id, request_id, payload.allow, payload.reason)
+    except PermissionRequestNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return {"accepted": True}
 
 
