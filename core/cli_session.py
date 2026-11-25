@@ -4,6 +4,7 @@
 対話はリポジトリの項目として、タイトルとOpen・Closeの状態を持つ。
 Webサーバーは応答を待たず、発言ごとに別スレッドでClaudeを実行する。
 応答中のClaudeは、開発PCのEscキーのように利用者が中断できる。
+範囲外の操作は、開発PCのCLIのように実行前に利用者へ許可を問い合わせる。
 画面は発言一覧をポーリングして表示する。
 """
 
@@ -25,8 +26,9 @@ from claude_agent_sdk import (
 )
 from sqlalchemy.orm import sessionmaker
 
+from core import cli_permission_requests as permission_requests
 from core.claude_client import run_claude
-from core.claude_permissions import CLI_DIALOG_DENIED_TOOLS
+from core.claude_permissions import CLI_DIALOG_DENIED_TOOLS, AskUser
 from core.claude_prompts import CLI_DIALOG_POLICY_PROMPT
 from core.cli_attachments import build_cli_prompt, resolve_cli_attachments
 from core.db import SessionLocal
@@ -78,6 +80,8 @@ class CliMessageRole:
 # ツール実行の表示で、入力の要約に使う項目（先に見つかった項目を使う）
 TOOL_SUMMARY_KEYS = ("command", "file_path", "path", "pattern", "url", "description")
 TOOL_SUMMARY_MAX_LENGTH = 300
+# 許可の問い合わせでは、判断できるよう操作の内容を長めに残す
+PERMISSION_SUMMARY_MAX_LENGTH = 2000
 # ツールの実行結果の表示で残す行数・文字数（超えた分は省略する）
 TOOL_RESULT_MAX_LINES = 20
 TOOL_RESULT_MAX_LENGTH = 2000
@@ -146,11 +150,11 @@ def _find_canceller(cli_session_id: int) -> _TurnCanceller | None:
         return _turn_cancellers.get(cli_session_id)
 
 
-def _summarize_tool_input(tool_input: dict) -> str:
+def _summarize_tool_input(tool_input: dict, max_length: int = TOOL_SUMMARY_MAX_LENGTH) -> str:
     summary = next((str(tool_input[key]) for key in TOOL_SUMMARY_KEYS if tool_input.get(key)), None)
     if summary is None:
         summary = json.dumps(tool_input, ensure_ascii=False)
-    return summary[:TOOL_SUMMARY_MAX_LENGTH]
+    return summary[:max_length]
 
 
 def _tool_result_text(content: str | list | None) -> str:
@@ -317,7 +321,9 @@ def _finish_turn(cli_session_id: int, claude_session_id: str | None, notice: str
         session.commit()
 
 
-async def _run_claude_for_dialog(text: str, repo_path: str, resume: str | None, on_message) -> str | None:
+async def _run_claude_for_dialog(
+    text: str, repo_path: str, resume: str | None, on_message, ask_user: AskUser
+) -> str | None:
     session_id, _ = await run_claude(
         text,
         repo_path,
@@ -325,8 +331,19 @@ async def _run_claude_for_dialog(text: str, repo_path: str, resume: str | None, 
         on_message=on_message,
         policy_prompt=CLI_DIALOG_POLICY_PROMPT,
         denied_tools=CLI_DIALOG_DENIED_TOOLS,
+        ask_user=ask_user,
     )
     return session_id
+
+
+def _ask_user_for(cli_session_id: int) -> AskUser:
+    """範囲外の操作を、画面の利用者に問い合わせる"""
+
+    async def ask_user(tool_name: str, tool_input: dict, reason: str) -> str | None:
+        tool = f"{tool_name}: {_summarize_tool_input(tool_input, PERMISSION_SUMMARY_MAX_LENGTH)}"
+        return await permission_requests.ask(cli_session_id, tool, reason)
+
+    return ask_user
 
 
 async def _run_cancellable(coro, canceller: _TurnCanceller):
@@ -363,13 +380,16 @@ def run_turn(
 
     claude_session_id, notice = None, None
     try:
-        runner = claude_runner(text, target["repo_path"], target["resume"], on_message)
+        runner = claude_runner(
+            text, target["repo_path"], target["resume"], on_message, _ask_user_for(cli_session_id)
+        )
         claude_session_id = asyncio.run(_run_cancellable(runner, canceller))
     except asyncio.CancelledError:
         notice = INTERRUPTED_BY_USER_MESSAGE
     except Exception as exc:  # noqa: BLE001
         logger.warning("CLIタブの対話 #%s の応答が失敗しました: %s", cli_session_id, exc)
         notice = str(exc) or RESULT_ERROR_MESSAGE
+    permission_requests.discard(cli_session_id)
     _finish_turn(cli_session_id, claude_session_id or started.get("session_id"), notice, session_factory)
     _unregister_canceller(cli_session_id, canceller)
 
@@ -413,6 +433,7 @@ def interrupt_turn(cli_session_id: int, session_factory: sessionmaker = SessionL
     canceller = _find_canceller(cli_session_id)
     if canceller is not None:
         canceller.cancel()
+        permission_requests.discard(cli_session_id)
         return
     _finish_turn(cli_session_id, None, INTERRUPTED_BY_USER_MESSAGE, session_factory)
 
@@ -439,7 +460,16 @@ def get_session(cli_session_id: int, after_id: int = 0, session_factory: session
         return {
             **session_to_dict(cli_session),
             "messages": [_message_to_dict(m) for m in messages],
+            "permission_requests": permission_requests.list_requests(cli_session_id),
         }
+
+
+def answer_permission(cli_session_id: int, request_id: int, allow: bool, reason: str = "") -> None:
+    """許可の問い合わせに回答する
+
+    拒否時の理由は、Claudeへの拒否理由として伝える。
+    """
+    permission_requests.answer(cli_session_id, request_id, allow, reason)
 
 
 def recover_interrupted_sessions(session_factory: sessionmaker = SessionLocal) -> None:

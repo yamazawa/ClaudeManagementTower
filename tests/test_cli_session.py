@@ -14,6 +14,7 @@ from claude_agent_sdk import (
 from sqlalchemy.orm import sessionmaker
 
 from core import cli_attachments as cli_attachments
+from core import cli_permission_requests
 from core import cli_session
 from core.attachments import AttachmentError
 from core.cli_session import CliMessageRole, CliSessionStatus
@@ -37,8 +38,10 @@ def session_factory(tmp_path):
 def clear_cancellers():
     """テストごとに対話のIDが重なるため、中断の目印を残さない"""
     cli_session._turn_cancellers.clear()
+    cli_permission_requests._requests.clear()
     yield
     cli_session._turn_cancellers.clear()
+    cli_permission_requests._requests.clear()
 
 
 def _assistant(*blocks):
@@ -112,17 +115,21 @@ def test_message_entries_shows_result_only_on_error():
     assert cli_session.message_entries(_result(True, "失敗")) == [(CliMessageRole.ERROR, "失敗")]
 
 
-def test_run_claude_for_dialog_passes_dialog_denied_tools(monkeypatch):
+def test_run_claude_for_dialog_passes_dialog_denied_tools_and_ask_user(monkeypatch):
     captured = {}
 
     async def fake_run_claude(prompt, worktree, **kwargs):
         captured.update(kwargs)
         return "s", "done"
 
+    async def ask_user(tool_name, tool_input, reason):
+        return None
+
     monkeypatch.setattr(cli_session, "run_claude", fake_run_claude)
-    asyncio.run(cli_session._run_claude_for_dialog("hi", "repo", None, None))
+    asyncio.run(cli_session._run_claude_for_dialog("hi", "repo", None, None, ask_user))
     assert captured["denied_tools"] == cli_session.CLI_DIALOG_DENIED_TOOLS
     assert "AskUserQuestion" in captured["denied_tools"]
+    assert captured["ask_user"] is ask_user
 
 
 def test_create_session_rejects_unknown_project(session_factory):
@@ -235,7 +242,7 @@ def test_send_message_passes_prompt_with_attachment_table(session_factory, tmp_p
 def test_run_turn_records_reply_and_keeps_claude_session(session_factory):
     session_id, target = _claim(session_factory)
 
-    async def fake_runner(text, repo_path, resume, on_message):
+    async def fake_runner(text, repo_path, resume, on_message, ask_user):
         on_message(_assistant(TextBlock(text=f"{text}への応答")))
         return "claude-1"
 
@@ -250,7 +257,7 @@ def test_run_turn_records_reply_and_keeps_claude_session(session_factory):
 def test_run_turn_records_error_and_returns_to_idle(session_factory):
     session_id, target = _claim(session_factory)
 
-    async def failing_runner(text, repo_path, resume, on_message):
+    async def failing_runner(text, repo_path, resume, on_message, ask_user):
         raise RuntimeError("CLIが見つからない")
 
     cli_session.run_turn(session_id, "こんにちは", target, session_factory, failing_runner)
@@ -263,7 +270,7 @@ def test_run_turn_records_error_and_returns_to_idle(session_factory):
 def _blocking_runner(started: threading.Event, claude_session_id="claude-1"):
     """開始を通知し、中断されるまで応答を続けるClaude実行"""
 
-    async def runner(text, repo_path, resume, on_message):
+    async def runner(text, repo_path, resume, on_message, ask_user):
         on_message(SystemMessage(subtype="init", data={"session_id": claude_session_id}))
         started.set()
         await asyncio.sleep(60)
@@ -317,6 +324,67 @@ def test_interrupt_turn_without_running_thread_returns_to_idle(session_factory):
 
     state = cli_session.get_session(session_id, after_id=1, session_factory=session_factory)
     assert state["status"] == CliSessionStatus.IDLE
+    assert [m["content"] for m in state["messages"]] == [cli_session.INTERRUPTED_BY_USER_MESSAGE]
+
+
+def _asking_runner(asked: threading.Event, result: dict):
+    """範囲外の操作を問い合わせ、回答をresultに残すClaude実行"""
+
+    async def runner(text, repo_path, resume, on_message, ask_user):
+        task = asyncio.ensure_future(ask_user("Bash", {"command": "git reset --hard"}, "危険な操作"))
+        await asyncio.sleep(0)
+        asked.set()
+        result["denial"] = await task
+        return "claude-1"
+
+    return runner
+
+
+def _start_asking(session_factory):
+    session_id = cli_session.create_session(1, "調査", session_factory=session_factory)["id"]
+    asked, result = threading.Event(), {}
+    thread = cli_session.send_message(
+        session_id, "戻して", session_factory=session_factory, claude_runner=_asking_runner(asked, result)
+    )
+    assert asked.wait(5)
+    return session_id, thread, result
+
+
+@pytest.mark.parametrize(
+    ("allow", "reason", "expected"),
+    [
+        (True, "", None),
+        (False, "", cli_permission_requests.PERMISSION_DENIED_MESSAGE),
+        (False, "不要", "利用者が操作を拒否しました。理由: 不要"),
+    ],
+)
+def test_permission_request_is_listed_and_answered(session_factory, allow, reason, expected):
+    session_id, thread, result = _start_asking(session_factory)
+
+    requests = cli_session.get_session(session_id, session_factory=session_factory)["permission_requests"]
+    assert [(r["tool"], r["reason"]) for r in requests] == [("Bash: git reset --hard", "危険な操作")]
+    cli_session.answer_permission(session_id, requests[0]["id"], allow, reason)
+    thread.join(5)
+
+    assert result["denial"] == expected
+    assert cli_session.get_session(session_id, session_factory=session_factory)["permission_requests"] == []
+
+
+def test_answer_permission_rejects_unknown_request(session_factory):
+    with pytest.raises(cli_permission_requests.PermissionRequestNotFound):
+        cli_session.answer_permission(1, 999, True)
+
+
+def test_interrupt_turn_discards_permission_request(session_factory):
+    session_id, thread, result = _start_asking(session_factory)
+
+    cli_session.interrupt_turn(session_id, session_factory)
+    thread.join(5)
+
+    assert not thread.is_alive()
+    state = cli_session.get_session(session_id, after_id=1, session_factory=session_factory)
+    assert state["status"] == CliSessionStatus.IDLE
+    assert state["permission_requests"] == []
     assert [m["content"] for m in state["messages"]] == [cli_session.INTERRUPTED_BY_USER_MESSAGE]
 
 
