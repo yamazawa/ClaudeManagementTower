@@ -2,70 +2,57 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実装レポート #265 検証用リポジトリ削除ー②</title>
+<title>実行レポート #265 検証用リポジトリ削除ー③</title>
 <style>
-body{font-family:sans-serif;margin:2em;line-height:1.6;color:#222}
-h1{font-size:1.4em}h2{font-size:1.15em;border-bottom:1px solid #ccc;padding-bottom:.2em;margin-top:1.6em}
-table{border-collapse:collapse;margin:.5em 0}th,td{border:1px solid #bbb;padding:.3em .6em;text-align:left;vertical-align:top}
-th{background:#f2f2f2}code{background:#f5f5f5;padding:0 .2em}
-.ok{color:#fff;background:#2e7d32;padding:.1em .6em;border-radius:3px}
+body { font-family: sans-serif; margin: 24px; line-height: 1.6; color: #222; }
+h1 { font-size: 1.4em; } h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; margin-top: 28px; }
+table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; vertical-align: top; }
+th { background: #f3f3f3; } .ok { color: #1a7f37; font-weight: bold; }
+code { background: #f3f3f3; padding: 1px 4px; }
 </style>
 </head>
 <body>
-<h1>実装レポート：検証用リポジトリ削除ー②</h1>
+<h1>実行レポート：検証用リポジトリ削除ー③</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#265 検証用リポジトリ削除</td></tr>
-<tr><th>サブタスク</th><td>検証用リポジトリ削除ー②（リポジトリ一覧から検証用リポジトリ・メルカリ管理を削除）</td></tr>
-<tr><th>ブランチ</th><td><code>issue-265-subtask-2</code>（PR #267、base: master、Draft）</td></tr>
+<tr><th>Issue</th><td>#265</td></tr>
+<tr><th>サブタスク</th><td>検証用リポジトリ削除ー③（Removeボタン削除・一覧からの削除再トライ）</td></tr>
+<tr><th>ブランチ</th><td><code>issue-265-subtask-3</code></td></tr>
 </table>
 
-<h2>2. 実装結果</h2>
-<p><span class="ok">成功</span>（リポジトリ一覧から削除する機能を実装）</p>
-<p>リポジトリ一覧はコードではなく稼働中の管理塔のDB（projectsテーブル）の登録データだった。</p>
-<p>管理塔自身のフォルダ（DB）への書き込みは権限外のため、DBを直接は編集していない。</p>
-<p>代わりに画面から一覧を削除できる機能を追加した。</p>
-<p>マージ・反映後に、画面で対象2件の「Remove」を押すと一覧から消える。</p>
-<table>
-<tr><th>削除対象</th><th>現在の表示名</th><th>GitHubリポジトリ</th></tr>
-<tr><td>検証用リポジトリ</td><td>yamazawa/claude-tower-test-repo（辞書から表示名が消えたため登録名で表示）</td><td>yamazawa/claude-tower-test-repo</td></tr>
-<tr><td>メルカリ管理</td><td>メルカリ管理</td><td>yamazawa/MercariManager</td></tr>
-</table>
+<h2>2. 実装結果の要約</h2>
+<p class="ok">成功</p>
+<ul>
+<li>稼働中の管理塔のAPIで、検証用リポジトリとメルカリ管理を一覧から削除した。</li>
+<li>Repo見出しのRemoveボタンを削除した。</li>
+</ul>
 
-<h2>3. 変更内容</h2>
+<h2>3. 実施した変更</h2>
 <table>
-<tr><th>No.</th><th>コミット</th><th>ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td>削除済みを表す列を追加</td><td>core/models.py, core/db.py, tests/test_db.py</td><td>Projectに<code>removed</code>列を追加。既存DBには起動時に列を後付け（NOT NULL DEFAULT 0）。</td></tr>
-<tr><td>2</td><td>リポジトリを一覧から削除するAPI</td><td>app/routes/projects.py, core/pr_sync.py, tests/test_issue_routes.py, tests/test_pr_sync.py</td><td><code>DELETE /api/projects/{id}</code>を追加。削除済みは一覧取得・PR状態の同期から除外。</td></tr>
-<tr><td>3</td><td>Repo見出しに削除ボタンを追加</td><td>app/static/app.js</td><td>Repo見出しに「Remove」ボタン。確認ダイアログ後に削除し、選択解除・一覧再取得。</td></tr>
+<tr><th>No.</th><th>ファイル</th><th>変更</th><th>変更理由</th></tr>
+<tr><td>1</td><td>app/static/app.js</td><td>Removeボタンと関連の文言・処理を削除（前回コミット77f3fa1のrevert）</td><td>通常使わないとの指示のため</td></tr>
+<tr><td>2</td><td>（データ操作・コミット対象外）</td><td>稼働中サーバーに<code>DELETE /api/projects/1</code>・<code>/3</code>を実行</td><td>スクリーンショットで赤枠の2件を削除する指示のため</td></tr>
 </table>
+<p>削除後の一覧はClaude監視塔・マイルストーンナビの2件のみであることをAPIで確認した。</p>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>DBを直接編集せず、削除機能を実装した</td><td>DBは管理塔自身のフォルダにあり書き込み権限外。稼働中のDBを手で操作するのは破壊的操作に当たる。</td></tr>
-<tr><td>2</td><td>行削除ではなく論理削除（removed列）にした</td><td>projectsはsubtasks・cli_sessions・idea_sessions等から外部キー参照されており、物理削除は履歴の連鎖削除が必要になる。論理削除なら履歴を残せて復旧も可能。</td></tr>
-<tr><td>3</td><td>起動時に特定リポジトリを削除する移行コードは書かなかった</td><td>データ移行はガイドライン上避ける方針。汎用の削除操作で対応できる。</td></tr>
-<tr><td>4</td><td>削除済みリポジトリはPR状態の同期対象外にした</td><td>GitHub上で削除済みのtest-repoへの問い合わせ失敗ログを止めるため。</td></tr>
-<tr><td>5</td><td>ボタンはRepo見出しに配置し、Issue見出しのClose等と同じ<code>title-action-button</code>形式にした</td><td>共通操作は同じUIで提供する方針に合わせた。</td></tr>
-<tr><td>6</td><td>GitHub・ローカルのリポジトリ自体は削除しない</td><td>依頼は管理塔の一覧からの削除。外部リソースの削除は不可逆で権限外。</td></tr>
+<tr><td>1</td><td>削除対象はスクリーンショット赤枠の2件（ID1：claude-tower-test-repo、ID3：メルカリ管理）とした</td><td>「もう一度トライ」は一覧からの削除と解釈した</td></tr>
+<tr><td>2</td><td>削除はローカルの稼働中サーバー（127.0.0.1:8000）のAPI経由で行った</td><td>管理塔本体のDBへの直接書き込みは権限外のため、論理削除のAPIを使った</td></tr>
+<tr><td>3</td><td>削除APIとremoved列は残した</td><td>削除済みデータの除外処理に必要であり、再度の削除時もAPIで対応できるため</td></tr>
 </table>
 
-<h2>5. テスト</h2>
-<ul>
-<li><code>./.venv/Scripts/python.exe -m pytest -q</code>：620 passed</li>
-<li>追加テスト：removed列の後付け、削除APIで一覧から消えること、存在しないIDで404、削除済みが同期対象外であること</li>
-<li><code>node --check app/static/app.js</code>：構文OK</li>
-<li>画面での動作確認は未実施（稼働中の管理塔を人間が使用中の可能性があるため、起動確認は人間に依頼）</li>
-</ul>
+<h2>5. テスト結果</h2>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code>：620 passed。</p>
+<p>画面での表示確認は未実施（人間に依頼）。</p>
 
-<h2>6. 残課題・リスク・確認ポイント</h2>
+<h2>6. 残課題・確認ポイント</h2>
 <ul>
-<li>マージ・反映後に、画面で「yamazawa/claude-tower-test-repo」と「メルカリ管理」を選択し、Removeを押す操作が必要。</li>
-<li>管理塔の<code>.env</code>の<code>GITHUB_TARGET_REPO</code>が検証用リポジトリのままの場合でも、既存行が残るため起動時に再登録はされない（<code>ensure_default_project</code>はremovedの行も既存とみなす）。ただし.envは参照不可のため未確認。</li>
-<li>削除済みと同じリポジトリを「Add」で作り直すと「既に登録されています」となる。復旧手段は未実装（必要ならDBのremovedを0に戻す）。</li>
-<li>確認ポイント：Removeボタンの位置・文言、削除後に一覧と右側ペインが未選択表示に戻ること。</li>
+<li>削除は論理削除のため、DBのprojects.removedを0に戻せば復元できる。</li>
+<li>デプロイ後、Repo見出しにRemoveボタンが出ないことを画面で確認してほしい。</li>
+<li>「実体がない」リポジトリを選択した際にRepo見出しが出ない原因は調査していない。</li>
 </ul>
 </body>
 </html>

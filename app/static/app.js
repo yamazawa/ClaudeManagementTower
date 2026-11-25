@@ -17,13 +17,6 @@ const PROJECT_COUNT_TOOLTIP = "OpenなIssueの未解決MR数 / 解決済MR数";
 const PROJECT_COUNT_FILTERED_TOOLTIP = "OpenなIssueで、選択中のステータスのMR数";
 const PROJECT_LIST_NO_PROJECT_TEXT = "リポジトリが登録されていません。";
 const PROJECT_LIST_NO_MATCH_TEXT = "選択中のステータスのMRを持つリポジトリはありません。";
-const PROJECT_REMOVE_MESSAGES = {
-  button: "Remove",
-  tooltip: "リポジトリ一覧から削除します（GitHub・ローカルのリポジトリは削除しません）",
-  confirm: (name) => `「${name}」をリポジトリ一覧から削除しますか？
-GitHub・ローカルのリポジトリは削除しません。`,
-  failed: "リポジトリの削除に失敗しました",
-};
 
 /**
  * Issueの選択を外し、Issue・MRを未選択の表示に戻す
@@ -278,30 +271,7 @@ function clearVisibleProjectSelection() {
  */
 function renderRepoHeading(project) {
   document.getElementById("repo-heading").innerHTML =
-    `${renderTitleNumber("Repo", project.repo_url)}<span id="repo-title">${escapeHtml(project.display_name)}</span>` +
-    `<button type="button" id="repo-remove-button" class="title-action-button" title="${escapeAttr(PROJECT_REMOVE_MESSAGES.tooltip)}">` +
-    `${PROJECT_REMOVE_MESSAGES.button}</button>`;
-  const button = document.getElementById("repo-remove-button");
-  button.addEventListener("click", () => removeProject(project, button));
-}
-
-/**
- * リポジトリを一覧から削除する
- *
- * 削除後は選択を外し、リポジトリ一覧を取得し直す。
- */
-async function removeProject(project, button) {
-  if (!confirm(PROJECT_REMOVE_MESSAGES.confirm(project.display_name))) return;
-  button.disabled = true;
-  const response = await fetch(`/api/projects/${project.id}`, { method: "DELETE" }).catch(() => null);
-  button.disabled = false;
-  if (!response || !response.ok) {
-    alert(PROJECT_REMOVE_MESSAGES.failed);
-    return;
-  }
-  openIssueNumbersByProject.delete(project.id);
-  clearProjectSelection();
-  await loadProjects();
+    `${renderTitleNumber("Repo", project.repo_url)}<span id="repo-title">${escapeHtml(project.display_name)}</span>`;
 }
 
 /**
