@@ -14,8 +14,6 @@ let currentSubtasks = [];
 // Issue一覧に表示中のIssue（番号→番号・タイトル・状態・URL）
 const listedIssues = new Map();
 let currentSelectedSubtaskId = null;
-// Issue作成に続くMR自動作成の対象Issue番号（実行中はそのIssueにMRを追加作成させない）
-let autoMrCreatingIssueNumber = null;
 
 // MRのlifecycle_state（core/lifecycle.pyと合わせる）
 const LIFECYCLE = {
@@ -294,25 +292,6 @@ async function runBusyAction(action) {
 
 function updateBusyOverlay() {
   document.getElementById("selection-busy").hidden = !selectionBusy && busyActionCount === 0;
-}
-
-/**
- * 表示中のIssueがMR自動作成中か
- *
- * 意図せずMRを2個作らないよう、該当IssueではMR作成ボタンを無効化する。
- */
-function isCurrentIssueAutoMrCreating() {
-  return currentIssueNumber !== null && currentIssueNumber === autoMrCreatingIssueNumber;
-}
-
-/**
- * MR自動作成の対象Issueの切り替え
- *
- * 表示中のIssueが対象の場合は、MR作成ボタンの有効状態も更新する。
- */
-function setAutoMrCreatingIssue(issueNumber) {
-  autoMrCreatingIssueNumber = issueNumber;
-  document.querySelector("#subtask-form button").disabled = isCurrentIssueAutoMrCreating();
 }
 
 /**

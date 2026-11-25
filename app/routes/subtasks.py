@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile
+from fastapi import APIRouter, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
@@ -23,15 +23,7 @@ from core.github_client import (
     get_pr_state,
     reopen_pr,
 )
-from core.issue_mr_creation import (
-    CREATION_ERRORS,
-    PENDING_BRANCH_PREFIX,
-    EmptyTitleError,
-    create_mr,
-    create_pending_mr,
-    discard_pending_mr,
-    link_pending_mr,
-)
+from core.issue_mr_creation import CREATION_ERRORS, create_mr
 from core.job_queue import ExecutionJobStatus
 from core.lifecycle import LifecycleState
 from core.models import ExecutionJob, Project, Subtask
@@ -74,65 +66,6 @@ def create_subtask(payload: CreateSubtaskRequest):
         )
     except CREATION_ERRORS as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-
-class CreatePendingSubtaskRequest(BaseModel):
-    project_id: int
-    # 並行して作成中のIssue名
-    issue_title: str
-
-
-@router.post("/pending")
-def create_pending_subtask(payload: CreatePendingSubtaskRequest):
-    """Issue作成と並行して、Issue未紐付けの規定値MRを作成する"""
-    with SessionLocal() as session:
-        project = get_project_or_404(session, payload.project_id)
-    try:
-        return create_pending_mr(project, payload.issue_title)
-    except EmptyTitleError as exc:
-        raise HTTPException(status_code=400, detail=messages.ISSUE_TITLE_EMPTY) from exc
-    except CREATION_ERRORS as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
-
-
-class LinkPendingSubtaskRequest(BaseModel):
-    project_id: int
-    github_issue_number: int
-    title: str
-    branch_name: str
-    github_pr_number: int
-    pr_url: str = ""
-
-
-@router.post("/pending/link")
-def link_pending_subtask(payload: LinkPendingSubtaskRequest, background_tasks: BackgroundTasks):
-    """Issue作成と並行して作成したMRをIssueに紐付けてDBへ登録する"""
-    if not payload.branch_name.startswith(f"{PENDING_BRANCH_PREFIX}-"):
-        raise HTTPException(status_code=400, detail=messages.NOT_UNLINKED_MR)
-    with SessionLocal() as session:
-        project = get_project_or_404(session, payload.project_id)
-    pending = payload.model_dump(include={"title", "branch_name", "github_pr_number", "pr_url"})
-    return link_pending_mr(
-        project,
-        payload.github_issue_number,
-        pending,
-        run_later=background_tasks.add_task,
-        session_factory=SessionLocal,
-    )
-
-
-class DiscardPendingSubtaskRequest(BaseModel):
-    project_id: int
-    github_pr_number: int
-
-
-@router.post("/pending/discard")
-def discard_pending_subtask(payload: DiscardPendingSubtaskRequest):
-    """Issue作成に失敗した場合に、並行して作成したMRをクローズする"""
-    with SessionLocal() as session:
-        project = get_project_or_404(session, payload.project_id)
-    discard_pending_mr(project, {"github_pr_number": payload.github_pr_number})
-    return {"github_pr_number": payload.github_pr_number}
 
 
 class UpdateSubtaskTitleRequest(BaseModel):

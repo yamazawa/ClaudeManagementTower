@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import case, func
 
@@ -19,7 +19,7 @@ from core.github_client import (
     list_issues_closed_since,
     reopen_issue,
 )
-from core.issue_mr_creation import EmptyTitleError, create_issue
+from core.issue_mr_creation import EmptyTitleError, create_issue, create_issue_with_mr
 from core.lifecycle import LifecycleState
 from core.merge_queue import latest_merge_summary
 from core.models import ExecutionJob, Project, Report, Subtask
@@ -195,6 +195,26 @@ def create_project_issue(project_id: int, payload: CreateIssueRequest):
         project = get_project_or_404(session, project_id)
     try:
         return create_issue(project, payload.title, payload.body)
+    except EmptyTitleError as exc:
+        raise HTTPException(status_code=400, detail=messages.TITLE_EMPTY) from exc
+    except GitHubClientError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+
+@router.post("/{project_id}/issues/with-mr")
+def create_project_issue_with_mr(project_id: int, payload: CreateIssueRequest, background_tasks: BackgroundTasks):
+    """IssueとMRを作成する
+
+    作成処理は画面・アイデアマン・CLIタブで共通の処理を使う。
+    PR本文へのIssue番号の記載は、応答を待たせないよう応答後に行う。
+    MR作成のみ失敗した場合は、mr_errorに理由を返す。
+    """
+    with SessionLocal() as session:
+        project = get_project_or_404(session, project_id)
+    try:
+        return create_issue_with_mr(
+            project, payload.title, payload.body, run_later=background_tasks.add_task, session_factory=SessionLocal
+        )
     except EmptyTitleError as exc:
         raise HTTPException(status_code=400, detail=messages.TITLE_EMPTY) from exc
     except GitHubClientError as exc:

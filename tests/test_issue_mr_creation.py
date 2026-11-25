@@ -126,3 +126,17 @@ def test_create_mr_uses_given_issue_title_and_instruction(session_factory, githu
     assert github["pushed"][0]["body"] == "Related to #5"
     with session_factory() as session:
         assert session.get(Subtask, mr["id"]).instruction == "指示"
+
+
+def test_pending_mr_branch_names_are_unique(github):
+    creation.create_pending_mr(_project(), "あ")
+    creation.create_pending_mr(_project(), "あ")
+
+    assert github["pushed"][0]["branch_name"] != github["pushed"][1]["branch_name"]
+    assert github["pushed"][0]["body"] == creation.PENDING_PR_BODY
+
+
+def test_link_pr_to_issue_ignores_github_error(monkeypatch):
+    monkeypatch.setattr(creation, "edit_pr_body", _raiser(GitHubClientError("boom")))
+
+    creation.link_pr_to_issue("owner/repo", 21, 7)
