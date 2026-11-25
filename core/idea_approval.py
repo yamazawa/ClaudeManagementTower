@@ -1,7 +1,7 @@
 """アイデアマンの提案の承認
 
 承認時の状態遷移と、Issue本文・サブタスク指示の組み立てを扱う。
-GitHubへの書き込み（Issue・サブタスク作成）は呼び出し側で既存処理を使う。
+GitHubへの書き込み（Issue・サブタスク作成）は呼び出し側で共通の作成処理を使う。
 """
 
 from datetime import datetime, timezone
