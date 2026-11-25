@@ -29,6 +29,7 @@ from core.claude_client import run_claude
 from core.claude_permissions import CLI_DIALOG_DENIED_TOOLS
 from core.claude_prompts import CLI_DIALOG_POLICY_PROMPT
 from core.cli_attachments import build_cli_prompt, resolve_cli_attachments
+from core.cli_tower_tools import TOWER_SERVER_NAME, build_tower_server
 from core.db import SessionLocal
 from core.models import CliMessage, CliSession, Project
 from core.rate_limits import record_rate_limit
@@ -287,7 +288,7 @@ def _claim_turn(
         _add_message(session, cli_session_id, CliMessageRole.USER, text, attachments)
         session.commit()
         project = session.get(Project, cli_session.project_id)
-        return {"repo_path": project.repo_path, "resume": cli_session.claude_session_id}
+        return {"project_id": project.id, "repo_path": project.repo_path, "resume": cli_session.claude_session_id}
 
 
 def _record_entries(cli_session_id: int, message: object, session_factory: sessionmaker) -> None:
@@ -317,14 +318,19 @@ def _finish_turn(cli_session_id: int, claude_session_id: str | None, notice: str
         session.commit()
 
 
-async def _run_claude_for_dialog(text: str, repo_path: str, resume: str | None, on_message) -> str | None:
+async def _run_claude_for_dialog(text: str, target: dict, on_message) -> str | None:
+    """対話中のリポジトリでClaudeを実行する
+
+    Issue・MRの作成用に、リポジトリに紐づけた管理塔ツールを渡す。
+    """
     session_id, _ = await run_claude(
         text,
-        repo_path,
-        resume=resume,
+        target["repo_path"],
+        resume=target["resume"],
         on_message=on_message,
         policy_prompt=CLI_DIALOG_POLICY_PROMPT,
         denied_tools=CLI_DIALOG_DENIED_TOOLS,
+        mcp_servers={TOWER_SERVER_NAME: build_tower_server(target["project_id"])},
     )
     return session_id
 
@@ -363,7 +369,7 @@ def run_turn(
 
     claude_session_id, notice = None, None
     try:
-        runner = claude_runner(text, target["repo_path"], target["resume"], on_message)
+        runner = claude_runner(text, target, on_message)
         claude_session_id = asyncio.run(_run_cancellable(runner, canceller))
     except asyncio.CancelledError:
         notice = INTERRUPTED_BY_USER_MESSAGE
