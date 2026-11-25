@@ -7,6 +7,7 @@ from fastapi import HTTPException, UploadFile
 from sqlalchemy.orm import sessionmaker
 
 from app.routes import subtasks
+from core import issue_mr_creation as creation
 from core.db import init_db, make_engine
 from core.models import Project, Subtask
 
@@ -31,8 +32,8 @@ def created(monkeypatch):
         calls.append({"title": title, "slug_source": slug_source})
         return f"issue-{issue_number}-{slug_suffix}", {"number": 10 + slug_suffix, "url": "u"}
 
-    monkeypatch.setattr(subtasks, "_create_branch_and_draft_pr", fake_create)
-    monkeypatch.setattr(subtasks, "get_issue", lambda repo, number: {"title": "あいうえお"})
+    monkeypatch.setattr(creation, "_create_branch_and_draft_pr", fake_create)
+    monkeypatch.setattr(creation, "get_issue", lambda repo, number: {"title": "あいうえお"})
     return calls
 
 
@@ -72,7 +73,7 @@ def test_create_subtask_with_issue_title_skips_github_lookup(session_factory, cr
     def fail_get_issue(repo, number):
         raise AssertionError("get_issue should not be called")
 
-    monkeypatch.setattr(subtasks, "get_issue", fail_get_issue)
+    monkeypatch.setattr(creation, "get_issue", fail_get_issue)
 
     result = subtasks.create_subtask(
         subtasks.CreateSubtaskRequest(
@@ -92,19 +93,19 @@ def pushed(monkeypatch):
         branches.append(branch_name)
         return {"number": 10, "url": "u"}
 
-    monkeypatch.setattr(subtasks, "_push_draft_pr", fake_push)
+    monkeypatch.setattr(creation, "_push_draft_pr", fake_push)
     return branches
 
 
 def test_branch_name_uses_slug_and_number(pushed):
-    subtasks._create_branch_and_draft_pr(_project(), 5, "t", "", 2, slug_source="Fix Bug")
+    creation._create_branch_and_draft_pr(_project(), 5, "t", "", 2, slug_source="Fix Bug")
 
     assert pushed == ["issue-5-fix-bug-2"]
 
 
 def test_unique_branch_name_does_not_repeat(pushed):
     for _ in range(2):
-        subtasks._create_branch_and_draft_pr(_project(), 5, "t", "", 1, unique_branch=True)
+        creation._create_branch_and_draft_pr(_project(), 5, "t", "", 1, unique_branch=True)
 
     assert all(re.fullmatch(r"issue-5-[0-9a-f]{8}-subtask-1", b) for b in pushed)
     assert pushed[0] != pushed[1]
@@ -117,7 +118,7 @@ def test_create_subtask_passes_unique_branch(session_factory, created, monkeypat
         received.append(kwargs["unique_branch"])
         return "issue-5-x", {"number": 10, "url": "u"}
 
-    monkeypatch.setattr(subtasks, "_create_branch_and_draft_pr", fake_create)
+    monkeypatch.setattr(creation, "_create_branch_and_draft_pr", fake_create)
 
     subtasks.create_subtask(subtasks.CreateSubtaskRequest(project_id=1, github_issue_number=5, unique_branch=True))
 
@@ -142,8 +143,8 @@ def test_create_subtask_adopts_row_imported_by_sync(session_factory, monkeypatch
             session.commit()
         return "issue-5-x", {"number": 11, "url": "u"}
 
-    monkeypatch.setattr(subtasks, "_create_branch_and_draft_pr", fake_create)
-    monkeypatch.setattr(subtasks, "get_issue", lambda repo, number: {"title": "あいうえお"})
+    monkeypatch.setattr(creation, "_create_branch_and_draft_pr", fake_create)
+    monkeypatch.setattr(creation, "get_issue", lambda repo, number: {"title": "あいうえお"})
 
     result = _create("かきくけこ")
 
@@ -157,13 +158,13 @@ def _project():
 
 
 def test_branch_name_unique_for_same_title(monkeypatch):
-    monkeypatch.setattr(subtasks, "create_worktree", lambda *a, **k: None)
-    monkeypatch.setattr(subtasks, "commit_subtask_instruction", lambda *a, **k: None)
-    monkeypatch.setattr(subtasks, "push_branch", lambda *a, **k: None)
-    monkeypatch.setattr(subtasks, "create_draft_pr", lambda **k: {"number": 1, "url": "u"})
+    monkeypatch.setattr(creation, "create_worktree", lambda *a, **k: None)
+    monkeypatch.setattr(creation, "commit_subtask_instruction", lambda *a, **k: None)
+    monkeypatch.setattr(creation, "push_branch", lambda *a, **k: None)
+    monkeypatch.setattr(creation, "create_draft_pr", lambda **k: {"number": 1, "url": "u"})
 
-    branch_1, _ = subtasks._create_branch_and_draft_pr(_project(), 53, "MR一覧の項目編集", "", 1)
-    branch_2, _ = subtasks._create_branch_and_draft_pr(_project(), 53, "MR内容のレイアウト編集", "", 2)
+    branch_1, _ = creation._create_branch_and_draft_pr(_project(), 53, "MR一覧の項目編集", "", 1)
+    branch_2, _ = creation._create_branch_and_draft_pr(_project(), 53, "MR内容のレイアウト編集", "", 2)
 
     assert branch_1 != branch_2
 
@@ -173,14 +174,14 @@ def stage_stubs(monkeypatch):
     """作成段階をスタブ化し、後始末に渡された完了段階を記録する"""
     rollbacks = []
     for name in ("create_worktree", "commit_subtask_instruction", "push_branch"):
-        monkeypatch.setattr(subtasks, name, lambda *a, **k: None)
-    monkeypatch.setattr(subtasks, "create_draft_pr", lambda **k: {"number": 1, "url": "u"})
+        monkeypatch.setattr(creation, name, lambda *a, **k: None)
+    monkeypatch.setattr(creation, "create_draft_pr", lambda **k: {"number": 1, "url": "u"})
 
     def fake_rollback(repo_path, worktree_path, branch_name, completed):
         rollbacks.append(set(completed))
         return ["ローカルブランチ b"]
 
-    monkeypatch.setattr(subtasks, "rollback_subtask_creation", fake_rollback)
+    monkeypatch.setattr(creation, "rollback_subtask_creation", fake_rollback)
     return rollbacks
 
 
@@ -192,31 +193,31 @@ def _fail(exc_type):
 
 
 def test_push_failure_rolls_back_created_stages(stage_stubs, monkeypatch):
-    monkeypatch.setattr(subtasks, "push_branch", _fail(subtasks.GitClientError))
+    monkeypatch.setattr(creation, "push_branch", _fail(creation.GitClientError))
 
-    with pytest.raises(subtasks.GitClientError) as exc:
-        subtasks._push_draft_pr(_project(), "b", "t", "", "body")
+    with pytest.raises(creation.GitClientError) as exc:
+        creation._push_draft_pr(_project(), "b", "t", "", "body")
 
-    stages = subtasks.SubtaskCreationStage
+    stages = creation.SubtaskCreationStage
     assert stage_stubs == [{stages.WORKTREE_CREATED, stages.INSTRUCTION_COMMITTED}]
     assert "boom" in str(exc.value)
     assert "ローカルブランチ b" in str(exc.value)
 
 
 def test_draft_pr_failure_rolls_back_pushed_branch(stage_stubs, monkeypatch):
-    monkeypatch.setattr(subtasks, "create_draft_pr", _fail(subtasks.GitHubClientError))
+    monkeypatch.setattr(creation, "create_draft_pr", _fail(creation.GitHubClientError))
 
-    with pytest.raises(subtasks.GitHubClientError):
-        subtasks._push_draft_pr(_project(), "b", "t", "", "body")
+    with pytest.raises(creation.GitHubClientError):
+        creation._push_draft_pr(_project(), "b", "t", "", "body")
 
-    assert stage_stubs == [set(subtasks.SubtaskCreationStage)]
+    assert stage_stubs == [set(creation.SubtaskCreationStage)]
 
 
 def test_worktree_failure_skips_rollback(stage_stubs, monkeypatch):
-    monkeypatch.setattr(subtasks, "create_worktree", _fail(subtasks.GitClientError))
+    monkeypatch.setattr(creation, "create_worktree", _fail(creation.GitClientError))
 
-    with pytest.raises(subtasks.GitClientError) as exc:
-        subtasks._push_draft_pr(_project(), "b", "t", "", "body")
+    with pytest.raises(creation.GitClientError) as exc:
+        creation._push_draft_pr(_project(), "b", "t", "", "body")
 
     assert stage_stubs == []
     assert str(exc.value) == "boom"

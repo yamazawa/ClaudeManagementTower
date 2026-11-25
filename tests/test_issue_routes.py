@@ -1,10 +1,11 @@
 from datetime import datetime
 
 import pytest
-from fastapi import HTTPException
+from fastapi import BackgroundTasks, HTTPException
 from sqlalchemy.orm import sessionmaker
 
 from app.routes import projects
+from core import issue_mr_creation
 from core.db import init_db, make_engine
 from core.models import Project, Subtask
 from core.repo_setup import NewRepo, RepoSetupError
@@ -246,7 +247,7 @@ def test_create_issue_strips_title_and_returns_it(session_factory, monkeypatch):
         calls.append(title)
         return {"number": 7, "url": "https://github.com/owner/repo/issues/7"}
 
-    monkeypatch.setattr(projects, "create_issue", fake)
+    monkeypatch.setattr(issue_mr_creation, "create_github_issue", fake)
 
     result = projects.create_project_issue(1, projects.CreateIssueRequest(title="  題名  "))
 
@@ -257,4 +258,29 @@ def test_create_issue_strips_title_and_returns_it(session_factory, monkeypatch):
 def test_create_issue_with_blank_title_is_bad_request(session_factory):
     with pytest.raises(HTTPException) as error:
         projects.create_project_issue(1, projects.CreateIssueRequest(title="  "))
+    assert error.value.status_code == 400
+
+
+def test_create_issue_with_mr_links_pr_after_response(session_factory, monkeypatch):
+    calls = []
+
+    def fake(project, title, body, run_later, session_factory):
+        run_later(calls.append, "linked")
+        return {"issue": {"number": 7}, "mr": {"id": 1}, "mr_error": None}
+
+    monkeypatch.setattr(projects, "create_issue_with_mr", fake)
+    background = BackgroundTasks()
+
+    result = projects.create_project_issue_with_mr(1, projects.CreateIssueRequest(title="題名"), background)
+
+    assert result["mr"]["id"] == 1
+    assert calls == []
+    for task in background.tasks:
+        task.func(*task.args, **task.kwargs)
+    assert calls == ["linked"]
+
+
+def test_create_issue_with_mr_blank_title_is_bad_request(session_factory):
+    with pytest.raises(HTTPException) as error:
+        projects.create_project_issue_with_mr(1, projects.CreateIssueRequest(title=" "), BackgroundTasks())
     assert error.value.status_code == 400

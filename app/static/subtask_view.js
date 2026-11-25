@@ -171,7 +171,7 @@ function resetSubtaskForm() {
   const form = document.getElementById("subtask-form");
   form.reset();
   form.title.value = nextDefaultMrSuffix();
-  form.querySelector("button").disabled = isCurrentIssueAutoMrCreating();
+  form.querySelector("button").disabled = false;
   document.getElementById("subtask-form-status").textContent = "";
   updateSubtaskFormPrefix();
 }

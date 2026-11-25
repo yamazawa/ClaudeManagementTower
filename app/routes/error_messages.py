@@ -12,12 +12,10 @@ DEPLOY_RESULT_NOT_FOUND = "デプロイの実行結果がありません"
 SELF_SYNC_RESULT_NOT_FOUND = "マージして最新化の実行結果がありません"
 
 TITLE_EMPTY = "タイトルが空です"
-ISSUE_TITLE_EMPTY = "Issueタイトルが空です"
 TEXT_EMPTY = "入力内容が空です"
 
 NOT_SUPERVISED = "run_all.py経由で起動していないため実行できません"
 UNRESOLVED_MR_REMAINS = "未解決のMRが残っています"
-NOT_UNLINKED_MR = "Issue未紐付けのMRではありません"
 NOT_UNRESOLVED_MR = "未解決のMRではありません"
 NOT_CLOSED_MR = "クローズ済のMRではありません"
 NOT_RESOLVED_MR = "ResolvedのMRではありません"

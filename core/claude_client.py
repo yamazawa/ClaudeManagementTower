@@ -66,7 +66,12 @@ async def run_claude(
     on_message: Callable[[object], None] | None = None,
     policy_prompt: str = AGENT_POLICY_PROMPT,
     denied_tools: dict[str, str] | None = None,
+    mcp_servers: dict | None = None,
 ) -> tuple[str | None, str | None]:
+    """Claudeを実行する
+
+    mcp_serversには、管理塔ツールなどプロセス内のMCPサーバーを指定する。
+    """
     rules = default_access_rules(worktree)
     options = ClaudeAgentOptions(
         cwd=worktree,
@@ -74,6 +79,7 @@ async def run_claude(
         hooks=_to_pre_tool_use_hooks(_with_denied_tools(_worktree_check(rules), denied_tools)),
         permission_mode="acceptEdits",
         resume=resume,
+        mcp_servers=mcp_servers or {},
         max_buffer_size=MAX_BUFFER_SIZE,
         system_prompt={
             "type": "preset",
