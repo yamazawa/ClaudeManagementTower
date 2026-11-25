@@ -12,7 +12,6 @@ from core.deploy import is_deploy_defined, is_deploy_running
 from core.github_client import (
     GitHubClientError,
     close_issue,
-    create_issue,
     edit_issue_title,
     edit_pr_title,
     get_issue,
@@ -20,6 +19,7 @@ from core.github_client import (
     list_issues_closed_since,
     reopen_issue,
 )
+from core.issue_mr_creation import EmptyTitleError, create_issue
 from core.lifecycle import LifecycleState
 from core.merge_queue import latest_merge_summary
 from core.models import ExecutionJob, Project, Report, Subtask
@@ -189,18 +189,16 @@ def _count_in(states: tuple[str, ...]):
 def create_project_issue(project_id: int, payload: CreateIssueRequest):
     """Issueを作成する
 
-    続けて行うMR作成でIssue名を再取得せずに済むよう、作成したIssue名も返す。
+    作成処理は画面・アイデアマン・CLIタブで共通の処理を使う。
     """
-    title = payload.title.strip()
-    if not title:
-        raise HTTPException(status_code=400, detail=messages.TITLE_EMPTY)
     with SessionLocal() as session:
         project = get_project_or_404(session, project_id)
-        try:
-            issue = create_issue(project.github_repo, title, payload.body)
-        except GitHubClientError as exc:
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
-        return {**issue, "title": title}
+    try:
+        return create_issue(project, payload.title, payload.body)
+    except EmptyTitleError as exc:
+        raise HTTPException(status_code=400, detail=messages.TITLE_EMPTY) from exc
+    except GitHubClientError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
 class UpdateTitleRequest(BaseModel):

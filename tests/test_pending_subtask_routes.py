@@ -4,6 +4,7 @@ from sqlalchemy.orm import sessionmaker
 
 from app.routes import subtasks
 from core.db import init_db, make_engine
+from core import issue_mr_creation as creation
 from core.github_client import GitHubClientError
 from core.models import Project, Subtask
 
@@ -30,7 +31,7 @@ def pushed(monkeypatch):
         calls.append({"branch_name": branch_name, "title": title, "body": body})
         return {"number": 21, "url": "u"}
 
-    monkeypatch.setattr(subtasks, "_push_draft_pr", fake_push)
+    monkeypatch.setattr(creation, "_push_draft_pr", fake_push)
     return calls
 
 
@@ -53,7 +54,7 @@ def test_create_pending_subtask_creates_unlinked_pr(session_factory, pushed):
     assert result["title"] == "あいうえおー①"
     assert result["branch_name"].startswith("issue-new-")
     assert result["github_pr_number"] == 21
-    assert pushed[0]["body"] == subtasks.PENDING_PR_BODY
+    assert pushed[0]["body"] == creation.PENDING_PR_BODY
     with session_factory() as session:
         assert session.query(Subtask).count() == 0
 
@@ -79,7 +80,7 @@ def test_create_pending_subtask_with_blank_title_is_bad_request(session_factory,
 
 def test_link_pending_subtask_registers_row_and_links_after_response(session_factory, monkeypatch):
     edits = []
-    monkeypatch.setattr(subtasks, "edit_pr_body", lambda *args: edits.append(args))
+    monkeypatch.setattr(creation, "edit_pr_body", lambda *args: edits.append(args))
     background = BackgroundTasks()
 
     result = subtasks.link_pending_subtask(_link_request(), background)
@@ -104,14 +105,14 @@ def test_link_pr_to_issue_ignores_github_error(monkeypatch):
     def fail(*args):
         raise GitHubClientError("boom")
 
-    monkeypatch.setattr(subtasks, "edit_pr_body", fail)
+    monkeypatch.setattr(creation, "edit_pr_body", fail)
 
-    subtasks._link_pr_to_issue("owner/repo", 21, 7)
+    creation.link_pr_to_issue("owner/repo", 21, 7)
 
 
 def test_discard_pending_subtask_closes_pr(session_factory, monkeypatch):
     closed = []
-    monkeypatch.setattr(subtasks, "close_pr", lambda *args: closed.append(args))
+    monkeypatch.setattr(creation, "close_pr", lambda *args: closed.append(args))
 
     subtasks.discard_pending_subtask(
         subtasks.DiscardPendingSubtaskRequest(project_id=1, github_pr_number=21)

@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import sessionmaker
 
 from app.routes import projects
+from core import issue_mr_creation
 from core.db import init_db, make_engine
 from core.models import Project, Subtask
 from core.repo_setup import NewRepo, RepoSetupError
@@ -246,7 +247,7 @@ def test_create_issue_strips_title_and_returns_it(session_factory, monkeypatch):
         calls.append(title)
         return {"number": 7, "url": "https://github.com/owner/repo/issues/7"}
 
-    monkeypatch.setattr(projects, "create_issue", fake)
+    monkeypatch.setattr(issue_mr_creation, "create_github_issue", fake)
 
     result = projects.create_project_issue(1, projects.CreateIssueRequest(title="  題名  "))
 
