@@ -5,6 +5,7 @@
  * 応答はサーバー側で別途実行し、発言一覧をポーリングして表示する。
  * 画面構成はMR内容と揃え、添付・指示の入力欄・送信ボタン・状態表示・発言一覧の順に並べる。
  * 添付は選択・貼り付けの時点で保存し、送信時にIDで発言に付ける。
+ * 範囲外の操作の許可の問い合わせは、状態表示の下に表示して回答を受け付ける。
  */
 
 // 応答中の発言一覧の取得間隔
@@ -41,6 +42,12 @@ const CLI_VIEW_MESSAGES = {
   uploading: "アップロード中",
   uploadFailed: "添付に失敗しました",
   removeAttachment: "添付を取り消す",
+  waitingPermission: "許可の確認待ち（下の内容を確認して許可・拒否してください）",
+  permissionTitle: "許可の確認",
+  allow: "許可",
+  deny: "拒否",
+  denyReasonPlaceholder: "拒否する理由（任意・Claudeに伝わります）",
+  answerFailed: "回答に失敗しました",
 };
 
 // 貼り付けた画像にファイル名が無い場合の名前
@@ -64,7 +71,7 @@ function cliItemMeta(item) {
  */
 function showCliItem(item, container) {
   stopCliViewPolling();
-  cliViewState = { item, lastMessageId: 0, status: item.status, pendingAttachments: [] };
+  cliViewState = { item, lastMessageId: 0, status: item.status, pendingAttachments: [], permissionRequests: [] };
   container.innerHTML = `
     <form id="cli-view-form" class="instruction-form cli-view-form">
       <div class="attachment-area">
@@ -80,6 +87,7 @@ function showCliItem(item, container) {
       </div>
     </form>
     <p id="cli-view-status" class="title-status repo-item-action-status empty" role="status"></p>
+    <div id="cli-view-permissions"></div>
     <div id="cli-view-log" class="cli-log" aria-live="polite"></div>
   `;
   document.getElementById("cli-view-form").addEventListener("submit", onSubmitCliView);
@@ -199,6 +207,8 @@ async function refreshCliView() {
 function applyCliSession(state, data) {
   data.messages.forEach(appendCliMessage);
   if (data.messages.length > 0) state.lastMessageId = data.messages[data.messages.length - 1].id;
+  state.permissionRequests = data.permission_requests || [];
+  renderCliPermissionRequests(state);
   setCliViewStatus(data.status);
   updateRepoItemRow(REPO_ITEM_TABS.cli, { ...state.item, status: data.status });
 }
@@ -374,7 +384,83 @@ function setCliViewStatus(status, errorText = "") {
 }
 
 function cliViewRunningText(state) {
-  return state.interrupting ? CLI_VIEW_MESSAGES.interrupting : CLI_VIEW_MESSAGES.running;
+  if (state.interrupting) return CLI_VIEW_MESSAGES.interrupting;
+  return state.permissionRequests.length ? CLI_VIEW_MESSAGES.waitingPermission : CLI_VIEW_MESSAGES.running;
+}
+
+/**
+ * 回答待ちの許可の問い合わせを表示する
+ *
+ * 入力中の拒否理由を消さないよう、表示済みの問い合わせは描画し直さない。
+ * 回答済み・中断済みになった問い合わせは取り除く。
+ */
+function renderCliPermissionRequests(state) {
+  const container = document.getElementById("cli-view-permissions");
+  if (!container || state !== cliViewState) return;
+  const ids = new Set(state.permissionRequests.map((r) => String(r.id)));
+  container.querySelectorAll(".cli-permission").forEach((el) => {
+    if (!ids.has(el.dataset.requestId)) el.remove();
+  });
+  const shown = new Set([...container.children].map((el) => el.dataset.requestId));
+  state.permissionRequests
+    .filter((r) => !shown.has(String(r.id)))
+    .forEach((r) => container.appendChild(createCliPermissionCard(state, r)));
+}
+
+/**
+ * 1件の問い合わせの内容と、許可・拒否のボタン
+ *
+ * 拒否時は入力した理由をClaudeに伝える。
+ */
+function createCliPermissionCard(state, request) {
+  const card = document.createElement("div");
+  card.className = "cli-permission";
+  card.dataset.requestId = String(request.id);
+  card.innerHTML = `
+    <p class="cli-permission-reason">${CLI_VIEW_MESSAGES.permissionTitle}: ${escapeHtml(request.reason)}</p>
+    <pre class="cli-permission-tool">${escapeHtml(request.tool)}</pre>
+    <input type="text" class="cli-permission-deny-reason" placeholder="${CLI_VIEW_MESSAGES.denyReasonPlaceholder}" />
+    <div class="subtask-actions">
+      <button type="button" class="subtask-action-button primary" data-allow="true">${CLI_VIEW_MESSAGES.allow}</button>
+      <button type="button" class="subtask-action-button" data-allow="false">${CLI_VIEW_MESSAGES.deny}</button>
+    </div>
+    <p class="title-status empty" role="status"></p>
+  `;
+  card.querySelectorAll("button").forEach((b) =>
+    b.addEventListener("click", () => answerCliPermission(state, request.id, card, b.dataset.allow === "true"))
+  );
+  return card;
+}
+
+/**
+ * 問い合わせに回答する
+ *
+ * 二重に回答しないよう、回答中はボタンを押せなくする。
+ * 回答後は発言一覧を取得し直して、問い合わせの表示を更新する。
+ */
+async function answerCliPermission(state, requestId, card, allow) {
+  const buttons = card.querySelectorAll("button");
+  buttons.forEach((b) => (b.disabled = true));
+  const reason = card.querySelector(".cli-permission-deny-reason").value;
+  try {
+    await postCliPermission(state.item.id, requestId, allow, reason);
+  } catch (error) {
+    buttons.forEach((b) => (b.disabled = false));
+    card.querySelector("[role=status]").textContent = error.message;
+    return;
+  }
+  if (state === cliViewState) await refreshCliView();
+}
+
+async function postCliPermission(sessionId, requestId, allow, reason) {
+  const response = await fetch(`/api/cli-sessions/${sessionId}/permissions/${requestId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ allow, reason }),
+  });
+  if (response.ok) return;
+  const body = await response.json().catch(() => ({}));
+  throw new Error(`${CLI_VIEW_MESSAGES.answerFailed}: ${body.detail || response.statusText}`);
 }
 
 // Ctrl+Enter（MacはCmd+Enter）で送信し、Enterのみは改行とする

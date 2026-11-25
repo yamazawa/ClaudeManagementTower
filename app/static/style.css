@@ -48,6 +48,8 @@
   --state-merge-failed-fg: var(--warning);
   --cli-log-height: 60vh;
   --cli-tool-error-bg: #fdf0e1;
+  --cli-permission-bg: #fdf0e1;
+  --cli-permission-tool-max-height: 30vh;
   --markdown-block-gap: 8px;
   --markdown-list-indent: 22px;
   --markdown-code-font: 12.5px/1.5 ui-monospace, Consolas, monospace;
@@ -541,6 +543,36 @@ Issue名・入力欄・作成ボタンは折り返さず1行に並べる。
   color: var(--warning);
   border: 1px solid var(--warning);
   background: var(--surface);
+}
+
+/* CLIの許可の問い合わせ */
+.cli-permission {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--warning);
+  border-radius: 6px;
+  background: var(--cli-permission-bg);
+}
+
+.cli-permission-reason {
+  margin: 0 0 4px;
+  color: var(--warning);
+  font-weight: 600;
+}
+
+.cli-permission-tool {
+  margin: 0 0 6px;
+  max-height: var(--cli-permission-tool-max-height);
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: 12.5px/1.5 ui-monospace, Consolas, monospace;
+}
+
+.cli-permission-deny-reason {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 6px;
 }
 
 /* CLIの添付（送信前の添付欄・発言内の添付ファイル名） */
