@@ -325,55 +325,20 @@ function collapseCreatedIssueForm(form, statusEl, created) {
 /**
  * IssueとMRの作成
  *
- * 高速化のため、Issue作成とMR作成を並行して行い、MRへのIssue紐付けは後から行う。
+ * 作成処理はアイデアマン・CLIタブと共通のサーバー側の処理で行う。
  * 作成中は画面を更新せず、作成完了後にまとめて反映する。
  * Issue作成に失敗した場合はnull、MR作成のみ失敗した場合はsubtaskIdをnullで返す。
  */
 async function createIssueWithSubtask(projectId, title, statusEl) {
-  const pendingPromise = postJson("/api/subtasks/pending", { project_id: projectId, issue_title: title });
-  const { body: issue, error } = await postJson(`/api/projects/${projectId}/issues`, { title });
+  const { body, error } = await postJson(`/api/projects/${projectId}/issues/with-mr`, { title });
   if (error) {
     statusEl.textContent = `失敗しました: ${error}`;
-    await discardPendingSubtask(projectId, pendingPromise);
     return null;
   }
-
-  setAutoMrCreatingIssue(issue.number);
-  const result = await linkPendingSubtask(projectId, issue.number, pendingPromise);
-  setAutoMrCreatingIssue(null);
-  statusEl.textContent = result.error
-    ? `Issueを作成しましたが、MRの作成に失敗しました: ${result.error}`
+  statusEl.textContent = body.mr_error
+    ? `Issueを作成しましたが、MRの作成に失敗しました: ${body.mr_error}`
     : "IssueとMRを作成しました";
-  return { issue, subtaskId: result.body?.id ?? null };
-}
-
-/**
- * Issue作成に失敗した場合に、並行して作成したMRをクローズする
- *
- * MR作成も失敗していた場合は何もしない。
- */
-async function discardPendingSubtask(projectId, pendingPromise) {
-  const { body } = await pendingPromise;
-  if (!body) return;
-  await postJson("/api/subtasks/pending/discard", {
-    project_id: projectId,
-    github_pr_number: body.github_pr_number,
-  });
-}
-
-/**
- * 並行して作成したMRをIssueに紐付ける
- *
- * MR作成に失敗していた場合は、そのエラーを返す。
- */
-async function linkPendingSubtask(projectId, issueNumber, pendingPromise) {
-  const { body, error } = await pendingPromise;
-  if (error) return { error };
-  return postJson("/api/subtasks/pending/link", {
-    project_id: projectId,
-    github_issue_number: issueNumber,
-    ...body,
-  });
+  return { issue: body.issue, subtaskId: body.mr?.id ?? null };
 }
 
 /**
@@ -428,7 +393,6 @@ function supplementCreatedIssue(issue) {
  */
 async function onSubmitSubtaskForm(event) {
   event.preventDefault();
-  if (isCurrentIssueAutoMrCreating()) return;
   const form = event.target;
   const statusEl = document.getElementById("subtask-form-status");
   const title = form.title.value;

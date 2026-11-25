@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実行レポート #265 検証用リポジトリ削除ー③</title>
+<title>実行レポート：#270 Issue・MR作成の共通化ー②</title>
 <style>
 body { font-family: sans-serif; margin: 24px; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; } h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; margin-top: 28px; }
@@ -12,47 +12,63 @@ code { background: #f3f3f3; padding: 1px 4px; }
 </style>
 </head>
 <body>
-<h1>実行レポート：検証用リポジトリ削除ー③</h1>
+<h1>実行レポート：Issue・MR作成の共通化</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#265</td></tr>
-<tr><th>サブタスク</th><td>検証用リポジトリ削除ー③（Removeボタン削除・一覧からの削除再トライ）</td></tr>
-<tr><th>ブランチ</th><td><code>issue-265-subtask-3</code></td></tr>
+<tr><th>Issue</th><td>#270</td></tr>
+<tr><th>サブタスク</th><td>CLIタブのIssue・MR作成を管理塔の作成フローに合わせるー②（PR #272）</td></tr>
+<tr><th>ブランチ</th><td><code>issue-270-subtask-2</code></td></tr>
 </table>
 
 <h2>2. 実装結果の要約</h2>
 <p class="ok">成功</p>
 <ul>
-<li>稼働中の管理塔のAPIで、検証用リポジトリとメルカリ管理を一覧から削除した。</li>
-<li>Repo見出しのRemoveボタンを削除した。</li>
+<li>Issue・MR作成処理を共通サービス<code>core/issue_mr_creation.py</code>に切り出した。</li>
+<li>画面のIssue作成・MR作成・Issue＋MR作成が共通処理を呼ぶようにした。</li>
+<li>アイデアマンの承認も共通処理を呼ぶようにした（従来はルート関数を経由していた）。</li>
+<li>CLIタブのClaudeに、共通処理を呼ぶ管理塔ツールを渡すようにした。</li>
+<li>CLIタブの指示文を、gh CLIで直接作成せず管理塔ツールを使う内容に変えた。</li>
 </ul>
 
 <h2>3. 実施した変更</h2>
 <table>
-<tr><th>No.</th><th>ファイル</th><th>変更</th><th>変更理由</th></tr>
-<tr><td>1</td><td>app/static/app.js</td><td>Removeボタンと関連の文言・処理を削除（前回コミット77f3fa1のrevert）</td><td>通常使わないとの指示のため</td></tr>
-<tr><td>2</td><td>（データ操作・コミット対象外）</td><td>稼働中サーバーに<code>DELETE /api/projects/1</code>・<code>/3</code>を実行</td><td>スクリーンショットで赤枠の2件を削除する指示のため</td></tr>
+<tr><th>No.</th><th>コミット</th><th>主な変更ファイル</th><th>変更</th></tr>
+<tr><td>1</td><td>2854870</td><td>core/issue_mr_creation.py（新規）<br>app/routes/subtasks.py<br>app/routes/projects.py</td><td>作成処理（worktree作成・指示記録・push・Draft PR・DB登録・後始末・並行作成）を共通サービスへ移動</td></tr>
+<tr><td>2</td><td>920fcdd</td><td>app/routes/projects.py<br>app/static/app.js・common.js・subtask_view.js</td><td><code>POST /api/projects/{id}/issues/with-mr</code>を追加し画面から1回で作成。pending・link・discardのAPIと画面側の紐付け処理を削除</td></tr>
+<tr><td>3</td><td>74959b1</td><td>app/routes/ideas.py<br>core/idea_approval.py</td><td>承認時の作成を共通処理に変更。失敗時の状態戻しを1か所に集約</td></tr>
+<tr><td>4</td><td>7c13bee</td><td>core/cli_tower_tools.py（新規）<br>core/cli_session.py・claude_client.py・claude_prompts.py</td><td>SDKのプロセス内MCPサーバー<code>tower</code>でcreate_issue_with_mr・create_issue・create_mrの3ツールを提供</td></tr>
+<tr><td>5</td><td>d16a4b6</td><td>IMPLEMENTATION_PLAN.md</td><td>1.2章・3章No.4に共通化の方針を追記</td></tr>
 </table>
-<p>削除後の一覧はClaude監視塔・マイルストーンナビの2件のみであることをAPIで確認した。</p>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>削除対象はスクリーンショット赤枠の2件（ID1：claude-tower-test-repo、ID3：メルカリ管理）とした</td><td>「もう一度トライ」は一覧からの削除と解釈した</td></tr>
-<tr><td>2</td><td>削除はローカルの稼働中サーバー（127.0.0.1:8000）のAPI経由で行った</td><td>管理塔本体のDBへの直接書き込みは権限外のため、論理削除のAPIを使った</td></tr>
-<tr><td>3</td><td>削除APIとremoved列は残した</td><td>削除済みデータの除外処理に必要であり、再度の削除時もAPIで対応できるため</td></tr>
+<tr><td>1</td><td>CLIタブの共通化は、Claudeに管理塔ツール（プロセス内MCP）を渡す方式にした</td><td>CLIのClaudeはgh CLIで直接作成しており、Pythonの共通処理を呼ぶ経路がなかったため。HTTP経由はURL・認証の前提が増えるため採用しなかった</td></tr>
+<tr><td>2</td><td>画面のIssue＋MR並行作成をサーバー側へ移した</td><td>並行作成の手順がJS側にあり、アイデアマン・CLIから再利用できなかったため。高速化のための並行実行は維持した</td></tr>
+<tr><td>3</td><td>CLIのMRは画面と同じくworktree・Draft PR（指示記録のみ）として作成する</td><td>「管理塔の作成フローに合わせる」指示に従った。CLIで行った変更そのものをPRにする依頼は、利用者へ進め方を確認するよう指示文に記載した</td></tr>
+<tr><td>4</td><td>クローズ済みIssueへのMR作成拒否はCLIツール側のみで行う</td><td>前回サブタスク①の方針を引き継いだ。画面・アイデアマンの挙動は変えていない</td></tr>
+<tr><td>5</td><td>新規Issue＋サブタスクのアイデアマン承認は、画面と同じ<code>issue-new-…</code>ブランチになる</td><td>同じ並行作成処理を使うため。既存IssueへのMRは従来どおり一意な識別子付きブランチ</td></tr>
+<tr><td>6</td><td>MR自動作成中の作成ボタン無効化（autoMrCreatingIssueNumber）を削除した</td><td>Issue番号が作成完了まで画面に返らず、制御が機能しなくなったため</td></tr>
+<tr><td>7</td><td>並行作成したMRのクローズ失敗はログ出力のみとした</td><td>従来も画面側で結果を無視しており、Issue作成の失敗を優先して伝えるため</td></tr>
 </table>
 
 <h2>5. テスト結果</h2>
-<p><code>./.venv/Scripts/python.exe -m pytest -q</code>：620 passed。</p>
-<p>画面での表示確認は未実施（人間に依頼）。</p>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code>：634 passed。</p>
+<ul>
+<li>追加：tests/test_issue_mr_creation.py、tests/test_cli_tower_tools.py</li>
+<li>更新：subtask・issue・idea・CLIセッション・指示文の各テスト</li>
+<li>JSは<code>node --check</code>で構文のみ確認した。</li>
+<li>画面操作・CLIタブでの実際のツール呼び出しは未確認（GitHubへの実書き込みを伴うため人間に依頼）。</li>
+</ul>
 
 <h2>6. 残課題・確認ポイント</h2>
 <ul>
-<li>削除は論理削除のため、DBのprojects.removedを0に戻せば復元できる。</li>
-<li>デプロイ後、Repo見出しにRemoveボタンが出ないことを画面で確認してほしい。</li>
-<li>「実体がない」リポジトリを選択した際にRepo見出しが出ない原因は調査していない。</li>
+<li>CLIタブで「IssueとMRを作って」と依頼し、管理塔ツールが呼ばれ画面にMRが表示されることを確認してほしい。</li>
+<li>画面のIssue作成（MR同時作成）と、アイデアマンの承認（Issue＋サブタスク）を実機で確認してほしい。</li>
+<li>Issue＋MRの作成中に、自動更新で表示された新Issueから手動でMRを作ると、①が重複し得る（削除したボタン無効化の代替は未実装）。</li>
+<li>CLIのClaudeがgh CLIで直接作成することは、指示文で禁止しただけで、権限上は拒否していない。</li>
+<li>CLIタブのツール実行の表示は<code>mcp__tower__create_mr: {...}</code>の形式になる。</li>
 </ul>
 </body>
 </html>

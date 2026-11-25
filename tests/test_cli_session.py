@@ -126,10 +126,12 @@ def test_run_claude_for_dialog_passes_dialog_denied_tools_and_ask_user(monkeypat
         return None
 
     monkeypatch.setattr(cli_session, "run_claude", fake_run_claude)
-    asyncio.run(cli_session._run_claude_for_dialog("hi", "repo", None, None, ask_user))
+    target = {"project_id": 1, "repo_path": "repo", "resume": None}
+    asyncio.run(cli_session._run_claude_for_dialog("hi", target, None, ask_user))
     assert captured["denied_tools"] == cli_session.CLI_DIALOG_DENIED_TOOLS
     assert "AskUserQuestion" in captured["denied_tools"]
     assert captured["ask_user"] is ask_user
+    assert list(captured["mcp_servers"]) == [cli_session.TOWER_SERVER_NAME]
 
 
 def test_create_session_rejects_unknown_project(session_factory):
@@ -186,7 +188,7 @@ def _claim(session_factory, text="こんにちは"):
 def test_claim_turn_records_user_message_and_rejects_while_running(session_factory):
     session_id, target = _claim(session_factory)
 
-    assert target == {"repo_path": "C:/repo", "resume": None}
+    assert target == {"project_id": 1, "repo_path": "C:/repo", "resume": None}
     state = cli_session.get_session(session_id, session_factory=session_factory)
     assert state["status"] == CliSessionStatus.RUNNING
     assert [(m["role"], m["content"]) for m in state["messages"]] == [(CliMessageRole.USER, "こんにちは")]
@@ -242,7 +244,7 @@ def test_send_message_passes_prompt_with_attachment_table(session_factory, tmp_p
 def test_run_turn_records_reply_and_keeps_claude_session(session_factory):
     session_id, target = _claim(session_factory)
 
-    async def fake_runner(text, repo_path, resume, on_message, ask_user):
+    async def fake_runner(text, target, on_message, ask_user):
         on_message(_assistant(TextBlock(text=f"{text}への応答")))
         return "claude-1"
 
@@ -257,7 +259,7 @@ def test_run_turn_records_reply_and_keeps_claude_session(session_factory):
 def test_run_turn_records_error_and_returns_to_idle(session_factory):
     session_id, target = _claim(session_factory)
 
-    async def failing_runner(text, repo_path, resume, on_message, ask_user):
+    async def failing_runner(text, target, on_message, ask_user):
         raise RuntimeError("CLIが見つからない")
 
     cli_session.run_turn(session_id, "こんにちは", target, session_factory, failing_runner)
@@ -270,7 +272,7 @@ def test_run_turn_records_error_and_returns_to_idle(session_factory):
 def _blocking_runner(started: threading.Event, claude_session_id="claude-1"):
     """開始を通知し、中断されるまで応答を続けるClaude実行"""
 
-    async def runner(text, repo_path, resume, on_message, ask_user):
+    async def runner(text, target, on_message, ask_user):
         on_message(SystemMessage(subtype="init", data={"session_id": claude_session_id}))
         started.set()
         await asyncio.sleep(60)
@@ -330,7 +332,7 @@ def test_interrupt_turn_without_running_thread_returns_to_idle(session_factory):
 def _asking_runner(asked: threading.Event, result: dict):
     """範囲外の操作を問い合わせ、回答をresultに残すClaude実行"""
 
-    async def runner(text, repo_path, resume, on_message, ask_user):
+    async def runner(text, target, on_message, ask_user):
         task = asyncio.ensure_future(ask_user("Bash", {"command": "git reset --hard"}, "危険な操作"))
         await asyncio.sleep(0)
         asked.set()

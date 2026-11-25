@@ -5,6 +5,7 @@ from sqlalchemy.orm import sessionmaker
 from app.routes import ideas
 from core import idea_approval
 from core.db import init_db, make_engine
+from core.git_client import GitClientError
 from core.github_client import GitHubClientError
 from core.idea_queue import IdeaJobAlreadyActive
 from core.ideas import IdeaAlreadyDecided, IdeaNotFound, IdeaStatus, list_ideas, save_proposals
@@ -131,23 +132,31 @@ def _save_idea(factory, related_issue_number=None) -> int:
 
 @pytest.fixture
 def github(monkeypatch):
-    """Issue作成・サブタスク作成・実行ジョブ投入の呼び出しを記録する"""
+    """共通の作成処理（Issue・Issue＋MR・MR）と実行ジョブ投入の呼び出しを記録する"""
     calls = {"issues": [], "subtasks": [], "executes": []}
+    issue = {"number": 50, "url": "https://example.invalid/issues/50"}
+    mr = {"id": 9, "title": "t", "github_pr_number": 51}
 
-    def fake_create_issue(repo, title, body):
-        calls["issues"].append((repo, title, body))
-        return {"number": 50, "url": "https://example.invalid/issues/50"}
+    def fake_create_issue(project, title, body):
+        calls["issues"].append((project.github_repo, title, body))
+        return {**issue, "title": title}
 
-    def fake_create_subtask(payload):
-        calls["subtasks"].append(payload)
-        return {"id": 9, "title": "t", "github_pr_number": 51}
+    def fake_create_issue_with_mr(project, title, body, instruction):
+        fake_create_issue(project, title, body)
+        calls["subtasks"].append({"issue_number": 50, "instruction": instruction, "unique_branch": False})
+        return {"issue": {**issue, "title": title}, "mr": mr, "mr_error": None}
+
+    def fake_create_mr(project, issue_number, instruction, unique_branch):
+        calls["subtasks"].append({"issue_number": issue_number, "instruction": instruction, "unique_branch": unique_branch})
+        return mr
 
     def fake_execute(subtask_id):
         calls["executes"].append(subtask_id)
         return {"job_id": 3, "status": "queued"}
 
     monkeypatch.setattr(ideas, "create_issue", fake_create_issue)
-    monkeypatch.setattr(ideas, "create_subtask", fake_create_subtask)
+    monkeypatch.setattr(ideas, "create_issue_with_mr", fake_create_issue_with_mr)
+    monkeypatch.setattr(ideas, "create_mr", fake_create_mr)
     monkeypatch.setattr(ideas, "execute_subtask", fake_execute)
     return calls
 
@@ -175,10 +184,10 @@ def test_approve_with_subtask_creates_issue_subtask_and_job(approval_db, github)
 
     assert result["idea"]["status"] == IdeaStatus.SUBTASK_CREATED
     assert result["idea"]["created_subtask_id"] == 9
+    assert github["issues"][0][:2] == ("owner/repo", "[IdeaMan] 提案タイトル")
     payload = github["subtasks"][0]
-    assert (payload.github_issue_number, payload.issue_title) == (50, "[IdeaMan] 提案タイトル")
-    assert payload.instruction.startswith("アイデアマンの提案を実装する。")
-    assert payload.unique_branch is True
+    assert payload["issue_number"] == 50
+    assert payload["instruction"].startswith("アイデアマンの提案を実装する。")
     assert github["executes"] == [9]
     assert result["subtask"]["job"]["job_id"] == 3
 
@@ -199,8 +208,8 @@ def test_approve_existing_issue_idea_skips_issue_creation(approval_db, github):
     result = _approve(idea_id, "with_subtask")
 
     assert github["issues"] == []
-    assert github["subtasks"][0].github_issue_number == 7
-    assert github["subtasks"][0].issue_title == ""
+    assert github["subtasks"][0]["issue_number"] == 7
+    assert github["subtasks"][0]["unique_branch"] is True
     assert result["idea"]["status"] == IdeaStatus.SUBTASK_CREATED
 
 
@@ -213,7 +222,7 @@ def test_approve_existing_issue_idea_refuses_issue_only(approval_db, github):
 
 
 def test_issue_creation_failure_returns_to_proposed(approval_db, github, monkeypatch):
-    monkeypatch.setattr(ideas, "create_issue", _raiser(GitHubClientError("gh error")))
+    monkeypatch.setattr(ideas, "create_issue_with_mr", _raiser(GitHubClientError("gh error")))
     idea_id = _save_idea(approval_db)
 
     with pytest.raises(HTTPException) as error:
@@ -247,7 +256,11 @@ def test_unexpected_issue_creation_error_releases_claim(approval_db, github, mon
 
 
 def test_subtask_failure_keeps_issue_and_allows_retry(approval_db, github, monkeypatch):
-    monkeypatch.setattr(ideas, "create_subtask", _raiser(HTTPException(status_code=500, detail="git error")))
+    def mr_failed(project, title, body, instruction):
+        github["issues"].append((project.github_repo, title, body))
+        return {"issue": {"number": 50, "url": "u", "title": title}, "mr": None, "mr_error": "git error"}
+
+    monkeypatch.setattr(ideas, "create_issue_with_mr", mr_failed)
     idea_id = _save_idea(approval_db)
 
     with pytest.raises(HTTPException) as error:
@@ -256,11 +269,22 @@ def test_subtask_failure_keeps_issue_and_allows_retry(approval_db, github, monke
     assert "git error" in error.value.detail
     assert list_ideas(1, session_factory=approval_db)[0]["status"] == IdeaStatus.ISSUE_CREATED
 
-    monkeypatch.setattr(ideas, "create_subtask", lambda payload: {"id": 9})
     result = _approve(idea_id, "with_subtask")
 
     assert len(github["issues"]) == 1
+    assert github["subtasks"][-1]["issue_number"] == 50
     assert result["idea"]["status"] == IdeaStatus.SUBTASK_CREATED
+
+
+def test_mr_failure_on_existing_issue_returns_to_proposed(approval_db, github, monkeypatch):
+    monkeypatch.setattr(ideas, "create_mr", _raiser(GitClientError("push error")))
+    idea_id = _save_idea(approval_db, related_issue_number=7)
+
+    with pytest.raises(HTTPException) as error:
+        _approve(idea_id, "with_subtask")
+
+    assert "push error" in error.value.detail
+    assert list_ideas(1, session_factory=approval_db)[0]["status"] == IdeaStatus.PROPOSED
 
 
 def test_approve_decided_idea_is_refused(approval_db, github):

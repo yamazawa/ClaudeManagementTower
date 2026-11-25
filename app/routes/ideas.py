@@ -2,7 +2,7 @@
 
 Ideaタブの項目の一覧・作成・変更、項目ごとのアイデア出しジョブの投入、
 提案一覧の取得、承認・却下を扱う。
-承認時のIssue・サブタスク作成は、既存のIssue作成・MR作成・実装実行の処理を使う。
+承認時のIssue・サブタスク作成は、画面・CLIタブと共通の作成処理を使う。
 """
 
 from typing import Literal
@@ -13,9 +13,9 @@ from pydantic import BaseModel, Field
 from app.routes import error_messages as messages
 from app.routes.lookups import get_project_or_404
 from app.routes.repo_items import RepoItemPatch, item_errors
-from app.routes.subtasks import CreateSubtaskRequest, create_subtask, execute_subtask
+from app.routes.subtasks import execute_subtask
 from core.db import SessionLocal
-from core.github_client import GitHubClientError, create_issue
+from core.github_client import GitHubClientError
 from core.idea_approval import (
     ApprovalMode,
     IdeaApprovalNotAllowed,
@@ -29,6 +29,7 @@ from core.idea_approval import (
     target_issue_number,
 )
 from core.idea_queue import IdeaJobAlreadyActive
+from core.issue_mr_creation import CREATION_ERRORS, create_issue, create_issue_with_mr, create_mr
 from core.idea_sessions import (
     create_session,
     get_session,
@@ -38,6 +39,7 @@ from core.idea_sessions import (
     update_session,
 )
 from core.ideas import IDEA_TABS, IdeaAlreadyDecided, IdeaNotFound, list_ideas, reject_idea
+from core.models import Project
 from core.repo_items import ItemState
 
 router = APIRouter(prefix="/api")
@@ -141,47 +143,69 @@ def _claim_or_raise(idea_id: int, mode: str) -> dict:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
-def _github_repo(project_id: int) -> str:
+def _project_of(idea: dict) -> Project:
     with SessionLocal() as session:
-        return get_project_or_404(session, project_id).github_repo
+        return get_project_or_404(session, idea["project_id"])
 
 
-def _create_issue_for(idea: dict) -> tuple[dict, str, str]:
-    """提案からIssueを作成する
+def _issue_failed(exc: Exception) -> HTTPException:
+    return HTTPException(status_code=500, detail=messages.ISSUE_CREATE_FAILED.format(reason=exc))
 
-    作成に失敗した場合は、例外の種類によらず承認前の状態へ戻す。
-    """
-    title = compose_issue_title(idea)
+
+def _subtask_failed(reason: object) -> HTTPException:
+    return HTTPException(status_code=500, detail=messages.SUBTASK_CREATE_FAILED.format(reason=reason))
+
+
+def _create_issue_only(idea: dict, project: Project) -> tuple[dict, str, None]:
     try:
-        issue = create_issue(_github_repo(idea["project_id"]), title, compose_issue_body(idea))
+        issue = create_issue(project, compose_issue_title(idea), compose_issue_body(idea))
     except GitHubClientError as exc:
-        release_claim(idea["id"])
-        raise HTTPException(status_code=500, detail=messages.ISSUE_CREATE_FAILED.format(reason=exc)) from exc
-    except Exception:
-        release_claim(idea["id"])
-        raise
-    return record_issue_created(idea["id"], issue["number"]), issue["url"], title
+        raise _issue_failed(exc) from exc
+    return record_issue_created(idea["id"], issue["number"]), issue["url"], None
 
 
-def _create_subtask_for(idea: dict, issue_title: str, execute: bool) -> tuple[dict, dict]:
-    """提案のIssue配下にサブタスク（Draft PR）を作成し、指定があれば実装を開始する
+def _create_issue_with_mr(idea: dict, project: Project) -> tuple[dict, str, dict]:
+    """提案からIssueとサブタスク（Draft PR）を作成する
 
-    作成に失敗した場合は承認前の状態へ戻す（Issue作成済みならIssue作成済みに戻す）。
+    サブタスクのみ失敗した場合は、Issue作成済みを記録してから失敗とする。
     """
-    payload = CreateSubtaskRequest(
-        project_id=idea["project_id"],
-        github_issue_number=target_issue_number(idea),
-        instruction=compose_subtask_instruction(idea),
-        issue_title=issue_title,
-        unique_branch=True,
-    )
     try:
-        subtask = create_subtask(payload)
-    except HTTPException as exc:
-        release_claim(idea["id"])
-        raise HTTPException(status_code=exc.status_code, detail=messages.SUBTASK_CREATE_FAILED.format(reason=exc.detail)) from exc
-    idea = record_subtask_created(idea["id"], subtask["id"])
-    return idea, {**subtask, "job": execute_subtask(subtask["id"]) if execute else None}
+        created = create_issue_with_mr(
+            project, compose_issue_title(idea), compose_issue_body(idea), compose_subtask_instruction(idea)
+        )
+    except GitHubClientError as exc:
+        raise _issue_failed(exc) from exc
+    idea = record_issue_created(idea["id"], created["issue"]["number"])
+    if created["mr"] is None:
+        raise _subtask_failed(created["mr_error"])
+    return record_subtask_created(idea["id"], created["mr"]["id"]), created["issue"]["url"], created["mr"]
+
+
+def _create_mr_for_issue(idea: dict, project: Project) -> tuple[dict, None, dict]:
+    """既存Issue配下（またはIssue作成済み）の提案にサブタスク（Draft PR）を作成する
+
+    作成失敗後の再作成でもブランチ名を重複させないよう、一意な識別子を使う。
+    """
+    try:
+        mr = create_mr(
+            project,
+            target_issue_number(idea),
+            instruction=compose_subtask_instruction(idea),
+            unique_branch=True,
+        )
+    except CREATION_ERRORS as exc:
+        raise _subtask_failed(exc) from exc
+    return record_subtask_created(idea["id"], mr["id"]), None, mr
+
+
+def _create_for_claimed(idea: dict, mode: str) -> tuple[dict, str | None, dict | None]:
+    """承認処理中の提案に、Issue・サブタスクを共通の作成処理で作成する"""
+    project = _project_of(idea)
+    if target_issue_number(idea) is not None:
+        return _create_mr_for_issue(idea, project)
+    if mode == ApprovalMode.ISSUE_ONLY:
+        return _create_issue_only(idea, project)
+    return _create_issue_with_mr(idea, project)
 
 
 @router.post("/ideas/{idea_id}/approve")
@@ -189,12 +213,16 @@ def post_approve_idea(idea_id: int, payload: ApproveIdeaRequest):
     """提案を承認し、Issue（とサブタスク）を作成する
 
     既存Issue配下の提案は、Issueを作らずサブタスクのみ作成する。
+    作成処理は画面・CLIタブと共通の処理を使う。
+    失敗した場合は承認前の状態へ戻す（Issue作成済みならIssue作成済みに戻す）。
     サブタスクも作成する場合、指定があれば作成後に実装の実行ジョブを投入する。
     """
     idea = _claim_or_raise(idea_id, payload.mode)
-    issue_url, issue_title, subtask = None, "", None
-    if target_issue_number(idea) is None:
-        idea, issue_url, issue_title = _create_issue_for(idea)
-    if payload.mode == ApprovalMode.WITH_SUBTASK:
-        idea, subtask = _create_subtask_for(idea, issue_title, payload.execute)
+    try:
+        idea, issue_url, subtask = _create_for_claimed(idea, payload.mode)
+    except Exception:
+        release_claim(idea["id"])
+        raise
+    if subtask is not None:
+        subtask = {**subtask, "job": execute_subtask(subtask["id"]) if payload.execute else None}
     return {"idea": idea, "issue_url": issue_url, "subtask": subtask}

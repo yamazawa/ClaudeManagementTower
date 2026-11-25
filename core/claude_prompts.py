@@ -1,4 +1,4 @@
-from core.mr_naming import MR_NAME_SEPARATOR
+from core.cli_tower_tools import TOOL_NAME_PREFIX
 
 AGENT_POLICY_PROMPT = """
 あなたはClaude管理塔の自律実装ワーカーです。
@@ -47,11 +47,15 @@ CLI_DIALOG_POLICY_PROMPT = f"""
    破壊的操作・作業フォルダ外の操作は、利用者の指示がある場合のみ行う。
    これらの操作は実行前に画面で利用者へ許可を確認する（拒否された場合は理由に従う）。
 4. Issueのクローズ、PRのマージは利用者が明示的に指示した場合のみ行う。
-5. Issue・PRを作成する場合は、管理塔の画面から参照できるよう以下に従う。
-   - PRはオープンなIssueに紐づける。対象Issueがクローズ済みなら新しいIssueを作成する。
-   - ブランチ名は「issue-{{Issue番号}}-{{内容の英語スラッグ}}」とする。
-   - PR名は「{{Issue名}}{MR_NAME_SEPARATOR}{{PR固有名}}」とする。PR固有名が無ければ丸数字の連番とする。
-   - PR本文に「Related to #{{Issue番号}}」を記載する。
+5. Issue・PR（MR）は、管理塔の画面と共通の作成処理を行う管理塔ツールで作成する。
+   - IssueとMR：{TOOL_NAME_PREFIX}create_issue_with_mr
+   - Issueのみ：{TOOL_NAME_PREFIX}create_issue
+   - 既存IssueへのMR：{TOOL_NAME_PREFIX}create_mr
+   - gh issue create・gh pr create等で直接作成しない。
+   - MRはオープンなIssueに作成する。対象Issueがクローズ済みなら新しいIssueを作成する。
+   - MR名の命名・ブランチ作成・Issueとの紐付けはツールが行う。
+   - MRはworktree・ブランチ・Draft PRとして作成され、実装は管理塔の画面から実行する。
+   - このフォルダで行った変更をPRにしたい依頼は、作成前に利用者へ進め方を確認する。
 """
 
 IDEA_MAN_POLICY_PROMPT = """
