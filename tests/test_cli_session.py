@@ -399,3 +399,33 @@ def test_recover_interrupted_sessions_returns_running_to_idle(session_factory):
         assert session.get(CliSession, session_id).status == CliSessionStatus.IDLE
     state = cli_session.get_session(session_id, after_id=1, session_factory=session_factory)
     assert [m["content"] for m in state["messages"]] == [cli_session.INTERRUPTED_MESSAGE]
+
+
+def test_list_session_attachments_marks_sent_by_message_attachment_ids(session_factory, tmp_path, monkeypatch):
+    monkeypatch.setattr(cli_attachments.settings, "worktree_base_dir", str(tmp_path))
+    session_id = cli_session.create_session(1, "調査", session_factory=session_factory)["id"]
+    cli_attachments.save_cli_attachment(session_id, "a.png", b"1")
+    cli_attachments.save_cli_attachment(session_id, "b.txt", b"2")
+    sent = cli_attachments.resolve_cli_attachments(session_id, ["S1"])
+    cli_session._claim_turn(session_id, "S1を見て", session_factory, sent)
+
+    attachments = cli_session.list_session_attachments(session_id, session_factory=session_factory)
+
+    assert attachments == [
+        {"id": "S1", "filename": "a.png", "is_image": True, "sent": True},
+        {"id": "S2", "filename": "b.txt", "is_image": False, "sent": False},
+    ]
+
+
+def test_list_session_attachments_unknown_session_is_not_found(session_factory):
+    with pytest.raises(RepoItemNotFound):
+        cli_session.list_session_attachments(999, session_factory=session_factory)
+
+
+def test_is_attachment_sent_only_for_ids_attached_to_messages(session_factory):
+    session_id = cli_session.create_session(1, "調査", session_factory=session_factory)["id"]
+    attachment = {"id": "S1", "filename": "a.png", "path": "S1/a.png", "is_image": True}
+    cli_session._claim_turn(session_id, "S1を見て", session_factory, [attachment])
+
+    assert cli_session.is_attachment_sent(session_id, "S1", session_factory=session_factory) is True
+    assert cli_session.is_attachment_sent(session_id, "S2", session_factory=session_factory) is False

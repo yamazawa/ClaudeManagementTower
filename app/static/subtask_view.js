@@ -4,6 +4,10 @@
  * 選択中のIssueのMR一覧・MR内容を表示し、MRの状態に応じた操作を行う。
  */
 
+// MR内容の添付の要素ID・表示中のMRの添付の部品
+const MR_ATTACHMENT_IDS = attachmentElementIds("mr-attach");
+let mrAttachmentForm = null;
+
 /**
  * MR一覧の表示対象
  *
@@ -231,6 +235,7 @@ function renderSubtaskDetail(s) {
   const el = document.getElementById("subtask-detail-body");
   const heading = document.getElementById("subtask-heading");
   if (!s) {
+    mrAttachmentForm = null;
     heading.textContent = "MR";
     el.innerHTML = '<p class="empty">一覧からMRを選択してください。</p>';
     setSectionShown(SECTION_IDS.mr, false);
@@ -243,14 +248,7 @@ function renderSubtaskDetail(s) {
   el.innerHTML = `
     <p id="subtask-title-status" class="title-status empty"></p>
     <div class="instruction-form">
-      <div class="attachment-area">
-        <button type="button" id="attach-file-button" class="subtask-action-button attach-button">ファイル添付</button>
-        <button type="button" id="attach-image-button" class="subtask-action-button attach-button">画像添付</button>
-        <input type="file" id="attach-file-input" multiple hidden />
-        <input type="file" id="attach-image-input" accept="image/*" hidden />
-        <span id="attachment-status" class="empty"></span>
-      </div>
-      <div id="attachment-list" data-subtask-id="${s.id}"></div>
+      ${renderAttachmentFormHtml(MR_ATTACHMENT_IDS)}
       <textarea id="instruction-${s.id}" name="instruction" aria-label="指示内容" placeholder="Claudeへの指示内容を入力してください（添付ファイルはS1、S2などのIDで指定できます）">${escapeHtml(s.instruction)}</textarea>
       <div id="subtask-actions" class="subtask-actions" data-subtask-id="${s.id}"></div>
     </div>
@@ -259,9 +257,9 @@ function renderSubtaskDetail(s) {
     <iframe class="report-frame" sandbox="" data-subtask-id="${s.id}" hidden></iframe>
   `;
 
+  setupMrAttachmentForm(s.id);
   renderSubtaskActions(s);
   setupSubtaskTitleEditing(s.id);
-  setupAttachmentForm(s.id);
 
   restoreJobState(s);
 }
@@ -399,7 +397,21 @@ function renderSubtaskActions(s) {
   const editable = actions.some((a) => a.action === "execute");
   const textarea = document.getElementById(`instruction-${s.id}`);
   if (textarea) textarea.readOnly = !editable;
-  document.querySelectorAll(".attach-button").forEach((b) => (b.disabled = !editable || busy));
+  mrAttachmentForm?.setDisabled(!editable || busy);
+}
+
+/**
+ * MR内容の添付ボタン・添付ファイル一覧の初期化
+ *
+ * 添付ファイルはMRのworktreeに保存する。
+ * 指示内容の入力欄への画像の貼り付けも添付する。
+ */
+function setupMrAttachmentForm(subtaskId) {
+  mrAttachmentForm = setupAttachmentForm({
+    apiUrl: `/api/subtasks/${subtaskId}/attachments`,
+    ids: MR_ATTACHMENT_IDS,
+    pasteTarget: document.getElementById(`instruction-${subtaskId}`),
+  });
 }
 
 function renderSubtaskActionButton(action, disabled) {

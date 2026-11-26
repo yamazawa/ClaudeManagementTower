@@ -1,25 +1,23 @@
-# サブタスク: DevGuidelinesを管理塔に登録し、Issue・MRの命名を管理塔のルールに揃えるー①
+# サブタスク: CLIとMRの添付UIを共通化し、クリップボードの画像を貼付できるようにするー①
 
-管理塔側に残る`[SPn]タスクn - 内容`形式の記載を廃止する。
-CommonGuideLine.mdでスプリント番号・タスク番号をIssue名に付けるルールを廃止したため、それに合わせる。
+Issue本文の仕様に従って実装する。
 
-1. CLAUDE.md 63行目のIssueタイトル形式の記載を、管理塔の命名規則（Issue名は内容を表す日本語の文、MR名は「Issue名ーMR固有名」）に変更する。
-2. IMPLEMENTATION_PLAN.md 2章（112行目）の`[SPn]`形式を使う記載を同様に変更する。
-3. core/repo_initial_setup.py 35行目のSETUP_ISSUE_TITLEから`[SP0]タスク1 - `を外し「Claude監視塔の管理用初期設定」にする。
-4. IMPLEMENTATION_PLAN.md 10章No.4（321行目）のIssue名も合わせて変更する。
-5. 関連テストがあれば更新し、`./.venv/Scripts/python.exe -m pytest -q`で確認する。
+- 共通化はMRのロジック（app/static/attachment.js）を元にし、CLIはそれを使う形にする。
+- 文言は各JSの文言定数に集約し、色などの見た目の値はstyle.cssの変数にまとめる。
+- クリップボードの判定はnavigator.clipboard.read()を使い、判定できない・許可されない環境ではボタンを常に表示する。
+- CLIの添付一覧のAPIが無い場合はapp/routes/cli.pyに追加し、送信済みかどうかを返す。
+- サーバー側を変更した場合はtestsにテストを追加し、./.venv/Scripts/python.exe -m pytest -q で確認する。
+- コミットは「UI共通化」「クリップボード貼付」「CLIの送信済み表示・絞り込み」の単位で分ける。
+- 画面での動作確認は人間が行うため、確認手順を報告に記載する。
+## 実行指示（2026-11-26 20:59:42 UTC）
 
-コミットは上記の対応ごとに分ける。
-## 実行指示（2026-11-26 20:59:33 UTC）
+Issue本文の仕様に従って実装する。
 
-管理塔側に残る`[SPn]タスクn - 内容`形式の記載を廃止する。
-CommonGuideLine.mdでスプリント番号・タスク番号をIssue名に付けるルールを廃止したため、それに合わせる。
-
-1. CLAUDE.md 63行目のIssueタイトル形式の記載を、管理塔の命名規則（Issue名は内容を表す日本語の文、MR名は「Issue名ーMR固有名」）に変更する。
-2. IMPLEMENTATION_PLAN.md 2章（112行目）の`[SPn]`形式を使う記載を同様に変更する。
-3. core/repo_initial_setup.py 35行目のSETUP_ISSUE_TITLEから`[SP0]タスク1 - `を外し「Claude監視塔の管理用初期設定」にする。
-4. IMPLEMENTATION_PLAN.md 10章No.4（321行目）のIssue名も合わせて変更する。
-5. 関連テストがあれば更新し、`./.venv/Scripts/python.exe -m pytest -q`で確認する。
-
-コミットは上記の対応ごとに分ける。
+- 共通化はMRのロジック（app/static/attachment.js）を元にし、CLIはそれを使う形にする。
+- 文言は各JSの文言定数に集約し、色などの見た目の値はstyle.cssの変数にまとめる。
+- クリップボードの判定はnavigator.clipboard.read()を使い、判定できない・許可されない環境ではボタンを常に表示する。
+- CLIの添付一覧のAPIが無い場合はapp/routes/cli.pyに追加し、送信済みかどうかを返す。
+- サーバー側を変更した場合はtestsにテストを追加し、./.venv/Scripts/python.exe -m pytest -q で確認する。
+- コミットは「UI共通化」「クリップボード貼付」「CLIの送信済み表示・絞り込み」の単位で分ける。
+- 画面での動作確認は人間が行うため、確認手順を報告に記載する。
 

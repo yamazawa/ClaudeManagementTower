@@ -50,6 +50,9 @@
   --cli-tool-error-bg: #fdf0e1;
   --cli-permission-bg: #fdf0e1;
   --cli-permission-tool-max-height: 30vh;
+  --cli-attachment-unsent-bg: #edf6ff;
+  --cli-attachment-sent-bg: #f1f2f4;
+  --cli-attachment-sent-fg: #98a1b0;
   --markdown-block-gap: 8px;
   --markdown-list-indent: 22px;
   --markdown-code-font: 12.5px/1.5 ui-monospace, Consolas, monospace;
@@ -575,7 +578,7 @@ Issue名・入力欄・作成ボタンは折り返さず1行に並べる。
   margin-bottom: 6px;
 }
 
-/* CLIの添付（送信前の添付欄・発言内の添付ファイル名） */
+/* CLIの発言内の添付ファイル名 */
 .cli-attachments {
   display: flex;
   flex-wrap: wrap;
@@ -600,14 +603,6 @@ Issue名・入力欄・作成ボタンは折り返さず1行に並べる。
   border-radius: 10px;
   background: var(--surface);
   white-space: nowrap;
-}
-
-.cli-attachment-remove {
-  padding: 0 2px;
-  border: none;
-  background: none;
-  color: var(--muted);
-  cursor: pointer;
 }
 
 /* Ideaタブの項目の提案一覧 */
@@ -1317,15 +1312,17 @@ h2 {
   background: var(--soft);
 }
 
-/* 実装指示の添付ファイル */
+/* 添付ファイル（MR内容・CLIタブ共通） */
+/* ボタンが増えても狭い画面（スマホ）で折り返す */
 .attachment-area {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   font-size: 12px;
 }
 
-#attachment-list:empty {
+.attachment-list:empty {
   display: none;
 }
 
@@ -1348,6 +1345,20 @@ h2 {
 .attachment-table .attachment-delete-button {
   font-size: 12px;
   padding: 2px 8px;
+}
+
+/* CLIの添付一覧の送信済み・未送信の色分け */
+.attachment-table .attachment-row-unsent td {
+  background: var(--cli-attachment-unsent-bg);
+}
+
+.attachment-table .attachment-row-sent td {
+  background: var(--cli-attachment-sent-bg);
+  color: var(--cli-attachment-sent-fg);
+}
+
+.cli-attachment-filter {
+  font: inherit;
 }
 
 /* 画像添付のサムネイル（縦横比を保って枠内に収める） */

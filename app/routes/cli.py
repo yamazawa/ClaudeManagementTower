@@ -2,7 +2,7 @@
 
 CLIの項目（対話）の一覧・作成・変更と、発言の送信・取得・応答の中断を扱う。
 応答中の許可の問い合わせへの回答も扱う。
-発言に付ける添付ファイルの保存・取得・削除も扱う。
+発言に付ける添付ファイルの一覧・保存・取得・削除も扱う。
 """
 
 from typing import Literal
@@ -24,6 +24,8 @@ from core.cli_session import (
     ensure_session_open,
     get_session,
     interrupt_turn,
+    is_attachment_sent,
+    list_session_attachments,
     list_sessions,
     send_message,
     update_session,
@@ -118,6 +120,13 @@ def get_cli_session(cli_session_id: int, after: int = 0):
         return get_session(cli_session_id, after_id=after)
 
 
+@router.get("/cli-sessions/{cli_session_id}/attachments")
+def get_cli_attachments(cli_session_id: int):
+    """添付ファイルの一覧を、送信済みかどうかを付けて返す"""
+    with item_errors():
+        return list_session_attachments(cli_session_id)
+
+
 @router.post("/cli-sessions/{cli_session_id}/attachments")
 async def upload_cli_attachment(cli_session_id: int, file: UploadFile):
     """発言の添付ファイルを保存する
@@ -149,8 +158,11 @@ def get_cli_attachment_file(cli_session_id: int, attachment_id: str):
 def remove_cli_attachment(cli_session_id: int, attachment_id: str):
     """送信前の添付ファイルを取り消す
 
+    送信済みの添付は発言から参照されるため削除できない。
     残りの添付のIDは振り直さない。
     """
+    if is_attachment_sent(cli_session_id, attachment_id):
+        raise HTTPException(status_code=409, detail=messages.ATTACHMENT_SENT)
     if not delete_cli_attachment(cli_session_id, attachment_id):
         raise HTTPException(status_code=404, detail=messages.ATTACHMENT_NOT_FOUND)
     return {"id": attachment_id}

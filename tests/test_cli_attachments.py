@@ -70,3 +70,14 @@ def test_find_and_delete_cli_attachment():
     assert cli_attachments.find_cli_attachment_file(7, "S1").read_bytes() == b"1"
     assert cli_attachments.delete_cli_attachment(7, "S1") is True
     assert cli_attachments.find_cli_attachment_file(7, "S1") is None
+
+
+def test_list_cli_attachments_omits_paths():
+    cli_attachments.save_cli_attachment(7, "a.png", b"1")
+    cli_attachments.save_cli_attachment(7, "b.txt", b"2")
+
+    assert cli_attachments.list_cli_attachments(7) == [
+        {"id": "S1", "filename": "a.png", "is_image": True},
+        {"id": "S2", "filename": "b.txt", "is_image": False},
+    ]
+    assert cli_attachments.list_cli_attachments(8) == []

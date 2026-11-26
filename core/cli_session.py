@@ -30,7 +30,7 @@ from core import cli_permission_requests as permission_requests
 from core.claude_client import run_claude
 from core.claude_permissions import CLI_DIALOG_DENIED_TOOLS, AskUser
 from core.claude_prompts import CLI_DIALOG_POLICY_PROMPT
-from core.cli_attachments import build_cli_prompt, resolve_cli_attachments
+from core.cli_attachments import build_cli_prompt, list_cli_attachments, resolve_cli_attachments
 from core.cli_tower_tools import TOWER_SERVER_NAME, build_tower_server
 from core.db import SessionLocal
 from core.models import CliMessage, CliSession, Project
@@ -465,6 +465,32 @@ def get_session(cli_session_id: int, after_id: int = 0, session_factory: session
             "messages": [_message_to_dict(m) for m in messages],
             "permission_requests": permission_requests.list_requests(cli_session_id),
         }
+
+
+def _sent_attachment_ids(session, cli_session_id: int) -> set[str]:
+    """利用者の発言に付けた添付のID"""
+    messages = session.query(CliMessage).filter(
+        CliMessage.cli_session_id == cli_session_id, CliMessage.role == CliMessageRole.USER
+    )
+    return {a["id"] for m in messages for a in json.loads(m.attachments or "[]")}
+
+
+def is_attachment_sent(cli_session_id: int, attachment_id: str, session_factory: sessionmaker = SessionLocal) -> bool:
+    """添付が発言に付けて送信済みか"""
+    with session_factory() as session:
+        return attachment_id in _sent_attachment_ids(session, cli_session_id)
+
+
+def list_session_attachments(cli_session_id: int, session_factory: sessionmaker = SessionLocal) -> list[dict]:
+    """保存済みの添付ファイルを、送信済みかどうか（sent）を付けてID順に返す
+
+    送信済みかどうかは、発言に付いた添付のIDから判定する。
+    存在しない対話はRepoItemNotFoundとする。
+    """
+    with session_factory() as session:
+        get_item_or_raise(session, CliSession, cli_session_id)
+        sent = _sent_attachment_ids(session, cli_session_id)
+    return [{**a, "sent": a["id"] in sent} for a in list_cli_attachments(cli_session_id)]
 
 
 def answer_permission(cli_session_id: int, request_id: int, allow: bool, reason: str = "") -> None:

@@ -139,6 +139,7 @@ class _Upload:
 def attachment_base(tmp_path, monkeypatch):
     monkeypatch.setattr(cli_attachments.settings, "worktree_base_dir", str(tmp_path))
     monkeypatch.setattr(cli, "ensure_session_open", lambda session_id: None)
+    monkeypatch.setattr(cli, "is_attachment_sent", lambda session_id, attachment_id: False)
     return tmp_path
 
 
@@ -174,3 +175,31 @@ def test_remove_attachment_404_when_missing(attachment_base):
     with pytest.raises(HTTPException) as error:
         cli.remove_cli_attachment(5, "S9")
     assert error.value.status_code == 404
+
+
+def test_get_attachments_returns_list_with_sent_flag(monkeypatch):
+    listed = [{"id": "S1", "filename": "a.png", "is_image": True, "sent": True}]
+    monkeypatch.setattr(cli, "list_session_attachments", lambda session_id: listed if session_id == 5 else [])
+
+    assert cli.get_cli_attachments(5) == listed
+
+
+def test_get_attachments_unknown_session_is_not_found(monkeypatch):
+    def missing(session_id):
+        raise RepoItemNotFound("x")
+
+    monkeypatch.setattr(cli, "list_session_attachments", missing)
+
+    with pytest.raises(HTTPException) as error:
+        cli.get_cli_attachments(5)
+    assert error.value.status_code == 404
+
+
+def test_remove_attachment_rejects_sent_attachment(attachment_base, monkeypatch):
+    asyncio.run(cli.upload_cli_attachment(5, _Upload("a.png", b"1")))
+    monkeypatch.setattr(cli, "is_attachment_sent", lambda session_id, attachment_id: attachment_id == "S1")
+
+    with pytest.raises(HTTPException) as error:
+        cli.remove_cli_attachment(5, "S1")
+    assert error.value.status_code == 409
+    assert cli.get_cli_attachment_file(5, "S1").path.name == "a.png"

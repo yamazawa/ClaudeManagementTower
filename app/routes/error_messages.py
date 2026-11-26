@@ -8,6 +8,7 @@ SUBTASK_NOT_FOUND = "MRが見つかりません"
 JOB_NOT_FOUND = "ジョブが見つかりません"
 REPORT_NOT_FOUND = "レポートが見つかりません"
 ATTACHMENT_NOT_FOUND = "添付ファイルが見つかりません"
+ATTACHMENT_SENT = "送信済みの添付ファイルは削除できません"
 DEPLOY_RESULT_NOT_FOUND = "デプロイの実行結果がありません"
 SELF_SYNC_RESULT_NOT_FOUND = "マージして最新化の実行結果がありません"
 
