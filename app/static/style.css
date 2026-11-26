@@ -575,7 +575,7 @@ Issue名・入力欄・作成ボタンは折り返さず1行に並べる。
   margin-bottom: 6px;
 }
 
-/* CLIの添付（送信前の添付欄・発言内の添付ファイル名） */
+/* CLIの発言内の添付ファイル名 */
 .cli-attachments {
   display: flex;
   flex-wrap: wrap;
@@ -600,14 +600,6 @@ Issue名・入力欄・作成ボタンは折り返さず1行に並べる。
   border-radius: 10px;
   background: var(--surface);
   white-space: nowrap;
-}
-
-.cli-attachment-remove {
-  padding: 0 2px;
-  border: none;
-  background: none;
-  color: var(--muted);
-  cursor: pointer;
 }
 
 /* Ideaタブの項目の提案一覧 */
@@ -1317,7 +1309,7 @@ h2 {
   background: var(--soft);
 }
 
-/* 実装指示の添付ファイル */
+/* 添付ファイル（MR内容・CLIタブ共通） */
 .attachment-area {
   display: flex;
   align-items: center;
@@ -1325,7 +1317,7 @@ h2 {
   font-size: 12px;
 }
 
-#attachment-list:empty {
+.attachment-list:empty {
   display: none;
 }
 

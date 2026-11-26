@@ -2,7 +2,7 @@
 
 CLIの項目（対話）の一覧・作成・変更と、発言の送信・取得・応答の中断を扱う。
 応答中の許可の問い合わせへの回答も扱う。
-発言に付ける添付ファイルの保存・取得・削除も扱う。
+発言に付ける添付ファイルの一覧・保存・取得・削除も扱う。
 """
 
 from typing import Literal
@@ -24,6 +24,7 @@ from core.cli_session import (
     ensure_session_open,
     get_session,
     interrupt_turn,
+    list_session_attachments,
     list_sessions,
     send_message,
     update_session,
@@ -116,6 +117,13 @@ def post_cli_permission(cli_session_id: int, request_id: int, payload: AnswerCli
 def get_cli_session(cli_session_id: int, after: int = 0):
     with item_errors():
         return get_session(cli_session_id, after_id=after)
+
+
+@router.get("/cli-sessions/{cli_session_id}/attachments")
+def get_cli_attachments(cli_session_id: int):
+    """添付ファイルの一覧を、送信済みかどうかを付けて返す"""
+    with item_errors():
+        return list_session_attachments(cli_session_id)
 
 
 @router.post("/cli-sessions/{cli_session_id}/attachments")

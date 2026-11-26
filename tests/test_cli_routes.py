@@ -174,3 +174,21 @@ def test_remove_attachment_404_when_missing(attachment_base):
     with pytest.raises(HTTPException) as error:
         cli.remove_cli_attachment(5, "S9")
     assert error.value.status_code == 404
+
+
+def test_get_attachments_returns_list_with_sent_flag(monkeypatch):
+    listed = [{"id": "S1", "filename": "a.png", "is_image": True, "sent": True}]
+    monkeypatch.setattr(cli, "list_session_attachments", lambda session_id: listed if session_id == 5 else [])
+
+    assert cli.get_cli_attachments(5) == listed
+
+
+def test_get_attachments_unknown_session_is_not_found(monkeypatch):
+    def missing(session_id):
+        raise RepoItemNotFound("x")
+
+    monkeypatch.setattr(cli, "list_session_attachments", missing)
+
+    with pytest.raises(HTTPException) as error:
+        cli.get_cli_attachments(5)
+    assert error.value.status_code == 404

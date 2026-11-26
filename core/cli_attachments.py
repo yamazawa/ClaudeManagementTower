@@ -33,6 +33,15 @@ def save_cli_attachment(cli_session_id: int, filename: str, data: bytes) -> dict
     return save_attachment(cli_attachments_dir(cli_session_id), filename, data, CLI_ATTACHMENTS_SUBDIR)
 
 
+def list_cli_attachments(cli_session_id: int) -> list[dict]:
+    """保存済みの添付ファイルをID順に返す
+
+    保存先のパスは画面に出さないため含めない。
+    """
+    entries = list_attachments(cli_attachments_dir(cli_session_id), CLI_ATTACHMENTS_SUBDIR)
+    return [{key: value for key, value in entry.items() if key != "path"} for entry in entries]
+
+
 def find_cli_attachment_file(cli_session_id: int, attachment_id: str) -> Path | None:
     return find_attachment_file(cli_attachments_dir(cli_session_id), attachment_id, CLI_ATTACHMENTS_SUBDIR)
 

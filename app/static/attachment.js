@@ -1,22 +1,98 @@
 /**
- * MR内容の添付ファイル
+ * 添付ファイルの共通部品（MR内容・CLIタブ）
  *
- * 添付ファイルの一覧表示・アップロード・削除を行う。
+ * 添付ボタン・お絵かきダイアログ・添付ファイル一覧の表を提供する。
+ * APIのURLと要素IDを引数で受け取り、一覧表示・アップロード・削除を行う。
  */
+
+const ATTACHMENT_MESSAGES = {
+  attachFile: "ファイル添付",
+  attachImage: "画像添付",
+  headerId: "ID",
+  headerFile: "ファイル",
+  delete: "削除",
+  uploading: "アップロード中",
+  uploadFailed: "失敗しました",
+  networkFailed: "通信に失敗しました",
+  confirmDelete: (id) => `添付ファイル ${id} を削除しますか？`,
+  deleteFailed: (id) => `削除に失敗しました: ${id}`,
+};
+
+// 貼り付けた画像にファイル名が無い場合の名前
+const ATTACHMENT_PASTED_IMAGE_NAME = "pasted-image.png";
+
+/**
+ * 部品の要素IDを、接頭辞から決める
+ */
+function attachmentElementIds(prefix) {
+  return {
+    fileButton: `${prefix}-file-button`,
+    fileInput: `${prefix}-file-input`,
+    imageButton: `${prefix}-image-button`,
+    imageInput: `${prefix}-image-input`,
+    status: `${prefix}-status`,
+    list: `${prefix}-list`,
+  };
+}
+
+/**
+ * 添付ボタンの行と一覧の置き場所のHTML
+ *
+ * 画像添付は画像のみ選べるようにする（スマホでは写真の選択画面が開く）。
+ * extraHtmlはボタンの行の末尾に置く（CLIの絞り込みなど）。
+ */
+function renderAttachmentFormHtml(ids, { hint = "", extraHtml = "" } = {}) {
+  return `
+    <div class="attachment-area">
+      <button type="button" id="${ids.fileButton}" class="subtask-action-button attach-button">${ATTACHMENT_MESSAGES.attachFile}</button>
+      <button type="button" id="${ids.imageButton}" class="subtask-action-button attach-button">${ATTACHMENT_MESSAGES.attachImage}</button>
+      <input type="file" id="${ids.fileInput}" multiple hidden />
+      <input type="file" id="${ids.imageInput}" accept="image/*" hidden />
+      ${extraHtml}
+      <span id="${ids.status}" class="empty">${escapeHtml(hint)}</span>
+    </div>
+    <div id="${ids.list}" class="attachment-list"></div>
+  `;
+}
 
 /**
  * 添付ボタン・添付ファイル一覧の初期化
  *
+ * options
+ *   apiUrl     : 添付ファイルのAPIのURL（一覧の取得・アップロードはこのURL、各添付は「URL/ID」）
+ *   ids        : 要素ID（attachmentElementIdsの戻り値）
+ *   hint       : 状態欄に普段表示する文言
+ *   pasteTarget: 画像の貼り付けを受け付ける入力欄
+ *   isShown    : 一覧に表示する添付か（省略時はすべて）
+ *   rowClass   : 一覧の行に付けるクラス名
+ *   canDelete  : 削除できる添付か（省略時はすべて）
+ *   onChange   : 一覧を読み直した時に呼ぶ
+ *
  * ファイル添付は選択したファイルをそのまま順にアップロードする。
  * 画像添付は選択した画像をお絵かきダイアログで加工してからアップロードする。
+ * 戻り値の部品で、一覧の読み直し・表示し直し・ボタンの無効化を行う。
  */
-function setupAttachmentForm(subtaskId) {
-  bindFileChooser("attach-file-button", "attach-file-input", (files) => uploadAttachments(subtaskId, files));
-  bindFileChooser("attach-image-button", "attach-image-input", async ([file]) => {
-    const edited = await openImageEditor(file);
-    if (edited) await uploadAttachments(subtaskId, [edited]);
-  });
-  loadAttachments(subtaskId);
+function setupAttachmentForm(options) {
+  const form = {
+    ...options,
+    attachments: [],
+    disabled: false,
+    reload: () => loadAttachments(form),
+    render: () => renderAttachmentList(form),
+    setDisabled: (disabled) => setAttachmentFormDisabled(form, disabled),
+    upload: (files) => uploadAttachments(form, files),
+  };
+  const { ids } = form;
+  form.elements = {
+    list: document.getElementById(ids.list),
+    status: document.getElementById(ids.status),
+    buttons: [ids.fileButton, ids.imageButton].map((id) => document.getElementById(id)),
+  };
+  bindFileChooser(ids.fileButton, ids.fileInput, (files) => form.upload(files));
+  bindFileChooser(ids.imageButton, ids.imageInput, ([file]) => attachEditedImages(form, [file]));
+  form.pasteTarget?.addEventListener("paste", (event) => onAttachmentPaste(form, event));
+  form.reload();
+  return form;
 }
 
 /**
@@ -35,11 +111,57 @@ function bindFileChooser(buttonId, inputId, onSelect) {
   });
 }
 
-async function loadAttachments(subtaskId) {
-  const attachments = await fetch(`/api/subtasks/${subtaskId}/attachments`)
+// 描画し直しやMRの切り替えで要素が消えた部品は、以降の表示を行わない
+function isAttachmentFormShown(form) {
+  return form.elements.list.isConnected;
+}
+
+// 状態の更新のたびに呼ばれるため、変わった時のみ描画し直す
+function setAttachmentFormDisabled(form, disabled) {
+  if (form.disabled === disabled) return;
+  form.disabled = disabled;
+  form.elements.buttons.forEach((b) => (b.disabled = disabled));
+  form.render();
+}
+
+/**
+ * 画像を1枚ずつお絵かきダイアログで加工してからアップロードする
+ *
+ * キャンセルした画像は添付しない。
+ */
+async function attachEditedImages(form, images) {
+  const edited = [];
+  for (const image of images) {
+    const file = await openImageEditor(image);
+    if (file) edited.push(file);
+  }
+  if (edited.length) await form.upload(edited);
+}
+
+/**
+ * 入力欄に貼り付けたファイル（クリップボードの画像など）を添付する
+ *
+ * ファイルを含まない貼り付けは、通常の文字の貼り付けとする。
+ */
+function onAttachmentPaste(form, event) {
+  const files = [...(event.clipboardData?.files || [])];
+  if (!files.length || form.disabled) return;
+  event.preventDefault();
+  form.upload(files.map(namePastedFile));
+}
+
+function namePastedFile(file) {
+  return file.name ? file : new File([file], ATTACHMENT_PASTED_IMAGE_NAME, { type: file.type });
+}
+
+async function loadAttachments(form) {
+  const attachments = await fetch(form.apiUrl)
     .then((r) => (r.ok ? r.json() : []))
     .catch(() => []);
-  renderAttachmentList(subtaskId, attachments);
+  if (!isAttachmentFormShown(form)) return;
+  form.attachments = attachments;
+  form.render();
+  form.onChange?.(attachments);
 }
 
 /**
@@ -47,38 +169,47 @@ async function loadAttachments(subtaskId) {
  *
  * 画像はファイル名の代わりにサムネイルを表示する。
  * 削除ボタンは添付ボタンと同じ条件で無効化する。
- * 添付ファイルが無い場合は表を表示しない。
+ * 表示する添付ファイルが無い場合は表を表示しない。
  */
-function renderAttachmentList(subtaskId, attachments) {
-  const container = document.getElementById("attachment-list");
-  if (!container || Number(container.dataset.subtaskId) !== subtaskId) return;
-  if (!attachments.length) {
+function renderAttachmentList(form) {
+  const container = form.elements.list;
+  const shown = form.attachments.filter((a) => (form.isShown ? form.isShown(a) : true));
+  if (!shown.length) {
     container.innerHTML = "";
     return;
   }
-  const disabled = document.getElementById("attach-file-button")?.disabled ? " disabled" : "";
-  const rows = attachments.map((a) => renderAttachmentRow(subtaskId, a, disabled)).join("");
+  const rows = shown.map((a) => renderAttachmentRow(form, a)).join("");
   container.innerHTML =
-    `<table class="attachment-table"><thead><tr><th>ID</th><th>ファイル</th><th></th></tr></thead>` +
-    `<tbody>${rows}</tbody></table>`;
+    `<table class="attachment-table"><thead><tr><th>${ATTACHMENT_MESSAGES.headerId}</th>` +
+    `<th>${ATTACHMENT_MESSAGES.headerFile}</th><th></th></tr></thead><tbody>${rows}</tbody></table>`;
   container
     .querySelectorAll(".attachment-delete-button")
-    .forEach((b) => b.addEventListener("click", () => removeAttachment(subtaskId, b.dataset.attachmentId)));
+    .forEach((b) => b.addEventListener("click", () => removeAttachment(form, b.dataset.attachmentId)));
 }
 
-function renderAttachmentRow(subtaskId, attachment, disabled) {
+function renderAttachmentRow(form, attachment) {
   const id = escapeHtml(attachment.id);
+  const deletable = !form.disabled && (form.canDelete ? form.canDelete(attachment) : true);
+  const rowClass = form.rowClass ? ` class="${form.rowClass(attachment)}"` : "";
   const deleteButton =
     `<button type="button" class="subtask-action-button attach-button attachment-delete-button"` +
-    ` data-attachment-id="${id}"${disabled}>削除</button>`;
-  return `<tr><td>${id}</td><td>${renderAttachmentCell(subtaskId, attachment)}</td><td>${deleteButton}</td></tr>`;
+    ` data-attachment-id="${id}"${deletable ? "" : " disabled"}>${ATTACHMENT_MESSAGES.delete}</button>`;
+  return `<tr${rowClass}><td>${id}</td><td>${renderAttachmentCell(form, attachment)}</td><td>${deleteButton}</td></tr>`;
 }
 
-function renderAttachmentCell(subtaskId, attachment) {
+function attachmentUrl(form, attachmentId) {
+  return `${form.apiUrl}/${encodeURIComponent(attachmentId)}`;
+}
+
+function renderAttachmentCell(form, attachment) {
   if (!attachment.is_image) return escapeHtml(attachment.filename);
-  const url = `/api/subtasks/${subtaskId}/attachments/${encodeURIComponent(attachment.id)}/file`;
+  const url = `${attachmentUrl(form, attachment.id)}/file`;
   const name = escapeHtml(attachment.filename);
   return `<a href="${url}" target="_blank" rel="noopener"><img class="attachment-thumbnail" src="${url}" alt="${name}" title="${name}" loading="lazy" /></a>`;
+}
+
+function setAttachmentStatus(form, text) {
+  form.elements.status.textContent = text || form.hint || "";
 }
 
 /**
@@ -87,20 +218,19 @@ function renderAttachmentCell(subtaskId, attachment) {
  * IDの採番順を選択順に揃えるため、並列にせず順に送る。
  * 一覧を読み直すまで更新中を表示する。
  */
-async function uploadAttachments(subtaskId, files) {
-  await runBusyAction(() => uploadAttachmentsInOrder(subtaskId, files));
+async function uploadAttachments(form, files) {
+  await runBusyAction(() => uploadAttachmentsInOrder(form, files));
 }
 
-async function uploadAttachmentsInOrder(subtaskId, files) {
-  const statusEl = document.getElementById("attachment-status");
+async function uploadAttachmentsInOrder(form, files) {
   const errors = [];
   for (const file of files) {
-    statusEl.textContent = `アップロード中: ${file.name}`;
-    const error = await uploadAttachment(subtaskId, file);
+    setAttachmentStatus(form, `${ATTACHMENT_MESSAGES.uploading}: ${file.name}`);
+    const error = await uploadAttachment(form, file);
     if (error) errors.push(`${file.name}: ${error}`);
   }
-  if (statusEl.isConnected) statusEl.textContent = errors.length ? `失敗しました: ${errors.join(" / ")}` : "";
-  await loadAttachments(subtaskId);
+  setAttachmentStatus(form, errors.length ? `${ATTACHMENT_MESSAGES.uploadFailed}: ${errors.join(" / ")}` : "");
+  await form.reload();
 }
 
 /**
@@ -109,28 +239,23 @@ async function uploadAttachmentsInOrder(subtaskId, files) {
  * 失敗した場合は添付ボタン横の状態欄に理由を表示する。
  * 一覧を読み直すまで更新中を表示する。
  */
-async function removeAttachment(subtaskId, attachmentId) {
-  if (!confirm(`添付ファイル ${attachmentId} を削除しますか？`)) return;
-  await runBusyAction(() => deleteAttachment(subtaskId, attachmentId));
+async function removeAttachment(form, attachmentId) {
+  if (!confirm(ATTACHMENT_MESSAGES.confirmDelete(attachmentId))) return;
+  await runBusyAction(() => deleteAttachment(form, attachmentId));
 }
 
-async function deleteAttachment(subtaskId, attachmentId) {
-  const response = await fetch(
-    `/api/subtasks/${subtaskId}/attachments/${encodeURIComponent(attachmentId)}`,
-    { method: "DELETE" }
-  ).catch(() => null);
-  const statusEl = document.getElementById("attachment-status");
-  if (statusEl) statusEl.textContent = response?.ok ? "" : `削除に失敗しました: ${attachmentId}`;
-  await loadAttachments(subtaskId);
+async function deleteAttachment(form, attachmentId) {
+  const response = await fetch(attachmentUrl(form, attachmentId), { method: "DELETE" }).catch(() => null);
+  setAttachmentStatus(form, response?.ok ? "" : ATTACHMENT_MESSAGES.deleteFailed(attachmentId));
+  await form.reload();
 }
 
-async function uploadAttachment(subtaskId, file) {
-  const form = new FormData();
-  form.append("file", file);
-  const response = await fetch(`/api/subtasks/${subtaskId}/attachments`, { method: "POST", body: form })
-    .catch(() => null);
-  if (!response) return "通信に失敗しました";
+async function uploadAttachment(form, file) {
+  const body = new FormData();
+  body.append("file", file);
+  const response = await fetch(form.apiUrl, { method: "POST", body }).catch(() => null);
+  if (!response) return ATTACHMENT_MESSAGES.networkFailed;
   if (response.ok) return null;
-  const body = await response.json().catch(() => ({}));
-  return body.detail || response.statusText;
+  const detail = await response.json().catch(() => ({}));
+  return detail.detail || response.statusText;
 }

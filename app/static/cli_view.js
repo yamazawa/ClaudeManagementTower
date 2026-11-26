@@ -4,7 +4,8 @@
  * リポジトリのフォルダで実行するClaudeと、開発PCで対話式に実行している時のように会話する。
  * 応答はサーバー側で別途実行し、発言一覧をポーリングして表示する。
  * 画面構成はMR内容と揃え、添付・指示の入力欄・送信ボタン・状態表示・発言一覧の順に並べる。
- * 添付は選択・貼り付けの時点で保存し、送信時にIDで発言に付ける。
+ * 添付はMR内容と共通の部品を使い、選択・貼り付けの時点で保存する。
+ * 送信時は未送信の添付をIDで発言に付ける。
  * 範囲外の操作の許可の問い合わせは、状態表示の下に表示して回答を受け付ける。
  */
 
@@ -37,11 +38,7 @@ const CLI_VIEW_MESSAGES = {
   interruptTitle: "応答中のClaudeを止める（開発PCのEscキー相当）",
   interrupting: "中断しています...",
   interruptFailed: "中断に失敗しました",
-  attach: "ファイル添付",
   attachHint: "画像は入力欄に貼り付けても添付できます（S1、S2などのIDで指示から指定できます）",
-  uploading: "アップロード中",
-  uploadFailed: "添付に失敗しました",
-  removeAttachment: "添付を取り消す",
   waitingPermission: "許可の確認待ち（下の内容を確認して許可・拒否してください）",
   permissionTitle: "許可の確認",
   allow: "許可",
@@ -50,10 +47,10 @@ const CLI_VIEW_MESSAGES = {
   answerFailed: "回答に失敗しました",
 };
 
-// 貼り付けた画像にファイル名が無い場合の名前
-const CLI_PASTED_IMAGE_NAME = "pasted-image.png";
+// 添付の要素ID
+const CLI_ATTACHMENT_IDS = attachmentElementIds("cli-attach");
 
-// 表示中の対話（item・表示済みの最終発言ID・状態・送信前の添付）
+// 表示中の対話（item・表示済みの最終発言ID・状態・添付の部品）
 let cliViewState = null;
 let cliViewPollTimer = null;
 
@@ -71,15 +68,10 @@ function cliItemMeta(item) {
  */
 function showCliItem(item, container) {
   stopCliViewPolling();
-  cliViewState = { item, lastMessageId: 0, status: item.status, pendingAttachments: [], permissionRequests: [] };
+  cliViewState = { item, lastMessageId: 0, status: item.status, attachmentForm: null, permissionRequests: [] };
   container.innerHTML = `
     <form id="cli-view-form" class="instruction-form cli-view-form">
-      <div class="attachment-area">
-        <button type="button" id="cli-view-attach" class="subtask-action-button attach-button">${CLI_VIEW_MESSAGES.attach}</button>
-        <input type="file" id="cli-view-attach-input" multiple hidden />
-        <span id="cli-view-attach-status" class="empty">${CLI_VIEW_MESSAGES.attachHint}</span>
-      </div>
-      <div id="cli-view-attachments" class="cli-attachments"></div>
+      ${renderAttachmentFormHtml(CLI_ATTACHMENT_IDS, { hint: CLI_VIEW_MESSAGES.attachHint })}
       <textarea id="cli-view-input" aria-label="Claudeへの指示" placeholder="${CLI_VIEW_MESSAGES.placeholder}"></textarea>
       <div class="subtask-actions">
         <button type="submit" id="cli-view-send" class="subtask-action-button primary">${CLI_VIEW_MESSAGES.send}</button>
@@ -93,10 +85,28 @@ function showCliItem(item, container) {
   document.getElementById("cli-view-form").addEventListener("submit", onSubmitCliView);
   document.getElementById("cli-view-interrupt").addEventListener("click", onClickCliViewInterrupt);
   document.getElementById("cli-view-input").addEventListener("keydown", onCliViewInputKeydown);
-  document.getElementById("cli-view-input").addEventListener("paste", onCliViewInputPaste);
-  bindFileChooser("cli-view-attach", "cli-view-attach-input", (files) => uploadCliAttachments(cliViewState, files));
+  cliViewState.attachmentForm = setupCliAttachmentForm(item.id);
   resetCliViewLog();
   refreshCliView();
+}
+
+/**
+ * 添付ボタン・添付ファイル一覧の初期化
+ *
+ * 一覧には未送信の添付のみ表示する。
+ */
+function setupCliAttachmentForm(sessionId) {
+  return setupAttachmentForm({
+    apiUrl: `/api/cli-sessions/${sessionId}/attachments`,
+    ids: CLI_ATTACHMENT_IDS,
+    hint: CLI_VIEW_MESSAGES.attachHint,
+    pasteTarget: document.getElementById("cli-view-input"),
+    isShown: (a) => !a.sent,
+  });
+}
+
+function unsentCliAttachmentIds(state) {
+  return state.attachmentForm.attachments.filter((a) => !a.sent).map((a) => a.id);
 }
 
 function hideCliItem() {
@@ -118,7 +128,7 @@ function resetCliViewLog() {
  * 入力欄の内容を送信する
  *
  * 応答中・Closeの項目では送信できない。
- * 送信前の添付は発言と一緒に送り、送信後に添付欄を空にする。
+ * 未送信の添付は発言と一緒に送り、送信後に添付の一覧を読み直す。
  * 送信後は応答が終わるまで発言一覧を取得し続ける。
  */
 async function onSubmitCliView(event) {
@@ -129,10 +139,9 @@ async function onSubmitCliView(event) {
   if (!state || !text || !isCliItemOpen(state) || state.status === CLI_SESSION_STATUS.running) return;
   setCliViewStatus(CLI_SESSION_STATUS.running);
   try {
-    await postCliMessage(state.item.id, text, state.pendingAttachments.map((a) => a.id));
+    await postCliMessage(state.item.id, text, unsentCliAttachmentIds(state));
     input.value = "";
-    state.pendingAttachments = [];
-    renderCliPendingAttachments(state);
+    state.attachmentForm.reload();
   } catch (error) {
     setCliViewStatus(CLI_SESSION_STATUS.idle, error.message);
     return;
@@ -283,83 +292,6 @@ function cliAttachmentUrl(sessionId, attachmentId) {
 }
 
 /**
- * 送信前の添付の一覧を描画する
- *
- * 各添付に取り消しボタンを付ける。
- */
-function renderCliPendingAttachments(state) {
-  const container = document.getElementById("cli-view-attachments");
-  if (!container || state !== cliViewState) return;
-  container.innerHTML = state.pendingAttachments
-    .map(
-      (a) =>
-        `<span class="cli-attachment">${renderCliAttachmentLabel(a)}` +
-        `<button type="button" class="cli-attachment-remove" data-attachment-id="${escapeHtml(a.id)}"` +
-        ` aria-label="${CLI_VIEW_MESSAGES.removeAttachment}" title="${CLI_VIEW_MESSAGES.removeAttachment}">×</button></span>`
-    )
-    .join("");
-  container
-    .querySelectorAll(".cli-attachment-remove")
-    .forEach((b) => b.addEventListener("click", () => removeCliAttachment(state, b.dataset.attachmentId)));
-}
-
-/**
- * 入力欄に貼り付けたファイル（クリップボードの画像など）を添付する
- *
- * ファイルを含まない貼り付けは、通常の文字の貼り付けとする。
- */
-function onCliViewInputPaste(event) {
-  const files = [...(event.clipboardData?.files || [])];
-  if (!files.length || !cliViewState || !isCliItemOpen(cliViewState)) return;
-  event.preventDefault();
-  const named = files.map((f) => (f.name ? f : new File([f], CLI_PASTED_IMAGE_NAME, { type: f.type })));
-  uploadCliAttachments(cliViewState, named);
-}
-
-/**
- * ファイルを1件ずつアップロードし、送信前の添付に加える
- *
- * IDの採番順を選択順に揃えるため、並列にせず順に送る。
- * 失敗したファイルは添付欄の横に理由を表示する。
- */
-async function uploadCliAttachments(state, files) {
-  const statusEl = document.getElementById("cli-view-attach-status");
-  const errors = [];
-  for (const file of files) {
-    statusEl.textContent = `${CLI_VIEW_MESSAGES.uploading}: ${file.name}`;
-    try {
-      state.pendingAttachments.push(await uploadCliAttachment(state.item.id, file));
-    } catch (error) {
-      errors.push(`${file.name}: ${error.message}`);
-    }
-    renderCliPendingAttachments(state);
-  }
-  if (statusEl.isConnected) {
-    statusEl.textContent = errors.length ? `${CLI_VIEW_MESSAGES.uploadFailed}: ${errors.join(" / ")}` : CLI_VIEW_MESSAGES.attachHint;
-  }
-}
-
-async function uploadCliAttachment(sessionId, file) {
-  const form = new FormData();
-  form.append("file", file);
-  const response = await fetch(`/api/cli-sessions/${sessionId}/attachments`, { method: "POST", body: form });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(body.detail || response.statusText);
-  return body;
-}
-
-/**
- * 送信前の添付を取り消す
- *
- * 保存済みのファイルも削除する。
- */
-async function removeCliAttachment(state, attachmentId) {
-  await fetch(cliAttachmentUrl(state.item.id, attachmentId), { method: "DELETE" }).catch(() => null);
-  state.pendingAttachments = state.pendingAttachments.filter((a) => a.id !== attachmentId);
-  renderCliPendingAttachments(state);
-}
-
-/**
  * 状態表示と送信・中断の可否を更新する
  *
  * 失敗時は文言を状態表示に出す。
@@ -377,7 +309,7 @@ function setCliViewStatus(status, errorText = "") {
   document.getElementById("cli-view-status").textContent = text;
   document.getElementById("cli-view-send").disabled = running || !open;
   document.getElementById("cli-view-input").readOnly = !open;
-  document.getElementById("cli-view-attach").disabled = !open;
+  state.attachmentForm?.setDisabled(!open);
   const interrupt = document.getElementById("cli-view-interrupt");
   interrupt.hidden = !running;
   interrupt.disabled = Boolean(state.interrupting);
