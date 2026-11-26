@@ -2,73 +2,101 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実行レポート：#270 Issue・MR作成の共通化ー②</title>
+<title>実行レポート：#275 CLIとMRの添付UIの共通化・クリップボード貼付ー①</title>
 <style>
 body { font-family: sans-serif; margin: 24px; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; } h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; margin-top: 28px; }
 table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; vertical-align: top; }
 th { background: #f3f3f3; } .ok { color: #1a7f37; font-weight: bold; }
 code { background: #f3f3f3; padding: 1px 4px; }
+ol li, ul li { margin-bottom: 2px; }
 </style>
 </head>
 <body>
-<h1>実行レポート：Issue・MR作成の共通化</h1>
+<h1>実行レポート：CLIとMRの添付UIの共通化・クリップボード貼付</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#270</td></tr>
-<tr><th>サブタスク</th><td>CLIタブのIssue・MR作成を管理塔の作成フローに合わせるー②（PR #272）</td></tr>
-<tr><th>ブランチ</th><td><code>issue-270-subtask-2</code></td></tr>
+<tr><th>Issue</th><td>#275 CLIとMRの添付UIを共通化し、クリップボードの画像を貼付できるようにする</td></tr>
+<tr><th>サブタスク</th><td>CLIとMRの添付UIを共通化し、クリップボードの画像を貼付できるようにするー①</td></tr>
+<tr><th>ブランチ</th><td><code>issue-new-b76d0315-subtask-1</code>（push済み・PRは未作成）</td></tr>
 </table>
 
 <h2>2. 実装結果の要約</h2>
-<p class="ok">成功</p>
+<p class="ok">成功（画面での動作確認は未実施で、人間による確認待ち）</p>
 <ul>
-<li>Issue・MR作成処理を共通サービス<code>core/issue_mr_creation.py</code>に切り出した。</li>
-<li>画面のIssue作成・MR作成・Issue＋MR作成が共通処理を呼ぶようにした。</li>
-<li>アイデアマンの承認も共通処理を呼ぶようにした（従来はルート関数を経由していた）。</li>
-<li>CLIタブのClaudeに、共通処理を呼ぶ管理塔ツールを渡すようにした。</li>
-<li>CLIタブの指示文を、gh CLIで直接作成せず管理塔ツールを使う内容に変えた。</li>
+<li><code>attachment.js</code>をAPIのURLと要素IDを引数で受け取る共通部品にし、MR内容とCLIタブの両方で使うようにした。</li>
+<li>CLIタブにも「ファイル添付」「画像添付」ボタン、お絵かきダイアログ、サムネイル付きの一覧の表を出すようにした。</li>
+<li>「クリップボードから貼付」ボタンを追加した。クリップボードに画像がある時だけ表示し、判定できない環境では常に表示する。</li>
+<li>入力欄にCtrl+Vで貼り付けた画像は、MR・CLIの両方でお絵かきダイアログを通してから添付する。</li>
+<li>CLIの添付一覧は送信済み・未送信を色で分けて表示し、コンボボックスで絞り込めるようにした（既定は未送信）。送信済みの添付は削除できない。</li>
+<li>CLIの添付一覧の取得API（送信済みかどうか付き）を追加し、送信済みの添付を削除するAPIは409で拒否するようにした。</li>
 </ul>
 
 <h2>3. 実施した変更</h2>
 <table>
-<tr><th>No.</th><th>コミット</th><th>主な変更ファイル</th><th>変更</th></tr>
-<tr><td>1</td><td>2854870</td><td>core/issue_mr_creation.py（新規）<br>app/routes/subtasks.py<br>app/routes/projects.py</td><td>作成処理（worktree作成・指示記録・push・Draft PR・DB登録・後始末・並行作成）を共通サービスへ移動</td></tr>
-<tr><td>2</td><td>920fcdd</td><td>app/routes/projects.py<br>app/static/app.js・common.js・subtask_view.js</td><td><code>POST /api/projects/{id}/issues/with-mr</code>を追加し画面から1回で作成。pending・link・discardのAPIと画面側の紐付け処理を削除</td></tr>
-<tr><td>3</td><td>74959b1</td><td>app/routes/ideas.py<br>core/idea_approval.py</td><td>承認時の作成を共通処理に変更。失敗時の状態戻しを1か所に集約</td></tr>
-<tr><td>4</td><td>7c13bee</td><td>core/cli_tower_tools.py（新規）<br>core/cli_session.py・claude_client.py・claude_prompts.py</td><td>SDKのプロセス内MCPサーバー<code>tower</code>でcreate_issue_with_mr・create_issue・create_mrの3ツールを提供</td></tr>
-<tr><td>5</td><td>d16a4b6</td><td>IMPLEMENTATION_PLAN.md</td><td>1.2章・3章No.4に共通化の方針を追記</td></tr>
+<tr><th>コミット</th><th>内容</th></tr>
+<tr><td><code>81f85f1</code> [UI共通化]</td><td>添付の共通部品にまとめた。CLIの添付一覧API <code>GET /api/cli-sessions/{id}/attachments</code> を追加した。CLIは未送信の添付だけを表示する。</td></tr>
+<tr><td><code>d58ce5b</code> [クリップボード貼付]</td><td>貼付ボタンと表示の判定（画面表示時・ウィンドウのフォーカス時・タブの再表示時）を追加した。Ctrl+Vで貼り付けた画像はお絵かきダイアログを通すようにした。MRの指示入力欄でも貼り付けを受け付ける。</td></tr>
+<tr><td><code>6c27fe6</code> [CLIの送信済み表示]</td><td>色分けと絞り込みのコンボボックスを追加した。送信済みの添付は削除ボタンを無効にし、APIでも409で拒否する。</td></tr>
+<tr><td><code>7fe41a9</code> [UI共通化]</td><td>使っていないonChange引数を削除した。</td></tr>
+</table>
+<h3>主な変更ファイル</h3>
+<table>
+<tr><th>ファイル</th><th>変更</th></tr>
+<tr><td><code>app/static/attachment.js</code></td><td>共通部品にした。<code>attachmentElementIds</code>、<code>renderAttachmentFormHtml</code>、<code>setupAttachmentForm</code>を追加。クリップボードの判定と貼付の処理もここに置いた。文言は<code>ATTACHMENT_MESSAGES</code>にまとめた。</td></tr>
+<tr><td><code>app/static/subtask_view.js</code></td><td>MR内容で共通部品を使うようにした。添付ボタンの無効化は、画面全体の<code>.attach-button</code>ではなくMRの部品だけを対象にした。</td></tr>
+<tr><td><code>app/static/cli_view.js</code></td><td>CLI独自の添付処理（送信前の添付欄・貼り付け・アップロード・取り消し）を削除し、共通部品を使うようにした。絞り込みの定義と文言を追加した。</td></tr>
+<tr><td><code>app/static/style.css</code></td><td>送信済み・未送信の色を変数（<code>--cli-attachment-*</code>）に追加した。添付のボタン列が狭い画面で折り返すようにした。使わなくなった<code>.cli-attachment-remove</code>を削除した。</td></tr>
+<tr><td><code>app/static/index.html</code></td><td>トップレベルで共通部品の関数を使うため、<code>attachment.js</code>を<code>common.js</code>の直後に読み込むよう変更した。</td></tr>
+<tr><td><code>app/routes/cli.py</code> / <code>app/routes/error_messages.py</code></td><td>添付一覧のAPIを追加し、送信済みの添付は削除時に409を返すようにした。</td></tr>
+<tr><td><code>core/cli_session.py</code> / <code>core/cli_attachments.py</code></td><td><code>list_session_attachments</code>、<code>is_attachment_sent</code>、<code>list_cli_attachments</code>を追加した。送信済みかどうかは、利用者の発言に付いた添付IDで判定する。</td></tr>
+<tr><td><code>tests/test_cli_session.py</code> / <code>tests/test_cli_routes.py</code> / <code>tests/test_cli_attachments.py</code></td><td>上記のテストを追加した。</td></tr>
 </table>
 
 <h2>4. 自律判断した事項</h2>
 <table>
-<tr><th>No.</th><th>判断</th><th>理由・前提</th></tr>
-<tr><td>1</td><td>CLIタブの共通化は、Claudeに管理塔ツール（プロセス内MCP）を渡す方式にした</td><td>CLIのClaudeはgh CLIで直接作成しており、Pythonの共通処理を呼ぶ経路がなかったため。HTTP経由はURL・認証の前提が増えるため採用しなかった</td></tr>
-<tr><td>2</td><td>画面のIssue＋MR並行作成をサーバー側へ移した</td><td>並行作成の手順がJS側にあり、アイデアマン・CLIから再利用できなかったため。高速化のための並行実行は維持した</td></tr>
-<tr><td>3</td><td>CLIのMRは画面と同じくworktree・Draft PR（指示記録のみ）として作成する</td><td>「管理塔の作成フローに合わせる」指示に従った。CLIで行った変更そのものをPRにする依頼は、利用者へ進め方を確認するよう指示文に記載した</td></tr>
-<tr><td>4</td><td>クローズ済みIssueへのMR作成拒否はCLIツール側のみで行う</td><td>前回サブタスク①の方針を引き継いだ。画面・アイデアマンの挙動は変えていない</td></tr>
-<tr><td>5</td><td>新規Issue＋サブタスクのアイデアマン承認は、画面と同じ<code>issue-new-…</code>ブランチになる</td><td>同じ並行作成処理を使うため。既存IssueへのMRは従来どおり一意な識別子付きブランチ</td></tr>
-<tr><td>6</td><td>MR自動作成中の作成ボタン無効化（autoMrCreatingIssueNumber）を削除した</td><td>Issue番号が作成完了まで画面に返らず、制御が機能しなくなったため</td></tr>
-<tr><td>7</td><td>並行作成したMRのクローズ失敗はログ出力のみとした</td><td>従来も画面側で結果を無視しており、Issue作成の失敗を優先して伝えるため</td></tr>
+<tr><th>判断</th><th>理由・前提</th></tr>
+<tr><td>クリップボードは、読み取りの許可が<code>granted</code>の時だけ<code>navigator.clipboard.read()</code>で自動判定する。<code>prompt</code>・<code>denied</code>・未対応のブラウザでは、判定できないものとしてボタンを常に表示する。</td><td>画面を表示しただけで許可ダイアログが出るのを避けるため。ボタンを押すと<code>read()</code>が呼ばれ、許可を求めるダイアログが出る。許可すれば次の判定から自動になる。Firefox・Safariは許可の照会に対応していないため、ボタンは常に表示される。</td></tr>
+<tr><td>画面にフォーカスが無く読み取れない時は、前回の判定を保つ。</td><td>タブの再表示の直後はフォーカスが無く、<code>read()</code>が失敗する場合があるため。続いて来るフォーカスのイベントで判定し直す。</td></tr>
+<tr><td>Ctrl+Vで貼り付けたファイルのうち、画像はお絵かきダイアログを通し、画像以外はそのまま添付する。</td><td>エクスプローラーでコピーしたファイルの貼り付けは、元のCLIでも受け付けていたため。</td></tr>
+<tr><td>CLIの送信時は、画面の絞り込みに関係なく「未送信のすべての添付」を発言に付ける。</td><td>従来の「送信前の添付」と同じ扱い。今回は再読み込み後もサーバーから未送信の添付を取得するため、送信し忘れた添付も次の発言に付く。</td></tr>
+<tr><td>送信済みの添付の削除は、画面に加えてAPIでも拒否する（409）。</td><td>発言からの参照を残すため。Issueの「削除できないようにする」をサーバー側でも守る。</td></tr>
+<tr><td>APIを追加したコミットは「UI共通化」に含め、CLIは送信済みを隠して表示するところから始めた。</td><td>CLIが共通部品を使うには、サーバーの一覧取得が必要なため。3つ目のコミットで、送信済みの表示と絞り込みに広げた。</td></tr>
+<tr><td>MRの要素IDを<code>attach-*</code>から<code>mr-attach-*</code>に、CLIは<code>cli-attach-*</code>に変えた。</td><td>2つの部品が同時にDOMにあってもIDが重ならないようにするため。参照元は変更したファイルだけ。</td></tr>
+<tr><td>スマホの画像添付は、従来の<code>accept="image/*"</code>のままにした（<code>capture</code>は付けない）。</td><td><code>capture</code>を付けるとカメラが起動し、写真の選択画面が開かないため。</td></tr>
+<tr><td>添付のアップロード中は、CLIでもMRと同じく「更新中…」を表示する。</td><td>MRの処理をそのまま共通にしたため。</td></tr>
 </table>
 
 <h2>5. テスト結果</h2>
-<p><code>./.venv/Scripts/python.exe -m pytest -q</code>：634 passed。</p>
 <ul>
-<li>追加：tests/test_issue_mr_creation.py、tests/test_cli_tower_tools.py</li>
-<li>更新：subtask・issue・idea・CLIセッション・指示文の各テスト</li>
-<li>JSは<code>node --check</code>で構文のみ確認した。</li>
-<li>画面操作・CLIタブでの実際のツール呼び出しは未確認（GitHubへの実書き込みを伴うため人間に依頼）。</li>
+<li><code>./.venv/Scripts/python.exe -m pytest -q</code>：<span class="ok">654件成功</span></li>
+<li>追加したテスト：一覧の送信済みの判定、パスを含めないこと、存在しない対話は404、送信済みの削除は409、<code>is_attachment_sent</code>。</li>
+<li>変更したJS 3ファイルは<code>node --check</code>で構文を確認した。クリップボードの判定（API未対応・prompt・granted＋画像あり／なし）はNode.jsにスタブを置いて確認した。</li>
+<li>OpenAPIで<code>GET/POST /api/cli-sessions/{id}/attachments</code>が登録されていることを確認した。</li>
+<li>ブラウザでの動作確認は未実施（人間が確認する指示のため）。</li>
 </ul>
 
-<h2>6. 残課題・確認ポイント</h2>
+<h2>6. 画面での確認手順</h2>
+<ol>
+<li>MR内容：Draft状態のMRで「ファイル添付」「画像添付」を押し、添付が表で表示されること（画像はサムネイル）と削除できることを確認する。実行中・Draft以外では、ボタンと削除が無効になることも確認する。</li>
+<li>MR内容：画像をコピーし、指示内容の入力欄でCtrl+Vを押す。お絵かきダイアログが開くことを確認する。「添付」を押すと添付され、「キャンセル」では添付されないことを確認する。</li>
+<li>CLIタブ：Openの項目で同じボタンと表が出ること、入力欄へのCtrl+Vで同様にダイアログが開くことを確認する。</li>
+<li>貼付ボタン（Chrome・Edge）：最初はボタンが表示されている。押すと許可を求められるので許可する。その後、テキストをコピーして画面に戻るとボタンが消えること、画像をコピーして画面に戻ると表示されることを確認する。</li>
+<li>貼付ボタン（Firefox・Safari・スマホ）：ボタンが常に表示され、押すとクリップボードの画像がお絵かきダイアログで開くことを確認する。</li>
+<li>CLIの送信：添付してから送信する。既定の「未送信」では一覧が空になり、「送信済み」「すべて」に切り替えると送信済みの行が灰色で表示されることを確認する。送信済みの行は削除ボタンが無効で、未送信の行は薄い青で表示されることも確認する。</li>
+<li>CLIで発言内の添付のリンク、Closeの項目でボタンが無効になること、ページ再読み込み後も未送信の添付が一覧に残ることを確認する。</li>
+<li>スマホ：「画像添付」で写真の選択画面が開くこと、ボタン列が折り返して崩れないことを確認する。</li>
+</ol>
+
+<h2>7. 残課題・リスク・レビューの確認ポイント</h2>
 <ul>
-<li>CLIタブで「IssueとMRを作って」と依頼し、管理塔ツールが呼ばれ画面にMRが表示されることを確認してほしい。</li>
-<li>画面のIssue作成（MR同時作成）と、アイデアマンの承認（Issue＋サブタスク）を実機で確認してほしい。</li>
-<li>Issue＋MRの作成中に、自動更新で表示された新Issueから手動でMRを作ると、①が重複し得る（削除したボタン無効化の代替は未実装）。</li>
-<li>CLIのClaudeがgh CLIで直接作成することは、指示文で禁止しただけで、権限上は拒否していない。</li>
-<li>CLIタブのツール実行の表示は<code>mcp__tower__create_mr: {...}</code>の形式になる。</li>
+<li>クリップボードの許可が<code>prompt</code>の環境では、一度ボタンを押して許可するまで自動判定されない（ボタンは常に表示）。指示の「<code>read()</code>で判定」に対し、許可ダイアログを勝手に出さないことを優先した。</li>
+<li>Safari（iOS含む）の<code>read()</code>は、ボタンを押した時に「ペースト」の確認が出る場合がある。実機での確認が必要。</li>
+<li>CLIの送信は、すべての未送信の添付を付ける。以前の画面で送信せずに残した添付も次の発言に付くため、意図した動きか確認してほしい。</li>
+<li>CLIは発言ごとに添付の一覧を再取得する。添付が多い対話では、一覧の表示（「すべて」）が長くなる。</li>
+<li>MRのワークツリーの添付（<code>app/routes/subtasks.py</code>）は変更していない。</li>
+<li>IMPLEMENTATION_PLAN.mdとの新たな衝突は見つからなかったため、追記していない。</li>
 </ul>
 </body>
 </html>
