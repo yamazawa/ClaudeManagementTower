@@ -24,6 +24,7 @@ from core.cli_session import (
     ensure_session_open,
     get_session,
     interrupt_turn,
+    is_attachment_sent,
     list_session_attachments,
     list_sessions,
     send_message,
@@ -157,8 +158,11 @@ def get_cli_attachment_file(cli_session_id: int, attachment_id: str):
 def remove_cli_attachment(cli_session_id: int, attachment_id: str):
     """送信前の添付ファイルを取り消す
 
+    送信済みの添付は発言から参照されるため削除できない。
     残りの添付のIDは振り直さない。
     """
+    if is_attachment_sent(cli_session_id, attachment_id):
+        raise HTTPException(status_code=409, detail=messages.ATTACHMENT_SENT)
     if not delete_cli_attachment(cli_session_id, attachment_id):
         raise HTTPException(status_code=404, detail=messages.ATTACHMENT_NOT_FOUND)
     return {"id": attachment_id}

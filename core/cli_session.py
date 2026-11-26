@@ -475,6 +475,12 @@ def _sent_attachment_ids(session, cli_session_id: int) -> set[str]:
     return {a["id"] for m in messages for a in json.loads(m.attachments or "[]")}
 
 
+def is_attachment_sent(cli_session_id: int, attachment_id: str, session_factory: sessionmaker = SessionLocal) -> bool:
+    """添付が発言に付けて送信済みか"""
+    with session_factory() as session:
+        return attachment_id in _sent_attachment_ids(session, cli_session_id)
+
+
 def list_session_attachments(cli_session_id: int, session_factory: sessionmaker = SessionLocal) -> list[dict]:
     """保存済みの添付ファイルを、送信済みかどうか（sent）を付けてID順に返す
 

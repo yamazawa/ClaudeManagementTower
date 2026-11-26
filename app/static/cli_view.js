@@ -6,6 +6,7 @@
  * 画面構成はMR内容と揃え、添付・指示の入力欄・送信ボタン・状態表示・発言一覧の順に並べる。
  * 添付はMR内容と共通の部品を使い、選択・貼り付けの時点で保存する。
  * 送信時は未送信の添付をIDで発言に付ける。
+ * 添付の一覧は送信済み・未送信を色分けし、絞り込んで表示する。
  * 範囲外の操作の許可の問い合わせは、状態表示の下に表示して回答を受け付ける。
  */
 
@@ -39,6 +40,10 @@ const CLI_VIEW_MESSAGES = {
   interrupting: "中断しています...",
   interruptFailed: "中断に失敗しました",
   attachHint: "画像は入力欄に貼り付けても添付できます（S1、S2などのIDで指示から指定できます）",
+  attachmentFilter: "表示する添付",
+  attachmentUnsent: "未送信",
+  attachmentSent: "送信済み",
+  attachmentAll: "すべて",
   waitingPermission: "許可の確認待ち（下の内容を確認して許可・拒否してください）",
   permissionTitle: "許可の確認",
   allow: "許可",
@@ -49,6 +54,16 @@ const CLI_VIEW_MESSAGES = {
 
 // 添付の要素ID
 const CLI_ATTACHMENT_IDS = attachmentElementIds("cli-attach");
+const CLI_ATTACHMENT_FILTER_ID = "cli-attach-filter";
+
+// 添付の一覧の絞り込み（先頭が既定）
+const CLI_ATTACHMENT_FILTERS = [
+  { value: "unsent", label: CLI_VIEW_MESSAGES.attachmentUnsent, match: (a) => !a.sent },
+  { value: "sent", label: CLI_VIEW_MESSAGES.attachmentSent, match: (a) => a.sent },
+  { value: "all", label: CLI_VIEW_MESSAGES.attachmentAll, match: () => true },
+];
+// 添付の一覧の行の色分けのクラス
+const CLI_ATTACHMENT_ROW_CLASSES = { sent: "attachment-row-sent", unsent: "attachment-row-unsent" };
 
 // 表示中の対話（item・表示済みの最終発言ID・状態・添付の部品）
 let cliViewState = null;
@@ -71,7 +86,7 @@ function showCliItem(item, container) {
   cliViewState = { item, lastMessageId: 0, status: item.status, attachmentForm: null, permissionRequests: [] };
   container.innerHTML = `
     <form id="cli-view-form" class="instruction-form cli-view-form">
-      ${renderAttachmentFormHtml(CLI_ATTACHMENT_IDS, { hint: CLI_VIEW_MESSAGES.attachHint })}
+      ${renderAttachmentFormHtml(CLI_ATTACHMENT_IDS, { hint: CLI_VIEW_MESSAGES.attachHint, extraHtml: renderCliAttachmentFilter() })}
       <textarea id="cli-view-input" aria-label="Claudeへの指示" placeholder="${CLI_VIEW_MESSAGES.placeholder}"></textarea>
       <div class="subtask-actions">
         <button type="submit" id="cli-view-send" class="subtask-action-button primary">${CLI_VIEW_MESSAGES.send}</button>
@@ -93,16 +108,27 @@ function showCliItem(item, container) {
 /**
  * 添付ボタン・添付ファイル一覧の初期化
  *
- * 一覧には未送信の添付のみ表示する。
+ * 一覧は絞り込みの選択に合う添付を表示し、送信済み・未送信で色を分ける。
+ * 送信済みの添付は発言から参照されるため削除できない。
  */
 function setupCliAttachmentForm(sessionId) {
-  return setupAttachmentForm({
+  const filter = document.getElementById(CLI_ATTACHMENT_FILTER_ID);
+  const form = setupAttachmentForm({
     apiUrl: `/api/cli-sessions/${sessionId}/attachments`,
     ids: CLI_ATTACHMENT_IDS,
     hint: CLI_VIEW_MESSAGES.attachHint,
     pasteTarget: document.getElementById("cli-view-input"),
-    isShown: (a) => !a.sent,
+    isShown: (a) => CLI_ATTACHMENT_FILTERS.find((f) => f.value === filter.value).match(a),
+    rowClass: (a) => (a.sent ? CLI_ATTACHMENT_ROW_CLASSES.sent : CLI_ATTACHMENT_ROW_CLASSES.unsent),
+    canDelete: (a) => !a.sent,
   });
+  filter.addEventListener("change", () => form.render());
+  return form;
+}
+
+function renderCliAttachmentFilter() {
+  const options = CLI_ATTACHMENT_FILTERS.map((f) => `<option value="${f.value}">${f.label}</option>`).join("");
+  return `<select id="${CLI_ATTACHMENT_FILTER_ID}" class="cli-attachment-filter" aria-label="${CLI_VIEW_MESSAGES.attachmentFilter}">${options}</select>`;
 }
 
 function unsentCliAttachmentIds(state) {

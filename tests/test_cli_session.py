@@ -420,3 +420,12 @@ def test_list_session_attachments_marks_sent_by_message_attachment_ids(session_f
 def test_list_session_attachments_unknown_session_is_not_found(session_factory):
     with pytest.raises(RepoItemNotFound):
         cli_session.list_session_attachments(999, session_factory=session_factory)
+
+
+def test_is_attachment_sent_only_for_ids_attached_to_messages(session_factory):
+    session_id = cli_session.create_session(1, "調査", session_factory=session_factory)["id"]
+    attachment = {"id": "S1", "filename": "a.png", "path": "S1/a.png", "is_image": True}
+    cli_session._claim_turn(session_id, "S1を見て", session_factory, [attachment])
+
+    assert cli_session.is_attachment_sent(session_id, "S1", session_factory=session_factory) is True
+    assert cli_session.is_attachment_sent(session_id, "S2", session_factory=session_factory) is False
