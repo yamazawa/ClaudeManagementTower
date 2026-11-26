@@ -404,11 +404,13 @@ function renderSubtaskActions(s) {
  * MR内容の添付ボタン・添付ファイル一覧の初期化
  *
  * 添付ファイルはMRのworktreeに保存する。
+ * 指示内容の入力欄への画像の貼り付けも添付する。
  */
 function setupMrAttachmentForm(subtaskId) {
   mrAttachmentForm = setupAttachmentForm({
     apiUrl: `/api/subtasks/${subtaskId}/attachments`,
     ids: MR_ATTACHMENT_IDS,
+    pasteTarget: document.getElementById(`instruction-${subtaskId}`),
   });
 }
 

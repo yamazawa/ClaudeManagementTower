@@ -1310,8 +1310,10 @@ h2 {
 }
 
 /* 添付ファイル（MR内容・CLIタブ共通） */
+/* ボタンが増えても狭い画面（スマホ）で折り返す */
 .attachment-area {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   font-size: 12px;

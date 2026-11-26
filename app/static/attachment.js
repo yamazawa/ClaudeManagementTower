@@ -3,11 +3,15 @@
  *
  * 添付ボタン・お絵かきダイアログ・添付ファイル一覧の表を提供する。
  * APIのURLと要素IDを引数で受け取り、一覧表示・アップロード・削除を行う。
+ * クリップボードの画像は、貼付ボタンまたは入力欄への貼り付けで添付する。
  */
 
 const ATTACHMENT_MESSAGES = {
   attachFile: "ファイル添付",
   attachImage: "画像添付",
+  pasteClipboard: "クリップボードから貼付",
+  clipboardNoImage: "クリップボードに画像がありません",
+  clipboardReadFailed: "クリップボードを読み取れませんでした（入力欄にCtrl+Vで貼り付けてください）",
   headerId: "ID",
   headerFile: "ファイル",
   delete: "削除",
@@ -20,6 +24,12 @@ const ATTACHMENT_MESSAGES = {
 
 // 貼り付けた画像にファイル名が無い場合の名前
 const ATTACHMENT_PASTED_IMAGE_NAME = "pasted-image.png";
+const ATTACHMENT_IMAGE_TYPE_PREFIX = "image/";
+
+// 表示中の部品（クリップボードの判定結果を貼付ボタンに反映する）
+const attachmentForms = new Set();
+// 最後に始めたクリップボードの判定（古い判定の結果は反映しない）
+let clipboardCheckSeq = 0;
 
 /**
  * 部品の要素IDを、接頭辞から決める
@@ -30,6 +40,7 @@ function attachmentElementIds(prefix) {
     fileInput: `${prefix}-file-input`,
     imageButton: `${prefix}-image-button`,
     imageInput: `${prefix}-image-input`,
+    pasteButton: `${prefix}-paste-button`,
     status: `${prefix}-status`,
     list: `${prefix}-list`,
   };
@@ -46,6 +57,7 @@ function renderAttachmentFormHtml(ids, { hint = "", extraHtml = "" } = {}) {
     <div class="attachment-area">
       <button type="button" id="${ids.fileButton}" class="subtask-action-button attach-button">${ATTACHMENT_MESSAGES.attachFile}</button>
       <button type="button" id="${ids.imageButton}" class="subtask-action-button attach-button">${ATTACHMENT_MESSAGES.attachImage}</button>
+      <button type="button" id="${ids.pasteButton}" class="subtask-action-button attach-button" hidden>${ATTACHMENT_MESSAGES.pasteClipboard}</button>
       <input type="file" id="${ids.fileInput}" multiple hidden />
       <input type="file" id="${ids.imageInput}" accept="image/*" hidden />
       ${extraHtml}
@@ -70,6 +82,7 @@ function renderAttachmentFormHtml(ids, { hint = "", extraHtml = "" } = {}) {
  *
  * ファイル添付は選択したファイルをそのまま順にアップロードする。
  * 画像添付は選択した画像をお絵かきダイアログで加工してからアップロードする。
+ * 貼付ボタンは、クリップボードに画像がある時のみ表示する。
  * 戻り値の部品で、一覧の読み直し・表示し直し・ボタンの無効化を行う。
  */
 function setupAttachmentForm(options) {
@@ -86,11 +99,15 @@ function setupAttachmentForm(options) {
   form.elements = {
     list: document.getElementById(ids.list),
     status: document.getElementById(ids.status),
-    buttons: [ids.fileButton, ids.imageButton].map((id) => document.getElementById(id)),
+    pasteButton: document.getElementById(ids.pasteButton),
+    buttons: [ids.fileButton, ids.imageButton, ids.pasteButton].map((id) => document.getElementById(id)),
   };
   bindFileChooser(ids.fileButton, ids.fileInput, (files) => form.upload(files));
   bindFileChooser(ids.imageButton, ids.imageInput, ([file]) => attachEditedImages(form, [file]));
+  form.elements.pasteButton.addEventListener("click", () => attachClipboardImage(form));
   form.pasteTarget?.addEventListener("paste", (event) => onAttachmentPaste(form, event));
+  attachmentForms.add(form);
+  refreshPasteButtons();
   form.reload();
   return form;
 }
@@ -141,14 +158,90 @@ async function attachEditedImages(form, images) {
 /**
  * 入力欄に貼り付けたファイル（クリップボードの画像など）を添付する
  *
+ * 画像はお絵かきダイアログを通し、それ以外のファイルはそのまま添付する。
  * ファイルを含まない貼り付けは、通常の文字の貼り付けとする。
  */
 function onAttachmentPaste(form, event) {
   const files = [...(event.clipboardData?.files || [])];
   if (!files.length || form.disabled) return;
   event.preventDefault();
-  form.upload(files.map(namePastedFile));
+  const named = files.map(namePastedFile);
+  const images = named.filter(isImageFile);
+  const others = named.filter((f) => !isImageFile(f));
+  (async () => {
+    if (others.length) await form.upload(others);
+    if (images.length) await attachEditedImages(form, images);
+  })();
 }
+
+function isImageFile(file) {
+  return file.type.startsWith(ATTACHMENT_IMAGE_TYPE_PREFIX);
+}
+
+/**
+ * 貼付ボタンで、クリップボードの画像をお絵かきダイアログを通して添付する
+ *
+ * 画像が無い・読み取れない場合は状態欄に表示する。
+ */
+async function attachClipboardImage(form) {
+  const image = await readClipboardImage().catch(() => undefined);
+  if (image === undefined) setAttachmentStatus(form, ATTACHMENT_MESSAGES.clipboardReadFailed);
+  else if (image === null) setAttachmentStatus(form, ATTACHMENT_MESSAGES.clipboardNoImage);
+  else await attachEditedImages(form, [image]);
+  refreshPasteButtons();
+}
+
+/**
+ * クリップボードの先頭の画像をファイルとして返す
+ *
+ * 画像が無い場合はnull、読み取れない環境では例外とする。
+ */
+async function readClipboardImage() {
+  for (const item of await navigator.clipboard.read()) {
+    const type = item.types.find((t) => t.startsWith(ATTACHMENT_IMAGE_TYPE_PREFIX));
+    if (type) return new File([await item.getType(type)], ATTACHMENT_PASTED_IMAGE_NAME, { type });
+  }
+  return null;
+}
+
+/**
+ * クリップボードに画像があるかを判定する
+ *
+ * 画像の有無をtrue・false、判定できない環境ではnullを返す。
+ * 許可を求めるダイアログを勝手に出さないよう、読み取りが許可済みの時のみ読む。
+ * 画面にフォーカスが無く読めない時は、前回の判定を保つためundefinedを返す。
+ */
+async function clipboardHasImage() {
+  if (!navigator.clipboard?.read || !navigator.permissions?.query) return null;
+  const permission = await navigator.permissions.query({ name: "clipboard-read" }).catch(() => null);
+  if (permission?.state !== "granted") return null;
+  if (!document.hasFocus()) return undefined;
+  const items = await navigator.clipboard.read().catch(() => null);
+  if (!items) return null;
+  return items.some((item) => item.types.some((t) => t.startsWith(ATTACHMENT_IMAGE_TYPE_PREFIX)));
+}
+
+/**
+ * 表示中の部品の貼付ボタンを、クリップボードの判定結果に合わせて表示・非表示にする
+ *
+ * 判定できない環境では常に表示する。
+ * 画面から消えた部品は対象から外す。
+ */
+async function refreshPasteButtons() {
+  attachmentForms.forEach((form) => {
+    if (!isAttachmentFormShown(form)) attachmentForms.delete(form);
+  });
+  if (!attachmentForms.size) return;
+  const seq = ++clipboardCheckSeq;
+  const hasImage = await clipboardHasImage().catch(() => null);
+  if (seq !== clipboardCheckSeq || hasImage === undefined) return;
+  attachmentForms.forEach((form) => (form.elements.pasteButton.hidden = hasImage === false));
+}
+
+window.addEventListener("focus", refreshPasteButtons);
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden) refreshPasteButtons();
+});
 
 function namePastedFile(file) {
   return file.name ? file : new File([file], ATTACHMENT_PASTED_IMAGE_NAME, { type: file.type });
