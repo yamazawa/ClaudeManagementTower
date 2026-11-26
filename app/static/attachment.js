@@ -78,7 +78,6 @@ function renderAttachmentFormHtml(ids, { hint = "", extraHtml = "" } = {}) {
  *   isShown    : 一覧に表示する添付か（省略時はすべて）
  *   rowClass   : 一覧の行に付けるクラス名
  *   canDelete  : 削除できる添付か（省略時はすべて）
- *   onChange   : 一覧を読み直した時に呼ぶ
  *
  * ファイル添付は選択したファイルをそのまま順にアップロードする。
  * 画像添付は選択した画像をお絵かきダイアログで加工してからアップロードする。
@@ -254,7 +253,6 @@ async function loadAttachments(form) {
   if (!isAttachmentFormShown(form)) return;
   form.attachments = attachments;
   form.render();
-  form.onChange?.(attachments);
 }
 
 /**
