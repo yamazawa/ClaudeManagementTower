@@ -60,4 +60,6 @@ Read・Glob・Grepツールによるworktree外の参照は許可されている
 # 進行管理
 
 開発はIMPLEMENTATION_PLAN.mdのPhase順に進める。\
-Issueタイトルは `[SPn]タスクn - 内容` 形式（CommonGuideLine.md準拠）。
+Issue・MRの命名は管理塔の命名規則に従う（CommonGuideLine.md準拠）。\
+Issue名は対応内容を表す日本語の文とし、スプリント番号・タスク番号は付けない。\
+MR名は「Issue名ーMR固有名」とする（区切りは全角の「ー」）。

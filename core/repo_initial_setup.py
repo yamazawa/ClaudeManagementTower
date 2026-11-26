@@ -32,7 +32,7 @@ from core.mr_naming import compose_mr_title, number_label
 
 logger = logging.getLogger(__name__)
 
-SETUP_ISSUE_TITLE = "[SP0]タスク1 - Claude監視塔の管理用初期設定"
+SETUP_ISSUE_TITLE = "Claude監視塔の管理用初期設定"
 SETUP_ISSUE_BODY = (
     "Claude監視塔で管理するための初期設定\n\n"
     "CLAUDE.md・.gitignoreを追加する。\n"

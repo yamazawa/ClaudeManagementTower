@@ -121,6 +121,14 @@ def test_create_repository_completes_setup_issue_and_mr(factory, github):
     assert github.calls[0] == ("create_repo", "owner/NewTool", "何かをするツール", "private")
 
 
+def test_create_repository_names_setup_issue_and_mr_without_sprint_prefix(factory, github):
+    create_repository(NEW_REPO, factory)
+
+    calls = {c[0]: c for c in github.calls}
+    assert calls["create_issue"][2] == "Claude監視塔の管理用初期設定"
+    assert calls["create_draft_pr"][3] == "Claude監視塔の管理用初期設定ー①"
+
+
 def test_create_repository_registers_project_and_merged_mr(factory, github):
     create_repository(NEW_REPO, factory)
 
