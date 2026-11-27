@@ -8,6 +8,7 @@
  * 実装・再実装の実行
  *
  * 入力中の指示内容で実行し、終了までMRの操作ボタンを無効化する。
+ * 実行を開始できたら、指示内容の下書きを消す（以降はサーバーに保存した指示内容を表示する）。
  */
 async function executeSubtask(subtask) {
   const instruction = document.getElementById(`instruction-${subtask.id}`)?.value;
@@ -34,6 +35,7 @@ async function executeSubtask(subtask) {
     setSubtaskBusy(subtask.id, false);
     return;
   }
+  clearDraft(draftKey(DRAFT_KINDS.mr, subtask.id));
   pollJob((await response.json()).job_id, subtask.id);
 }
 
