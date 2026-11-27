@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実行レポート：#275 CLIとMRの添付UIの共通化・クリップボード貼付ー①</title>
+<title>実行レポート：#279 途中入力の保存ー①</title>
 <style>
 body { font-family: sans-serif; margin: 24px; line-height: 1.6; color: #222; }
 h1 { font-size: 1.4em; } h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; margin-top: 28px; }
@@ -13,89 +13,65 @@ ol li, ul li { margin-bottom: 2px; }
 </style>
 </head>
 <body>
-<h1>実行レポート：CLIとMRの添付UIの共通化・クリップボード貼付</h1>
+<h1>実行レポート：途中入力の保存</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#275 CLIとMRの添付UIを共通化し、クリップボードの画像を貼付できるようにする</td></tr>
-<tr><th>サブタスク</th><td>CLIとMRの添付UIを共通化し、クリップボードの画像を貼付できるようにするー①</td></tr>
-<tr><th>ブランチ</th><td><code>issue-new-b76d0315-subtask-1</code>（push済み・PRは未作成）</td></tr>
+<tr><th>Issue</th><td>#279 途中入力の保存</td></tr>
+<tr><th>サブタスク</th><td>途中入力の保存ー①（PR #280、指示記録上の名前は「CLI、IdeaのUIー①」）</td></tr>
+<tr><th>ブランチ</th><td><code>issue-new-b5f739cb-subtask-1</code>（push済み）</td></tr>
 </table>
 
 <h2>2. 実装結果の要約</h2>
-<p class="ok">成功（画面での動作確認は未実施で、人間による確認待ち）</p>
+<p class="ok">成功（ブラウザでの動作確認は未実施で、人間による確認待ち）</p>
 <ul>
-<li><code>attachment.js</code>をAPIのURLと要素IDを引数で受け取る共通部品にし、MR内容とCLIタブの両方で使うようにした。</li>
-<li>CLIタブにも「ファイル添付」「画像添付」ボタン、お絵かきダイアログ、サムネイル付きの一覧の表を出すようにした。</li>
-<li>「クリップボードから貼付」ボタンを追加した。クリップボードに画像がある時だけ表示し、判定できない環境では常に表示する。</li>
-<li>入力欄にCtrl+Vで貼り付けた画像は、MR・CLIの両方でお絵かきダイアログを通してから添付する。</li>
-<li>CLIの添付一覧は送信済み・未送信を色で分けて表示し、コンボボックスで絞り込めるようにした（既定は未送信）。送信済みの添付は削除できない。</li>
-<li>CLIの添付一覧の取得API（送信済みかどうか付き）を追加し、送信済みの添付を削除するAPIは409で拒否するようにした。</li>
+<li>MRの指示内容、CLIの入力欄、Ideaの観点の入力欄を、入力のたびにブラウザ（localStorage）へ保存するようにした。</li>
+<li>項目の切り替え・タブの切り替え・ページの再読み込みの後も、保存した内容を入力欄に戻す。</li>
+<li>実装の開始・CLIの送信・アイデア出しの開始に成功したら、保存した内容を消す。</li>
 </ul>
 
 <h2>3. 実施した変更</h2>
 <table>
 <tr><th>コミット</th><th>内容</th></tr>
-<tr><td><code>81f85f1</code> [UI共通化]</td><td>添付の共通部品にまとめた。CLIの添付一覧API <code>GET /api/cli-sessions/{id}/attachments</code> を追加した。CLIは未送信の添付だけを表示する。</td></tr>
-<tr><td><code>d58ce5b</code> [クリップボード貼付]</td><td>貼付ボタンと表示の判定（画面表示時・ウィンドウのフォーカス時・タブの再表示時）を追加した。Ctrl+Vで貼り付けた画像はお絵かきダイアログを通すようにした。MRの指示入力欄でも貼り付けを受け付ける。</td></tr>
-<tr><td><code>6c27fe6</code> [CLIの送信済み表示]</td><td>色分けと絞り込みのコンボボックスを追加した。送信済みの添付は削除ボタンを無効にし、APIでも409で拒否する。</td></tr>
-<tr><td><code>7fe41a9</code> [UI共通化]</td><td>使っていないonChange引数を削除した。</td></tr>
+<tr><td><code>c02ef3a</code></td><td>下書きを保存する部品<code>draft_store.js</code>とテストを追加した。</td></tr>
+<tr><td><code>9054313</code></td><td>MRの指示内容に下書きを結び付けた。実装の開始に成功したら消す。</td></tr>
+<tr><td><code>b1301d1</code></td><td>CLIの入力欄に下書きを結び付けた。送信に成功したら消す。</td></tr>
+<tr><td><code>13eebe2</code></td><td>Ideaの観点に下書きを結び付けた。アイデア出しの開始に成功したら消す。</td></tr>
 </table>
 <h3>主な変更ファイル</h3>
 <table>
 <tr><th>ファイル</th><th>変更</th></tr>
-<tr><td><code>app/static/attachment.js</code></td><td>共通部品にした。<code>attachmentElementIds</code>、<code>renderAttachmentFormHtml</code>、<code>setupAttachmentForm</code>を追加。クリップボードの判定と貼付の処理もここに置いた。文言は<code>ATTACHMENT_MESSAGES</code>にまとめた。</td></tr>
-<tr><td><code>app/static/subtask_view.js</code></td><td>MR内容で共通部品を使うようにした。添付ボタンの無効化は、画面全体の<code>.attach-button</code>ではなくMRの部品だけを対象にした。</td></tr>
-<tr><td><code>app/static/cli_view.js</code></td><td>CLI独自の添付処理（送信前の添付欄・貼り付け・アップロード・取り消し）を削除し、共通部品を使うようにした。絞り込みの定義と文言を追加した。</td></tr>
-<tr><td><code>app/static/style.css</code></td><td>送信済み・未送信の色を変数（<code>--cli-attachment-*</code>）に追加した。添付のボタン列が狭い画面で折り返すようにした。使わなくなった<code>.cli-attachment-remove</code>を削除した。</td></tr>
-<tr><td><code>app/static/index.html</code></td><td>トップレベルで共通部品の関数を使うため、<code>attachment.js</code>を<code>common.js</code>の直後に読み込むよう変更した。</td></tr>
-<tr><td><code>app/routes/cli.py</code> / <code>app/routes/error_messages.py</code></td><td>添付一覧のAPIを追加し、送信済みの添付は削除時に409を返すようにした。</td></tr>
-<tr><td><code>core/cli_session.py</code> / <code>core/cli_attachments.py</code></td><td><code>list_session_attachments</code>、<code>is_attachment_sent</code>、<code>list_cli_attachments</code>を追加した。送信済みかどうかは、利用者の発言に付いた添付IDで判定する。</td></tr>
-<tr><td><code>tests/test_cli_session.py</code> / <code>tests/test_cli_routes.py</code> / <code>tests/test_cli_attachments.py</code></td><td>上記のテストを追加した。</td></tr>
+<tr><td><code>app/static/draft_store.js</code>（新規）</td><td><code>draftKey</code>・<code>bindDraft</code>・<code>loadDraft</code>・<code>saveDraft</code>・<code>clearDraft</code>。キーは<code>claude-tower.draft.{mr|cli|idea}.{ID}</code>。</td></tr>
+<tr><td><code>app/static/index.html</code></td><td><code>draft_store.js</code>を<code>attachment.js</code>の直後に読み込む。</td></tr>
+<tr><td><code>app/static/subtask_view.js</code> / <code>app/static/job_runner.js</code></td><td>MRの指示内容の保存・復元と、開始成功時の削除。</td></tr>
+<tr><td><code>app/static/cli_view.js</code></td><td>CLIの入力欄の保存・復元と、送信成功時の削除。</td></tr>
+<tr><td><code>app/static/idea_view.js</code></td><td>Ideaの観点の保存・復元と、開始成功時の削除。</td></tr>
+<tr><td><code>tests/test_draft_store.py</code>（新規）</td><td>Node.jsで偽のlocalStorageを使い、保存・復元・削除・ストレージ使用不可の時の動きを確認する。</td></tr>
 </table>
 
 <h2>4. 自律判断した事項</h2>
 <table>
 <tr><th>判断</th><th>理由・前提</th></tr>
-<tr><td>クリップボードは、読み取りの許可が<code>granted</code>の時だけ<code>navigator.clipboard.read()</code>で自動判定する。<code>prompt</code>・<code>denied</code>・未対応のブラウザでは、判定できないものとしてボタンを常に表示する。</td><td>画面を表示しただけで許可ダイアログが出るのを避けるため。ボタンを押すと<code>read()</code>が呼ばれ、許可を求めるダイアログが出る。許可すれば次の判定から自動になる。Firefox・Safariは許可の照会に対応していないため、ボタンは常に表示される。</td></tr>
-<tr><td>画面にフォーカスが無く読み取れない時は、前回の判定を保つ。</td><td>タブの再表示の直後はフォーカスが無く、<code>read()</code>が失敗する場合があるため。続いて来るフォーカスのイベントで判定し直す。</td></tr>
-<tr><td>Ctrl+Vで貼り付けたファイルのうち、画像はお絵かきダイアログを通し、画像以外はそのまま添付する。</td><td>エクスプローラーでコピーしたファイルの貼り付けは、元のCLIでも受け付けていたため。</td></tr>
-<tr><td>CLIの送信時は、画面の絞り込みに関係なく「未送信のすべての添付」を発言に付ける。</td><td>従来の「送信前の添付」と同じ扱い。今回は再読み込み後もサーバーから未送信の添付を取得するため、送信し忘れた添付も次の発言に付く。</td></tr>
-<tr><td>送信済みの添付の削除は、画面に加えてAPIでも拒否する（409）。</td><td>発言からの参照を残すため。Issueの「削除できないようにする」をサーバー側でも守る。</td></tr>
-<tr><td>APIを追加したコミットは「UI共通化」に含め、CLIは送信済みを隠して表示するところから始めた。</td><td>CLIが共通部品を使うには、サーバーの一覧取得が必要なため。3つ目のコミットで、送信済みの表示と絞り込みに広げた。</td></tr>
-<tr><td>MRの要素IDを<code>attach-*</code>から<code>mr-attach-*</code>に、CLIは<code>cli-attach-*</code>に変えた。</td><td>2つの部品が同時にDOMにあってもIDが重ならないようにするため。参照元は変更したファイルだけ。</td></tr>
-<tr><td>スマホの画像添付は、従来の<code>accept="image/*"</code>のままにした（<code>capture</code>は付けない）。</td><td><code>capture</code>を付けるとカメラが起動し、写真の選択画面が開かないため。</td></tr>
-<tr><td>添付のアップロード中は、CLIでもMRと同じく「更新中…」を表示する。</td><td>MRの処理をそのまま共通にしたため。</td></tr>
+<tr><td>保存先はサーバーではなくブラウザのlocalStorageにした。</td><td>DB・APIの変更が不要で、入力のたびに通信しないため。MRの<code>instruction</code>は「実行した指示内容」の意味を持つため、下書きで上書きしないようにした。</td></tr>
+<tr><td>対象はMRの指示内容・CLIの入力欄・Ideaの観点の3か所にした。</td><td>指示の「指示内容」「CLIの入力項目」と、サブタスク名の「CLI、IdeaのUI」から判断した。許可の拒否理由やIssue作成フォーム等は対象外にした。</td></tr>
+<tr><td>下書きがある場合は、サーバーの値（前回の指示内容・前回の観点）より下書きを優先して表示する。</td><td>入力途中の内容を戻すのが目的のため。</td></tr>
+<tr><td>開始・送信に成功した時だけ下書きを消し、失敗時は残す。</td><td>失敗した時に入力をやり直さなくて済むようにするため。</td></tr>
+<tr><td>入力欄を空にした時は下書きを消す。</td><td>空の下書きを残さないため。</td></tr>
 </table>
 
 <h2>5. テスト結果</h2>
 <ul>
-<li><code>./.venv/Scripts/python.exe -m pytest -q</code>：<span class="ok">654件成功</span></li>
-<li>追加したテスト：一覧の送信済みの判定、パスを含めないこと、存在しない対話は404、送信済みの削除は409、<code>is_attachment_sent</code>。</li>
-<li>変更したJS 3ファイルは<code>node --check</code>で構文を確認した。クリップボードの判定（API未対応・prompt・granted＋画像あり／なし）はNode.jsにスタブを置いて確認した。</li>
-<li>OpenAPIで<code>GET/POST /api/cli-sessions/{id}/attachments</code>が登録されていることを確認した。</li>
-<li>ブラウザでの動作確認は未実施（人間が確認する指示のため）。</li>
+<li><code>./.venv/Scripts/python.exe -m pytest -q</code>：<span class="ok">661件成功</span>（追加した6件を含む）</li>
+<li>変更したJS 5ファイルは<code>node --check</code>で構文を確認した。</li>
+<li>ブラウザでの動作確認は未実施。</li>
 </ul>
 
-<h2>6. 画面での確認手順</h2>
-<ol>
-<li>MR内容：Draft状態のMRで「ファイル添付」「画像添付」を押し、添付が表で表示されること（画像はサムネイル）と削除できることを確認する。実行中・Draft以外では、ボタンと削除が無効になることも確認する。</li>
-<li>MR内容：画像をコピーし、指示内容の入力欄でCtrl+Vを押す。お絵かきダイアログが開くことを確認する。「添付」を押すと添付され、「キャンセル」では添付されないことを確認する。</li>
-<li>CLIタブ：Openの項目で同じボタンと表が出ること、入力欄へのCtrl+Vで同様にダイアログが開くことを確認する。</li>
-<li>貼付ボタン（Chrome・Edge）：最初はボタンが表示されている。押すと許可を求められるので許可する。その後、テキストをコピーして画面に戻るとボタンが消えること、画像をコピーして画面に戻ると表示されることを確認する。</li>
-<li>貼付ボタン（Firefox・Safari・スマホ）：ボタンが常に表示され、押すとクリップボードの画像がお絵かきダイアログで開くことを確認する。</li>
-<li>CLIの送信：添付してから送信する。既定の「未送信」では一覧が空になり、「送信済み」「すべて」に切り替えると送信済みの行が灰色で表示されることを確認する。送信済みの行は削除ボタンが無効で、未送信の行は薄い青で表示されることも確認する。</li>
-<li>CLIで発言内の添付のリンク、Closeの項目でボタンが無効になること、ページ再読み込み後も未送信の添付が一覧に残ることを確認する。</li>
-<li>スマホ：「画像添付」で写真の選択画面が開くこと、ボタン列が折り返して崩れないことを確認する。</li>
-</ol>
-
-<h2>7. 残課題・リスク・レビューの確認ポイント</h2>
+<h2>6. 残課題・リスク・レビューの確認ポイント</h2>
 <ul>
-<li>クリップボードの許可が<code>prompt</code>の環境では、一度ボタンを押して許可するまで自動判定されない（ボタンは常に表示）。指示の「<code>read()</code>で判定」に対し、許可ダイアログを勝手に出さないことを優先した。</li>
-<li>Safari（iOS含む）の<code>read()</code>は、ボタンを押した時に「ペースト」の確認が出る場合がある。実機での確認が必要。</li>
-<li>CLIの送信は、すべての未送信の添付を付ける。以前の画面で送信せずに残した添付も次の発言に付くため、意図した動きか確認してほしい。</li>
-<li>CLIは発言ごとに添付の一覧を再取得する。添付が多い対話では、一覧の表示（「すべて」）が長くなる。</li>
-<li>MRのワークツリーの添付（<code>app/routes/subtasks.py</code>）は変更していない。</li>
+<li>保存はブラウザごと。PCで入力した途中の内容はスマホには出ない。端末間で共有したい場合はサーバー保存への変更が必要。</li>
+<li>MRの指示内容・Ideaの観点を空欄にすると下書きが消え、再表示時はサーバーの前回の値に戻る。</li>
+<li>MR・CLI・Ideaを削除しても下書きは消えずに残る（文字列のみのため容量の影響は小さい）。</li>
+<li>確認手順：各入力欄に入力して、別の項目に切り替えて戻る、またはページを再読み込みして入力が残ること、開始・送信後に入力が残らないことを確認する。</li>
 <li>IMPLEMENTATION_PLAN.mdとの新たな衝突は見つからなかったため、追記していない。</li>
 </ul>
 </body>

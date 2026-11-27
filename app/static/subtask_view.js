@@ -257,6 +257,7 @@ function renderSubtaskDetail(s) {
     <iframe class="report-frame" sandbox="" data-subtask-id="${s.id}" hidden></iframe>
   `;
 
+  bindDraft(document.getElementById(`instruction-${s.id}`), draftKey(DRAFT_KINDS.mr, s.id));
   setupMrAttachmentForm(s.id);
   renderSubtaskActions(s);
   setupSubtaskTitleEditing(s.id);

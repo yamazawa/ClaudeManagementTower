@@ -100,6 +100,7 @@ function isIdeaJobActive(job) {
  * Ideaの項目の内容を表示する
  *
  * 観点の入力欄は、前回のアイデア出しの観点で埋める（同じ観点で再実行しやすくするため）。
+ * 実行前に入力した観点の下書きがあれば、そちらを優先する。
  */
 function showIdeaItem(item, container) {
   hideIdeaItem();
@@ -118,7 +119,9 @@ function showIdeaItem(item, container) {
     <div id="idea-view-tabs" class="idea-tabs" role="group" aria-label="提案の状態"></div>
     <div id="idea-view-list" class="idea-list" aria-live="polite"></div>
   `;
-  document.getElementById("idea-view-focus").value = (item.latest_job && item.latest_job.focus) || "";
+  const focus = document.getElementById("idea-view-focus");
+  focus.value = (item.latest_job && item.latest_job.focus) || "";
+  bindDraft(focus, draftKey(DRAFT_KINDS.idea, item.id));
   document.getElementById("idea-view-run").addEventListener("click", onRunIdeaGeneration);
   renderIdeaTabs();
   renderIdeaJob(item);
@@ -225,6 +228,7 @@ async function onRunIdeaGeneration() {
   const focus = document.getElementById("idea-view-focus").value;
   try {
     await postIdeaJson(`/api/idea-sessions/${state.item.id}/run`, { focus });
+    clearDraft(draftKey(DRAFT_KINDS.idea, state.item.id));
     setIdeaViewMessage("");
   } catch (error) {
     setIdeaViewMessage(`${IDEA_VIEW_MESSAGES.runFailed}: ${error.message}`);
