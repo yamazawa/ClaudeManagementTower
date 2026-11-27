@@ -8,6 +8,7 @@
  * 送信時は未送信の添付をIDで発言に付ける。
  * 添付の一覧は送信済み・未送信を色分けし、絞り込んで表示する。
  * 範囲外の操作の許可の問い合わせは、状態表示の下に表示して回答を受け付ける。
+ * 入力欄の内容は、送信前でも下書きとして項目ごとに保存する。
  */
 
 // 応答中の発言一覧の取得間隔
@@ -100,6 +101,7 @@ function showCliItem(item, container) {
   document.getElementById("cli-view-form").addEventListener("submit", onSubmitCliView);
   document.getElementById("cli-view-interrupt").addEventListener("click", onClickCliViewInterrupt);
   document.getElementById("cli-view-input").addEventListener("keydown", onCliViewInputKeydown);
+  bindDraft(document.getElementById("cli-view-input"), draftKey(DRAFT_KINDS.cli, item.id));
   cliViewState.attachmentForm = setupCliAttachmentForm(item.id);
   resetCliViewLog();
   refreshCliView();
@@ -155,6 +157,7 @@ function resetCliViewLog() {
  *
  * 応答中・Closeの項目では送信できない。
  * 未送信の添付は発言と一緒に送り、送信後に添付の一覧を読み直す。
+ * 送信できたら入力欄と下書きを空にする。
  * 送信後は応答が終わるまで発言一覧を取得し続ける。
  */
 async function onSubmitCliView(event) {
@@ -167,6 +170,7 @@ async function onSubmitCliView(event) {
   try {
     await postCliMessage(state.item.id, text, unsentCliAttachmentIds(state));
     input.value = "";
+    clearDraft(draftKey(DRAFT_KINDS.cli, state.item.id));
     state.attachmentForm.reload();
   } catch (error) {
     setCliViewStatus(CLI_SESSION_STATUS.idle, error.message);
