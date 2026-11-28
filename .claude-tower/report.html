@@ -2,77 +2,52 @@
 <html lang="ja">
 <head>
 <meta charset="utf-8">
-<title>実行レポート：#279 途中入力の保存ー①</title>
+<title>実行レポート #285 サブタスク①</title>
 <style>
-body { font-family: sans-serif; margin: 24px; line-height: 1.6; color: #222; }
-h1 { font-size: 1.4em; } h2 { font-size: 1.15em; border-bottom: 1px solid #ccc; margin-top: 28px; }
-table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid #ccc; padding: 6px 8px; text-align: left; vertical-align: top; }
-th { background: #f3f3f3; } .ok { color: #1a7f37; font-weight: bold; }
-code { background: #f3f3f3; padding: 1px 4px; }
-ol li, ul li { margin-bottom: 2px; }
+body{font-family:sans-serif;max-width:860px;margin:2em auto;line-height:1.6;color:#222}
+h1{font-size:1.4em}h2{font-size:1.1em;border-bottom:1px solid #ccc;margin-top:1.6em}
+code{background:#f3f3f3;padding:0 .3em}.ok{color:#0a7a2a;font-weight:bold}
+table{border-collapse:collapse}td,th{border:1px solid #ccc;padding:.3em .6em;text-align:left}
 </style>
 </head>
 <body>
-<h1>実行レポート：途中入力の保存</h1>
+<h1>実行レポート</h1>
 
 <h2>1. 対象</h2>
 <table>
-<tr><th>Issue</th><td>#279 途中入力の保存</td></tr>
-<tr><th>サブタスク</th><td>途中入力の保存ー①（PR #280、指示記録上の名前は「CLI、IdeaのUIー①」）</td></tr>
-<tr><th>ブランチ</th><td><code>issue-new-b5f739cb-subtask-1</code>（push済み）</td></tr>
+<tr><th>Issue</th><td>#285 CLIタブで変更のPR化の進め方を問い合わせずに管理塔ツールで進める</td></tr>
+<tr><th>サブタスク</th><td>CLIタブで変更のPR化の進め方を問い合わせずに管理塔ツールで進めるー①（PR #286）</td></tr>
+<tr><th>ブランチ</th><td><code>issue-new-66587140-subtask-1</code></td></tr>
 </table>
 
 <h2>2. 実装結果の要約</h2>
-<p class="ok">成功（ブラウザでの動作確認は未実施で、人間による確認待ち）</p>
+<p class="ok">成功</p>
+<p>CLIタブ用ポリシープロンプトから「作成前に利用者へ進め方を確認する」指示を削除しました。代わりに、PRにしたい変更・実装の依頼は管理塔ツールでIssueとMRを作成し、実装は管理塔の画面から行う旨を入れました。このフォルダで直接実装・コミットするのは、利用者が明示的に指示した場合だけとしました。</p>
+
+<h2>3. 実施した変更と主な変更ファイル</h2>
 <ul>
-<li>MRの指示内容、CLIの入力欄、Ideaの観点の入力欄を、入力のたびにブラウザ（localStorage）へ保存するようにした。</li>
-<li>項目の切り替え・タブの切り替え・ページの再読み込みの後も、保存した内容を入力欄に戻す。</li>
-<li>実装の開始・CLIの送信・アイデア出しの開始に成功したら、保存した内容を消す。</li>
+<li><code>core/claude_prompts.py</code>：<code>CLI_DIALOG_POLICY_PROMPT</code>の5項の最後の行を、次の2行に置き換えました。
+<ul>
+<li>PRにしたい変更・実装の依頼は、進め方を確認せず管理塔ツールでIssueとMRを作成し、実装は管理塔の画面から実行する旨を利用者へ伝える。</li>
+<li>このフォルダで直接実装・コミットするのは、利用者が明示的に指示した場合のみとする。</li>
+</ul></li>
+<li><code>tests/test_claude_prompts.py</code>：新しい文言が含まれ、旧文言が含まれないことを確認するテストを追加しました。</li>
 </ul>
 
-<h2>3. 実施した変更</h2>
-<table>
-<tr><th>コミット</th><th>内容</th></tr>
-<tr><td><code>c02ef3a</code></td><td>下書きを保存する部品<code>draft_store.js</code>とテストを追加した。</td></tr>
-<tr><td><code>9054313</code></td><td>MRの指示内容に下書きを結び付けた。実装の開始に成功したら消す。</td></tr>
-<tr><td><code>b1301d1</code></td><td>CLIの入力欄に下書きを結び付けた。送信に成功したら消す。</td></tr>
-<tr><td><code>13eebe2</code></td><td>Ideaの観点に下書きを結び付けた。アイデア出しの開始に成功したら消す。</td></tr>
-</table>
-<h3>主な変更ファイル</h3>
-<table>
-<tr><th>ファイル</th><th>変更</th></tr>
-<tr><td><code>app/static/draft_store.js</code>（新規）</td><td><code>draftKey</code>・<code>bindDraft</code>・<code>loadDraft</code>・<code>saveDraft</code>・<code>clearDraft</code>。キーは<code>claude-tower.draft.{mr|cli|idea}.{ID}</code>。</td></tr>
-<tr><td><code>app/static/index.html</code></td><td><code>draft_store.js</code>を<code>attachment.js</code>の直後に読み込む。</td></tr>
-<tr><td><code>app/static/subtask_view.js</code> / <code>app/static/job_runner.js</code></td><td>MRの指示内容の保存・復元と、開始成功時の削除。</td></tr>
-<tr><td><code>app/static/cli_view.js</code></td><td>CLIの入力欄の保存・復元と、送信成功時の削除。</td></tr>
-<tr><td><code>app/static/idea_view.js</code></td><td>Ideaの観点の保存・復元と、開始成功時の削除。</td></tr>
-<tr><td><code>tests/test_draft_store.py</code>（新規）</td><td>Node.jsで偽のlocalStorageを使い、保存・復元・削除・ストレージ使用不可の時の動きを確認する。</td></tr>
-</table>
-
-<h2>4. 自律判断した事項</h2>
-<table>
-<tr><th>判断</th><th>理由・前提</th></tr>
-<tr><td>保存先はサーバーではなくブラウザのlocalStorageにした。</td><td>DB・APIの変更が不要で、入力のたびに通信しないため。MRの<code>instruction</code>は「実行した指示内容」の意味を持つため、下書きで上書きしないようにした。</td></tr>
-<tr><td>対象はMRの指示内容・CLIの入力欄・Ideaの観点の3か所にした。</td><td>指示の「指示内容」「CLIの入力項目」と、サブタスク名の「CLI、IdeaのUI」から判断した。許可の拒否理由やIssue作成フォーム等は対象外にした。</td></tr>
-<tr><td>下書きがある場合は、サーバーの値（前回の指示内容・前回の観点）より下書きを優先して表示する。</td><td>入力途中の内容を戻すのが目的のため。</td></tr>
-<tr><td>開始・送信に成功した時だけ下書きを消し、失敗時は残す。</td><td>失敗した時に入力をやり直さなくて済むようにするため。</td></tr>
-<tr><td>入力欄を空にした時は下書きを消す。</td><td>空の下書きを残さないため。</td></tr>
-</table>
-
-<h2>5. テスト結果</h2>
+<h2>4. 自律判断した事項・採用理由・前提</h2>
 <ul>
-<li><code>./.venv/Scripts/python.exe -m pytest -q</code>：<span class="ok">661件成功</span>（追加した6件を含む）</li>
-<li>変更したJS 5ファイルは<code>node --check</code>で構文を確認した。</li>
-<li>ブラウザでの動作確認は未実施。</li>
+<li>既存テストは旧文言を確認していなかったため、文言の退行を防ぐテストを1件新しく追加しました。</li>
+<li>「実装は管理塔の画面から実行する旨」は「利用者へ伝える」と書きました。MRを作成した後、実装の実行は利用者の画面操作で始まるため、作成した後の案内まで指示に含めるのが妥当と判断しました。</li>
+<li>既存の箇条書き（「- 」と3文字インデント）の書式に合わせ、長い1行は継続行に分けました。</li>
 </ul>
 
-<h2>6. 残課題・リスク・レビューの確認ポイント</h2>
+<h2>5. 実行したテストと結果</h2>
+<p><code>./.venv/Scripts/python.exe -m pytest -q</code>：<span class="ok">662 passed</span></p>
+
+<h2>6. 残課題・リスク・レビュー時の確認ポイント</h2>
 <ul>
-<li>保存はブラウザごと。PCで入力した途中の内容はスマホには出ない。端末間で共有したい場合はサーバー保存への変更が必要。</li>
-<li>MRの指示内容・Ideaの観点を空欄にすると下書きが消え、再表示時はサーバーの前回の値に戻る。</li>
-<li>MR・CLI・Ideaを削除しても下書きは消えずに残る（文字列のみのため容量の影響は小さい）。</li>
-<li>確認手順：各入力欄に入力して、別の項目に切り替えて戻る、またはページを再読み込みして入力が残ること、開始・送信後に入力が残らないことを確認する。</li>
-<li>IMPLEMENTATION_PLAN.mdとの新たな衝突は見つからなかったため、追記していない。</li>
+<li>プロンプトの文言を変えただけなので、実際のCLIタブでの挙動（PR化を頼んだときに確認せずに<code>create_issue_with_mr</code>を呼ぶか）は実機で確認していません。</li>
+<li>小さな修正をその場でしてほしいという依頼でも、利用者が明示的に指示しない限りIssue・MRの作成に進みます。この方針で問題ないか確認してください。</li>
 </ul>
 </body>
 </html>
