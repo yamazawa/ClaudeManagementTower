@@ -100,15 +100,26 @@ def _read_only_escape(root: str, tool_name: str, tool_input: dict) -> str | None
     return outside[0] if outside else None
 
 
-def _blocked_input_denial(tool_name: str, tool_input: dict) -> str | None:
+def _blocked_input_path(tool_name: str, tool_input: dict) -> str | None:
     blocked = [path for path in _input_paths(tool_name, tool_input) if is_blocked_path(path)]
-    return f"参照禁止のファイルのため拒否: {blocked[0]}" if blocked else None
+    return blocked[0] if blocked else None
+
+
+def _blocked_input_denial(tool_name: str, tool_input: dict) -> str | None:
+    path = _blocked_input_path(tool_name, tool_input)
+    return f"参照禁止のファイルのため拒否: {path}" if path is not None else None
 
 
 # CLIタブの対話で拒否するツールと拒否理由（画面に回答の経路が無いため）
 CLI_DIALOG_DENIED_TOOLS = {
     "AskUserQuestion": "CLIタブでは選択肢付きの質問に回答できません。質問は応答文で行い、利用者の次の発言を待ってください。",
 }
+
+# CLIタブで参照禁止ファイルに触れる操作を問い合わせる際の理由（{target}は対象のパス・コマンド）
+CLI_BLOCKED_ASK_REASON = (
+    "参照禁止ファイル（秘密鍵・.env・認証情報等）への操作: {target}"
+    "（許可すると、ファイルの内容がClaudeの文脈と会話ログに入ります）"
+)
 
 # アイデアマンが使えるツール（読み取り専用）
 IDEA_MAN_TOOL_NAMES = ["Read", "Glob", "Grep"]
@@ -176,12 +187,28 @@ def restrict_to_read_only(root: str) -> Callable:
     return _to_can_use_tool(_read_only_check(root))
 
 
-def _blocked_check(tool_name: str, tool_input: dict) -> str | None:
-    """参照禁止のファイルに触れる操作を拒否する"""
+def _blocked_target(tool_name: str, tool_input: dict) -> str | None:
+    """参照禁止のファイルに触れる場合、そのパスまたはコマンドを返す"""
     if tool_name in SHELL_TOOL_NAMES:
         command = tool_input.get("command", "")
-        return f"参照禁止のファイルを含むため拒否: {command}" if command_touches_blocked(command) else None
-    return _blocked_input_denial(tool_name, tool_input)
+        return command if command_touches_blocked(command) else None
+    return _blocked_input_path(tool_name, tool_input)
+
+
+def _blocked_check(tool_name: str, tool_input: dict) -> str | None:
+    """参照禁止のファイルに触れる操作を拒否する"""
+    target = _blocked_target(tool_name, tool_input)
+    if target is None:
+        return None
+    if tool_name in SHELL_TOOL_NAMES:
+        return f"参照禁止のファイルを含むため拒否: {target}"
+    return f"参照禁止のファイルのため拒否: {target}"
+
+
+def _blocked_ask_check(tool_name: str, tool_input: dict) -> str | None:
+    """参照禁止のファイルに触れる操作について、問い合わせ理由を返す"""
+    target = _blocked_target(tool_name, tool_input)
+    return CLI_BLOCKED_ASK_REASON.format(target=target) if target is not None else None
 
 
 def _scope_check(rules: AccessRules) -> DenialCheck:
@@ -260,11 +287,16 @@ def _to_asking_can_use_tool(check: DenialCheck, ask_check: DenialCheck, ask_user
 def ask_outside_worktree(
     rules: AccessRules, ask_user: AskUser, denied_tools: dict[str, str] | None = None
 ) -> tuple[Callable, dict]:
-    """危険な操作・書き込み許可範囲外の操作を、拒否せず利用者に確認する
+    """危険な操作・書き込み許可範囲外・参照禁止のファイルへの操作を、拒否せず利用者に確認する
 
     許可確認のcan_use_toolと、PreToolUseフックの組を返す。
-    参照禁止のファイル・denied_toolsに指定したツールは、確認せずに拒否する。
+    参照禁止と範囲外の両方に該当する場合は、参照禁止の理由で確認する。
+    denied_toolsに指定したツールは、確認せずに拒否する。
     """
-    check = _with_denied_tools(_blocked_check, denied_tools)
-    ask_check = _scope_check(rules)
+    check = _with_denied_tools(lambda tool_name, tool_input: None, denied_tools)
+    scope_check = _scope_check(rules)
+
+    def ask_check(tool_name: str, tool_input: dict) -> str | None:
+        return _blocked_ask_check(tool_name, tool_input) or scope_check(tool_name, tool_input)
+
     return _to_asking_can_use_tool(check, ask_check, ask_user), _to_pre_tool_use_hooks(check, ask_check)

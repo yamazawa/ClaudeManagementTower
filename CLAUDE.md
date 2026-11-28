@@ -38,6 +38,7 @@ GitHub Issue連動型AI開発タスク管理システム。\
 他のworktreeと管理塔自身のフォルダへの書き込みは拒否される。\
 Read・Glob・Grepツールによるworktree外の参照は許可されている。\
 秘密鍵・`.env`・認証情報ファイル等は、場所を問わず参照・書き込みが拒否される。\
+ただしCLIタブでは拒否せず、利用者への許可問い合わせとなる（許可すると内容がClaudeの文脈・会話ログに入る）。\
 ルールの詳細は`core/claude_access_rules.py`を参照する。
 
 検証用リポジトリは使用しない（`yamazawa/claude-tower-test-repo`は2026-11-25に廃止）。\

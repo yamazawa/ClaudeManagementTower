@@ -316,12 +316,59 @@ def test_asking_denies_with_user_reason(tmp_path):
     assert result.message == "不要です"
 
 
-def test_asking_denies_blocked_and_dialog_tools_without_asking(tmp_path):
+def test_asking_denies_dialog_tools_without_asking(tmp_path):
     worktree = _worktree(tmp_path)
     can_use_tool, _, asked = _asking(str(worktree))
-    for name, args in [("Read", {"file_path": str(worktree / ".env")}), ("AskUserQuestion", {})]:
-        assert isinstance(asyncio.run(can_use_tool(name, args, {})), PermissionResultDeny), name
+    result = asyncio.run(can_use_tool("AskUserQuestion", {}, {}))
+    assert isinstance(result, PermissionResultDeny)
+    assert result.message == claude_permissions.CLI_DIALOG_DENIED_TOOLS["AskUserQuestion"]
     assert asked == []
+
+
+def test_asking_asks_for_blocked_files(tmp_path):
+    worktree = _worktree(tmp_path)
+    can_use_tool, _, asked = _asking(str(worktree))
+    cases = [
+        ("Read", {"file_path": str(worktree / ".env")}, str(worktree / ".env")),
+        ("Bash", {"command": "cat .env"}, "cat .env"),
+    ]
+    for name, args, target in cases:
+        assert isinstance(asyncio.run(can_use_tool(name, args, {})), PermissionResultAllow), name
+    assert asked == [
+        (name, claude_permissions.CLI_BLOCKED_ASK_REASON.format(target=target)) for name, _, target in cases
+    ]
+
+
+def test_asking_denies_blocked_files_when_user_denies(tmp_path):
+    worktree = _worktree(tmp_path)
+    can_use_tool, _, asked = _asking(str(worktree), answer="見せないでください")
+    result = asyncio.run(can_use_tool("Read", {"file_path": str(worktree / ".env")}, {}))
+    assert isinstance(result, PermissionResultDeny)
+    assert result.message == "見せないでください"
+    assert len(asked) == 1
+
+
+def test_asking_prefers_blocked_reason_over_scope_reason(tmp_path):
+    worktree = _worktree(tmp_path)
+    can_use_tool, _, asked = _asking(str(worktree))
+    target = str(tmp_path / "home" / ".ssh" / "config")
+    asyncio.run(can_use_tool("Write", {"file_path": target}, {}))
+    assert asked == [("Write", claude_permissions.CLI_BLOCKED_ASK_REASON.format(target=target))]
+
+
+def test_blocked_ask_reason_mentions_context_and_log():
+    reason = claude_permissions.CLI_BLOCKED_ASK_REASON
+    assert "参照禁止" in reason
+    assert "文脈" in reason and "会話ログ" in reason
+
+
+def test_worker_still_denies_blocked_files(tmp_path):
+    worktree = _worktree(tmp_path)
+    for name, args in [("Read", {"file_path": str(worktree / ".env")}), ("Bash", {"command": "cat .env"})]:
+        assert isinstance(_check(str(worktree), name, args), PermissionResultDeny), name
+        hook = claude_permissions._to_pre_tool_use_hooks(claude_permissions._worktree_check(_rules(worktree)))
+        output = asyncio.run(hook["PreToolUse"][0].hooks[0]({"tool_name": name, "tool_input": args}, None, {}))
+        assert output["hookSpecificOutput"]["permissionDecision"] == "deny", name
 
 
 def test_asking_allows_inside_operation_without_asking(tmp_path):
@@ -332,7 +379,7 @@ def test_asking_allows_inside_operation_without_asking(tmp_path):
     assert asked == []
 
 
-def test_asking_hook_returns_ask_for_scope_and_deny_for_blocked(tmp_path):
+def test_asking_hook_returns_ask_for_scope_and_blocked(tmp_path):
     worktree = _worktree(tmp_path)
     _, hook, _ = _asking(str(worktree))
 
@@ -342,7 +389,9 @@ def test_asking_hook_returns_ask_for_scope_and_deny_for_blocked(tmp_path):
 
     assert decide("Bash", {"command": "git reset --hard"}) == "ask"
     assert decide("Write", {"file_path": str(tmp_path / "outside.txt")}) == "ask"
-    assert decide("Bash", {"command": "cat .env"}) == "deny"
+    assert decide("Bash", {"command": "cat .env"}) == "ask"
+    assert decide("Read", {"file_path": str(worktree / ".env")}) == "ask"
+    assert decide("AskUserQuestion", {}) == "deny"
     assert decide("Edit", {"file_path": str(worktree / "a.py")}) is None
 
 
